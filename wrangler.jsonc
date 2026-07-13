@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "invoice-flash",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+  // Objetos privados: logotipos de empresa y PDFs cacheados (research.md R14)
+  "r2_buckets": [
+    {
+      "binding": "STORAGE_BUCKET",
+      "bucket_name": "invoice-flash-storage"
+    }
+  ],
+  // Trabajo asíncrono: render de PDF al emitir y envío de email (research.md R9)
+  "queues": {
+    "producers": [
+      { "queue": "invoice-flash-pdf-render", "binding": "PDF_RENDER_QUEUE" },
+      { "queue": "invoice-flash-email-send", "binding": "EMAIL_SEND_QUEUE" }
+    ],
+    "consumers": [
+      {
+        "queue": "invoice-flash-pdf-render",
+        "max_batch_size": 10,
+        "max_retries": 3,
+        "dead_letter_queue": "invoice-flash-pdf-render-dlq"
+      },
+      {
+        "queue": "invoice-flash-email-send",
+        "max_batch_size": 10,
+        "max_retries": 3,
+        "dead_letter_queue": "invoice-flash-email-send-dlq"
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  }
+  // Secretos (DATABASE_URL, BETTER_AUTH_SECRET, RESEND_API_KEY): nunca aquí.
+  // Local: .dev.vars (ver .dev.vars.example). Producción: `wrangler secret put <NAME>`.
+}
