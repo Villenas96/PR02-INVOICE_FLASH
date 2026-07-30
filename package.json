@@ -34,7 +34,7 @@
     "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "2.2.0",
     "@opennextjs/cloudflare": "^1.20.1",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
