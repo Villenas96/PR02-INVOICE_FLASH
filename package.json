@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
-    "@biomejs/biome": "2.2.0",
+    "@biomejs/biome": "2.5.6",
     "@opennextjs/cloudflare": "^1.20.1",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
