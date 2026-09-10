@@ -1,0 +1,53 @@
+{
+  "pageSize": {
+    "width": 595.28,
+    "height": 841.89
+  },
+  "margins": {
+    "top": 48,
+    "right": 48,
+    "bottom": 48,
+    "left": 48
+  },
+  "theme": {
+    "accentHex": "#18181B",
+    "textHex": "#18181B",
+    "mutedHex": "#71717A",
+    "borderHex": "#E4E4E7"
+  },
+  "firstPageRoles": [
+    "brand",
+    "document_title",
+    "document_number",
+    "issuer_heading",
+    "issuer_details",
+    "client_heading",
+    "client_details",
+    "issue_date",
+    "due_date",
+    "line_table",
+    "page_footer"
+  ],
+  "continuationRequiredRoles": ["document_number", "line_table", "page_footer"],
+  "lastPageRoles": [
+    "document_number",
+    "line_table",
+    "tax_breakdown",
+    "totals",
+    "notes",
+    "page_footer"
+  ],
+  "tableHeaders": ["Concepto", "Cantidad", "Precio unitario", "IVA", "Total"],
+  "spanishLabels": [
+    "Factura",
+    "Emisor",
+    "Cliente",
+    "NIF",
+    "Fecha de emisión",
+    "Fecha de vencimiento",
+    "Base imponible",
+    "Retención IRPF",
+    "Total",
+    "Notas"
+  ]
+}

@@ -13,7 +13,7 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["tests/unit/**/*.test.ts"],
+          include: ["tests/unit/**/*.test.{ts,tsx}"],
         },
       },
       {
@@ -22,7 +22,19 @@ export default defineConfig({
           name: "integration",
           environment: "node",
           include: ["tests/integration/**/*.test.ts"],
+          fileParallelism: false,
           testTimeout: 30000,
+          setupFiles: ["tests/integration/setup.ts"],
+          globalSetup: ["tests/integration/global-teardown.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "performance",
+          environment: "node",
+          include: ["tests/performance/**/*.test.ts"],
+          testTimeout: 60000,
         },
       },
     ],

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "document_event_document_pdf_terminal_unique" ON "document_event" USING btree ("document_id","event") WHERE "document_event"."event" IN ('pdf_generated'::document_event_type, 'pdf_failed'::document_event_type);

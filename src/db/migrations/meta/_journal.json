@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785410021756,
+      "tag": "0000_fine_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785430582369,
+      "tag": "0001_add_document_soft_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785440850165,
+      "tag": "0002_hard_puff_adder",
+      "breakpoints": true
+    }
+  ]
+}

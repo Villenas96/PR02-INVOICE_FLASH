@@ -1,6 +1,6 @@
 # Research: Invoice Flash — Elección de stack y decisiones técnicas
 
-**Date**: 2026-07-09 | **Plan**: [plan.md](./plan.md)
+**Date**: 2026-07-09 | **Updated**: 2026-07-30 | **Plan**: [plan.md](./plan.md)
 
 **Contexto de entrada**: el usuario no impone stack; único requisito duro: **si se usa Node, el gestor de paquetes es exclusivamente pnpm**. Criterio de selección: máxima eficacia coste/eficiencia (alineado con el Principio IV de la constitución), para una app web responsive de facturación (mercado español, un solo desarrollador, v1 acotada).
 
@@ -29,7 +29,7 @@ Precios verificados en julio de 2026 contra fuentes públicas (ver "Fuentes" al 
 ## R3. Hosting: Cloudflare Workers vía OpenNext (`@opennextjs/cloudflare`)
 
 - **Decision**: desplegar la app Next.js en Cloudflare Workers con el adaptador OpenNext, plan Workers Paid (5 $/mes, incluye 10M requests, Queues y Cron Triggers).
-- **Rationale**: es la opción serverless comercial más barata verificada: 5 $/mes fijos frente a 20 $/asiento/mes de Vercel Pro (el plan Hobby de Vercel prohíbe uso comercial y esto es un SaaS). Incluye en el mismo plan las piezas que la arquitectura necesita: Queues (trabajo asíncrono, Principio II), R2 (objetos sin egreso) y Cron. Escala a cero de facto (pago por petición). A 10x sigue en ~5–10 $/mes, mientras Vercel crece por asiento + uso.
+- **Rationale**: es la opción serverless comercial más barata verificada: 5 $/mes fijos frente a 20 $/asiento/mes de Vercel Pro (el plan Hobby de Vercel prohíbe uso comercial y esto es un SaaS). Incluye Queues y R2, y escala a cero de facto. Workers Paid incluye 10M peticiones y 30M CPU-ms/mes; Queues incluye 1M de operaciones/mes. El objetivo v1 permanece en ~5–10 $/mes; el escenario conservador de resiliencia puede alcanzar ~10–50 $/mes según peticiones y CPU.
 - **Riesgo aceptado y mitigación**: OpenNext lo opera uno mismo (vs. `git push` en Vercel) y workerd no es Node completo. Mitigación: (a) las dependencias elegidas son compatibles con workerd (`pdf-lib` JS puro, driver Neon serverless, Better Auth edge-ready); (b) Next.js es portable: si el adaptador bloquease el desarrollo, migrar a Vercel Pro (20 $/mes) es un cambio de configuración, no de código. Esta portabilidad es parte de la decisión.
 - **Alternatives considered**:
   - *Vercel Pro*: mejor DX, cero fricción, pero 20 $/mes mínimo + uso; a 10x típicamente 40–70 $/mes. Queda como **fallback documentado** si OpenNext genera fricción real.
@@ -39,7 +39,7 @@ Precios verificados en julio de 2026 contra fuentes públicas (ver "Fuentes" al 
 ## R4. Base de datos: Neon Postgres serverless + Drizzle ORM
 
 - **Decision**: Neon Postgres (plan Free: 0,5 GB, 100 CU-h/mes, scale-to-zero con suspensión a los 5 min) con `@neondatabase/serverless` (funciona sobre WebSocket/HTTP en Workers) y Drizzle ORM + drizzle-kit para esquema y migraciones versionadas.
-- **Rationale**: la facturación exige transacciones ACID y bloqueo de filas para la numeración correlativa sin huecos (FR-013) y tipos exactos — Postgres lo da de serie. Neon escala a cero (coste 0 en lanzamiento) y su plan de pago es puro uso sin mínimo mensual (compute 0,106 $/CU-h, storage 0,35 $/GB-mes tras las bajadas de precio de 2026) → ~10–20 $/mes a 10x. El branching de Neon da bases de datos de prueba efímeras gratis para integración en CI. Drizzle: ORM TypeScript-first, ligero, compatible con workerd, migraciones SQL versionadas y reversibles (mandato constitucional), sin runtime pesado.
+- **Rationale**: la facturación exige transacciones ACID y bloqueo de filas para la numeración correlativa sin huecos (FR-013) y tipos exactos — Postgres lo da de serie. Neon escala a cero: 0 $ en lanzamiento, ~10–20 $/mes en el objetivo v1 y un sobre conservador de ~50–120 $/mes en el escenario de resiliencia, que se recalibrará con uso real. Neon cifra los datos en reposo con AES-256, gestiona claves mediante KMS/Key Vault y exige conexiones TLS; la aplicación usa `sslmode=require` y verifica la configuración pre-deploy. El branching da bases de prueba efímeras para CI, con limpieza/caducidad obligatoria. Drizzle aporta migraciones SQL versionadas y reversibles.
 - **Alternatives considered**:
   - *Cloudflare D1 (SQLite)*: aún más barato e integrado, pero transaccionalidad limitada (sin transacciones interactivas multi-statement con bloqueo de fila desde el Worker), lo que complica la garantía de numeración correlativa bajo concurrencia. Rechazado por riesgo en el requisito más crítico.
   - *Supabase*: bundle atractivo (Postgres+Auth+Storage) pero acopla auth y storage al proveedor; el plan Pro (25 $/mes) es más caro que Neon+R2+Better Auth a igual volumen. Rechazado por coste y acoplamiento.
@@ -47,16 +47,16 @@ Precios verificados en julio de 2026 contra fuentes públicas (ver "Fuentes" al 
 
 ## R5. Autenticación: Better Auth
 
-- **Decision**: Better Auth (open source, self-hosted en la propia app) con email/contraseña + verificación + recuperación, sesiones en Postgres vía adaptador Drizzle.
-- **Rationale**: coste cero a cualquier escala (vs. proveedores por MAU); los datos de usuarios quedan en nuestra base (datos fiscales sensibles, Principio III); soporta runtimes edge; adaptador Drizzle oficial genera las tablas. Cubre FR-001 completo sin código criptográfico propio.
+- **Decision**: Better Auth (open source, self-hosted en la propia app) con email/contraseña + verificación + recuperación, sesiones en Postgres vía adaptador Drizzle. Sus callbacks de verificación y recuperación persisten una entrega y encolan únicamente un `delivery_id`; nunca invocan Resend desde la petición. La recuperación responde igual exista o no la cuenta.
+- **Rationale**: coste cero a cualquier escala (vs. proveedores por MAU); los datos de usuarios quedan en nuestra base (datos fiscales sensibles, Principio III); soporta runtimes edge; adaptador Drizzle oficial genera las tablas. Referenciar el registro temporal de verificación permite construir el enlace en el consumidor sin transportar tokens, URLs ni destinatarios por la cola. Cubre FR-001 completo sin código criptográfico propio ni enumeración de cuentas.
 - **Alternatives considered**:
   - *Clerk / Auth0*: excelente DX pero coste por MAU que crece justo con el éxito (Clerk gratis hasta 10k MAU pero features clave de pago; Auth0 caro pronto). Rechazado por Principio IV.
   - *Auth.js (NextAuth v5)*: gratuito también, pero el flujo credentials + reset de contraseña es de segunda clase (orientado a OAuth). Better Auth lo trae de serie. Rechazado.
 
 ## R6. Generación de PDF: `pdf-lib` con plantilla propia, caché en R2
 
-- **Decision**: generar los PDF con `pdf-lib` (TypeScript puro, sin dependencias de Node/navegador) mediante una plantilla de factura propia (layout tabular acotado); render disparado como job de Cloudflare Queues al emitir el documento, resultado almacenado en R2 y servido desde ahí en descargas posteriores (los documentos emitidos son inmutables → caché permanente). Fallback: render on-demand si se descarga antes de completarse el job.
-- **Rationale**: es la opción más barata y rápida (~50–300 ms, sin headless Chrome, sin servicio externo por documento) y la única de las candidatas 100% compatible con workerd sin flags de compatibilidad frágiles. Una factura es un documento tabular acotado: una plantilla propia es ~1 fichero de layout, coste asumible y control total del resultado (desglose de IVA, marca "proforma sin validez fiscal", etc.).
+- **Decision**: generar los PDF con `pdf-lib` exclusivamente en un consumidor de Cloudflare Queues al emitir; almacenar el resultado en R2 con clave determinista y servirlo desde caché permanente. El documento persiste `pdf_status` (`pending|ready|failed`). Si una descarga llega antes de terminar, responde `202 pdf_processing` con `Retry-After`; no existe render on-demand dentro de HTTP.
+- **Rationale**: cumple literalmente el mandato de sacar trabajo pesado de la petición y conserva coste/rendimiento (~50–300 ms de render aislado). La clave determinista y la comprobación de `pdf_status` hacen idempotentes las reentregas. Una plantilla propia permite definir criterios verificables: bloques fiscales, jerarquía, tabla multipágina, totales, marca de proforma y snapshots visuales.
 - **Alternatives considered**:
   - *@react-pdf/renderer*: DX excelente (JSX), pero compatibilidad irregular en workerd (fontkit/Buffer) → riesgo de bloqueo en el runtime elegido. Rechazado; reconsiderar si se migrase a runtime Node.
   - *Puppeteer/Playwright (HTML→PDF)*: máxima fidelidad visual pero exige headless Chrome (imposible en Workers, caro en cualquier serverless: memoria y arranque). Rechazado por coste.
@@ -64,8 +64,8 @@ Precios verificados en julio de 2026 contra fuentes públicas (ver "Fuentes" al 
 
 ## R7. Email transaccional: Resend, enviado vía cola
 
-- **Decision**: Resend (Free: 3.000 emails/mes, 100/día) para el envío de documentos por email (US5, solo plan de pago del usuario final) y los emails de auth (verificación, reset). Envío siempre asíncrono a través de Cloudflare Queues con registro en el historial del documento.
-- **Rationale**: capa gratuita suficiente para el lanzamiento (el envío de documentos está limitado por plan de todos modos); SDK TypeScript de primera; 20 $/mes (50k emails) a 10x, dentro del presupuesto. La cola da reintentos automáticos y desacopla del request (Principio II).
+- **Decision**: Resend (Free: 3.000 emails/mes; Pro: 20 $/mes por 50.000; Scale: 90 $/mes por 100.000) para documentos y auth. Una tabla común `email_delivery` discrimina `document`, `verify_email` y `reset_password`; `company_id`/`document_id` son opcionales para autenticación y esta referencia el registro temporal de Better Auth. Cada solicitud crea una fila con clave única estable; Queues transporta solo `delivery_id`; el consumidor selecciona la plantilla por propósito y usa `email/{delivery_id}` como `idempotencyKey` de Resend. Solo una entrega documental registra `document_event`.
+- **Rationale**: Cloudflare Queues entrega al menos una vez, por lo que un reintento puede repetir efectos. Resend conserva claves de idempotencia durante 24 horas (máx. 256 caracteres) y devuelve la respuesta original ante repetición. La tabla local evita duplicados conocidos; los reintentos automáticos se acotan a menos de 24 horas y a la vigencia del token de auth. Tras la ventana aplicable no se reintenta automáticamente un estado incierto: requiere una solicitud nueva. Destinatario, mensaje y referencias temporales se eliminan tras la retención definida; tokens, URLs, destinatarios y mensajes nunca viajan en la cola ni aparecen en logs.
 - **Alternatives considered**:
   - *Amazon SES*: el más barato a gran escala (~0,10 $/1.000) pero alta fricción inicial (salir del sandbox, reputación, sin plantillas). Documentado como **ruta de migración a 10x+** si el volumen supera el plan Pro de Resend.
   - *SendGrid*: eliminó su capa gratuita; DX inferior. Rechazado.
@@ -78,14 +78,14 @@ Precios verificados en julio de 2026 contra fuentes públicas (ver "Fuentes" al 
 
 ## R9. Trabajo asíncrono y tareas programadas
 
-- **Decision**: Cloudflare Queues (incluido en Workers Paid) para render de PDF al emitir y envío de emails, con reintentos y dead-letter queue. **Sin cron para vencimientos**: el estado "vencida" se deriva en tiempo de consulta (`due_date < hoy` y no pagada del todo), no se materializa.
-- **Rationale**: cumple "trabajo pesado fuera de la petición" (Principio II) sin servicio adicional. Derivar el vencimiento al consultar elimina un job programado, evita estados desincronizados y hace el requisito FR-024 trivialmente correcto en cualquier zona horaria de consulta.
+- **Decision**: Cloudflare Queues para render de PDF y email, con reintentos, backoff y dead-letter queue. Los consumidores asumen entrega al menos una vez: reclaman un estado persistido, detectan trabajos terminales y producen efectos idempotentes. **Sin cron para vencimientos**: se derivan en consulta.
+- **Rationale**: cumple "trabajo pesado fuera de la petición" sin servicio adicional. La idempotencia evita PDFs duplicados y correos repetidos. Derivar vencimiento elimina estados desincronizados y mantiene FR-024 correcto.
 - **Alternatives considered**: *Inngest/Trigger.dev* (otro proveedor y otra factura para necesidades que Queues ya cubre — rechazado); *cron nocturno que marca vencidas* (estado materializado que puede quedar obsoleto entre ejecuciones — rechazado por corrección).
 
 ## R10. Manejo de dinero e impuestos
 
-- **Decision**: todos los importes como **enteros en céntimos** (`integer`/`bigint` en Postgres, `number` entero en TS con tipo nominal `Cents`); cantidades y porcentajes como `numeric` escalado (cantidad con 3 decimales, porcentajes con 2). Redondeo half-up al céntimo por línea y desglose de impuestos agregado por tipo desde las líneas redondeadas. IVA multi-tipo por línea; retención IRPF global del documento según configuración del emisor.
-- **Rationale**: garantiza SC-003 (exactitud al céntimo, sin errores de coma flotante) con el tipo más simple posible; el redondeo por línea y suma de líneas es el criterio habitual en facturación española y hace los totales reproducibles. La lógica vive en `src/lib/billing` pura y exhaustivamente testeada (Principio I).
+- **Decision**: todos los importes como **enteros en céntimos** (`integer`/`bigint` en Postgres, `number` entero en TS con tipo nominal `Cents`); cantidades y porcentajes como `numeric` escalado (cantidad con 3 decimales, porcentajes con 2). Facturas/proformas usan redondeo half-up al céntimo por línea, impuestos agregados por tipo y retención global. Un recibo no ejecuta cálculo fiscal: `total_cents` copia exactamente `payment.amount_cents` y base/impuestos/retención quedan a cero.
+- **Rationale**: garantiza SC-003 sin errores de coma flotante y evita atribuir fiscalidad nueva a un justificante de pago. El redondeo por línea y suma de líneas es el criterio habitual en facturación española y hace los totales reproducibles. La lógica vive en `src/lib/billing` y `src/lib/documents/receipts` pura y exhaustivamente testeada (Principio I).
 - **Alternatives considered**: *decimal.js/big.js* (dependencia extra innecesaria si nunca salimos de céntimos enteros — rechazado); *numeric en BD y float en app* (reintroduce coma flotante — rechazado).
 
 ## R11. Numeración correlativa sin huecos (FR-013, edge case de concurrencia)
@@ -96,21 +96,27 @@ Precios verificados en julio de 2026 contra fuentes públicas (ver "Fuentes" al 
 
 ## R12. Calidad: linting, formato, pruebas y CI
 
-- **Decision**: Biome (linter + formateador único, escrito en Rust) + `tsc --noEmit` como puerta de tipos; Vitest para unitarias e integración (integración contra Postgres real vía Neon branch efímera en CI o Docker en local); Playwright para E2E de flujos críticos con chequeo axe (WCAG 2.1 AA); GitHub Actions como CI (capa gratuita) con puertas: lint, tipos, tests, `pnpm audit` + Dependabot.
-- **Rationale**: Biome sustituye ESLint+Prettier con una sola dependencia y ~10x menos tiempo de CI (Principio IV también aplica a CI); Vitest comparte config con el stack Vite/Next; el chequeo axe automatizado hace verificable el mandato WCAG del Principio V.
+- **Decision**: Biome + `tsc --noEmit`; Vitest para unitarias e integración contra Postgres real; Playwright para E2E, axe, responsive y feedback <100 ms con respuestas de red retrasadas; runner Vitest/fetch concurrente contra staging para p95 de CRUD/búsqueda y medición aislada del consumidor PDF. GitHub Actions ejecuta lint, tipos, tests, rendimiento, `pnpm audit` y Dependabot. `main` exige PR, al menos una aprobación y checks requeridos en verde, sin push directo ni force-push.
+- **Rationale**: cubre todas las puertas constitucionales y convierte los objetivos de rendimiento en umbrales verificables. Las pruebas unitarias incluyen cambio anual, conversión y recibos; las de integración prueban emisión atómica, autorización por recurso e idempotencia por reentrega. La protección de rama convierte la revisión obligatoria en una puerta verificable.
 - **Alternatives considered**: *ESLint+Prettier* (más plugins específicos de Next, pero dos herramientas, config más frágil y CI más lento; las reglas críticas están cubiertas por Biome — rechazado); *Jest* (más lento, config legacy — rechazado).
 
 ## R13. Observabilidad
 
-- **Decision**: logging estructurado JSON con `request_id` correlacionado (middleware propio ligero) emitido a Workers Logs; errores no controlados a Sentry (capa gratuita, SDK Cloudflare); alertas de presupuesto activadas en Cloudflare y Neon desde el primer despliegue.
-- **Rationale**: cumple el mandato constitucional de observabilidad con coste 0 en lanzamiento. NIF, importes y datos personales quedan excluidos de logs por convención de serialización central (un único helper `logSafe`).
+- **Decision**: logging estructurado JSON con `request_id` en Workers Logs; errores no controlados a Sentry; controles de gasto configurados y verificados. Un gate pre-deploy impide cualquier despliegue remoto hasta confirmar Sentry, TLS/cifrado, R2 privado y la alerta de gasto Cloudflare. Mientras Neon permanezca en Free no existe gasto facturable: se monitorizan sus límites de uso; antes de cualquier upgrade de pago se activa Spending Limit, con avisos al 80% y 100%. Se conserva evidencia no sensible y responsables en el runbook; un smoke test post-deploy confirma el flujo de errores.
+- **Rationale**: cumple observabilidad y coste sin confundir documentación con configuración. NIF, importes, tokens, destinatarios y mensajes quedan excluidos de logs mediante `logSafe`.
 - **Alternatives considered**: *Axiom/Baselime* (buenos, pero Workers Logs + Sentry gratis cubren v1 — rechazado por ahora).
 
 ## R14. Almacenamiento de objetos: Cloudflare R2
 
-- **Decision**: R2 para logotipos de empresa y PDFs cacheados. Bucket privado; el acceso pasa siempre por el Worker (autorización por sesión o por token de enlace público).
-- **Rationale**: sin coste de egreso (los PDF se descargan muchas veces — es exactamente el caso donde S3 cobra y R2 no); 10 GB gratis; misma cuenta/factura que el hosting.
+- **Decision**: R2 para logotipos y PDFs cacheados. Bucket privado; acceso siempre por Worker autorizado. R2 cifra automáticamente objetos y metadatos en reposo con AES-256-GCM y protege el tránsito con TLS; la verificación pre-deploy confirma bucket privado, HTTPS y configuración esperada.
+- **Rationale**: sin coste de egreso, 10 GB gratis y cifrado gestionado sin claves propias en v1. El objeto PDF usa clave determinista para caché e idempotencia.
 - **Alternatives considered**: *S3* (egreso de pago — rechazado); *BD bytea* (infla la base más cara del stack — rechazado).
+
+## R15. Capacidades y límites de planes
+
+- **Decision**: una tabla de capacidades versionada en `src/lib/plan.ts` define `free = {docLimit: 5, canSendEmail: false}` y `pro = {docLimit: 100, canSendEmail: true}`. El consumo cuenta documentos con `issued_at` dentro del mes natural `Europe/Madrid`, incluidos los anulados posteriormente; los borradores no cuentan. API y UI consumen exclusivamente esta fuente. Toda operación que vaya a crear un documento emitido —emisión convencional, conversión con `issue=true` o recibo— pasa por `src/services/document-issuance.ts`: puede resolver un resultado idempotente como vía rápida y, dentro de la transacción, bloquea primero la fila `company`, vuelve a resolverlo para cerrar carreras, cuenta el consumo, rechaza si no queda cupo y solo después bloquea la serie y crea los efectos.
+- **Rationale**: valores concretos permiten pruebas deterministas y mensajes claros sin persistir límites redundantes por empresa. Contar documentos anulados evita eludir el límite después de consumir numeración y trabajo de PDF. La fila de empresa ofrece un punto de serialización ya existente para todas las vías de emisión; el orden fijo `company → document_series` evita carreras e interbloqueos y garantiza que un rechazo no consuma número, PDF ni evento. Versionarlo con el producto obliga a revisar requisitos, pruebas y comunicación cuando cambie.
+- **Alternatives considered**: *límite persistido por empresa* (permite divergencias accidentales entre clientes del mismo plan — rechazado para v1); *contador mensual mutable* (exige conciliación y una entidad adicional — rechazado para v1); *comprobar `COUNT(*)` sin lock común en cada endpoint* (permite superar el cupo bajo concurrencia — rechazado); *configuración remota comercial* (más flexible, pero añade servicio, auditoría y estados de caché innecesarios en v1 — pospuesto).
 
 ---
 
@@ -130,11 +136,11 @@ Precios verificados en julio de 2026 contra fuentes públicas (ver "Fuentes" al 
 | Calidad | Biome, Vitest, Playwright, GitHub Actions | 0 $ |
 | Observabilidad | Workers Logs + Sentry free | 0 $ |
 
-**Total: ~5–6 $/mes en lanzamiento; ~35–55 $/mes a 10x.** Todas las incógnitas de Technical Context quedan resueltas; no restan NEEDS CLARIFICATION.
+**Escalas de coste**: ~5–6 $/mes en lanzamiento (100 usuarios/1k documentos), sobre conservador ~36–78 $/mes en objetivo v1 (1k/10k) y ~180–310 $/mes en resiliencia (10k/100k, hasta un email por documento). Los valores se recalibran con métricas antes de escalar. Todas las incógnitas técnicas quedan resueltas.
 
 ## Fuentes
 
-- [Neon — Pricing](https://neon.com/pricing) · [Neon plans — Docs](https://neon.com/docs/introduction/plans) · [Neon Serverless Postgres Pricing 2026](https://vela.simplyblock.io/articles/neon-serverless-postgres-pricing-2026/)
+- [Neon — Pricing](https://neon.com/pricing) · [Neon plans](https://neon.com/docs/introduction/plans) · [Neon security](https://neon.com/docs/security/security-overview) · [Neon spending limits](https://neon.com/blog/introducing-organization-spending-limits)
 - [Vercel — Pricing](https://vercel.com/pricing) · [Vercel Pricing Explained 2026](https://kuberns.com/blogs/vercel-pricing/) · [Vercel Cost in 2026](https://makerkit.dev/blog/saas/vercel-cost)
-- [Cloudflare Workers — Pricing docs](https://developers.cloudflare.com/workers/platform/pricing/) · [Workers & Pages Pricing](https://www.cloudflare.com/plans/developer-platform/) · [OpenNext Cloudflare](https://opennext.js.org/cloudflare) · [Next.js on Vercel vs Cloudflare](https://vercel.com/kb/guide/next-js-on-vercel-vs-cloudflare)
-- [Resend — Pricing](https://resend.com/pricing) · [Resend — New Free Tier](https://resend.com/blog/new-free-tier)
+- [Cloudflare Workers — Pricing](https://developers.cloudflare.com/workers/platform/pricing/) · [Queues delivery model](https://developers.cloudflare.com/queues/reference/how-queues-works/) · [R2 data security](https://developers.cloudflare.com/r2/reference/data-security/) · [Cloudflare budget alerts](https://developers.cloudflare.com/billing/manage/budget-alerts/) · [OpenNext Cloudflare](https://opennext.js.org/cloudflare)
+- [Resend — Pricing](https://resend.com/pricing) · [Resend idempotency keys](https://resend.com/docs/dashboard/emails/idempotency-keys)
