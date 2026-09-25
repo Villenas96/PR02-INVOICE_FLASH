@@ -41,7 +41,11 @@ const cursorSchema = z
 const decimalSchema = z.union([z.string(), z.number()]);
 const draftLineSchema = z
   .object({
-    description: z.string().trim().min(1).max(1_000),
+    description: z
+      .string()
+      .trim()
+      .min(1, "Añade una descripción a cada línea.")
+      .max(1_000, "La descripción no puede superar 1.000 caracteres."),
     quantity: decimalSchema,
     unit_price_cents: z.number().int().min(0).max(MAX_POSTGRES_INTEGER),
     tax_rate: decimalSchema,
@@ -55,7 +59,10 @@ const createDraftSchema = z
     issue_date: z.iso.date().optional(),
     due_date: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
-    lines: z.array(draftLineSchema).max(500),
+    lines: z
+      .array(draftLineSchema)
+      .min(1, "Añade al menos una línea al borrador.")
+      .max(500, "El borrador no puede superar 500 líneas."),
   })
   .strict();
 

@@ -112,8 +112,8 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 - [X] T061 [P] [US1] Build the cursor-paginated document list with type/status badges in `src/app/(app)/documents/page.tsx`
 - [X] T062 [P] [US1] Build document detail with immutable snapshots, audit history, issue/void and PDF processing/poll/download states in `src/app/(app)/documents/[id]/page.tsx`
 - [X] T063 [US1] Wire persistent `free=5|pro=100` plan usage, warning at 4/80, new-emission block at 5/100, server-authoritative `plan_limit_reached` feedback and email/PDF/link capabilities into settings and editor in `src/components/plan/plan-indicator.tsx` and `src/components/documents/editor/issue-action.tsx`
-- [ ] T064 [US1] Add the automated timed registration-to-first-PDF and configured-user-under-two-minutes regression with incomplete-draft errors, axe and mobile/desktop feedback checks, explicitly separate from moderated V13, in `tests/e2e/first-invoice.spec.ts`
-- [ ] T065 [US1] Add PDF render p95 <500 ms and availability p95 <3 s performance scenarios in `tests/performance/pdf-render.test.ts`
+- [X] T064 [US1] Add the automated timed registration-to-first-PDF and configured-user-under-two-minutes regression with incomplete-draft errors, axe and mobile/desktop feedback checks, explicitly separate from moderated V13, in `tests/e2e/first-invoice.spec.ts`
+- [X] T065 [US1] Add PDF render p95 <500 ms and availability p95 <3 s performance scenarios in `tests/performance/pdf-render.test.ts`
 
 **Checkpoint**: US1 sustituye el flujo Word/Excel y constituye el MVP desplegable.
 

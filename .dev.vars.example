@@ -4,6 +4,7 @@
 DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 BETTER_AUTH_SECRET=
 RESEND_API_KEY=
+RESEND_FROM_EMAIL=facturas@invoiceflash.app
 SENTRY_DSN=
 
 # Solo integración: usa una base aislada; nunca reutilices DATABASE_URL.

@@ -2,20 +2,14 @@ import { eq } from "drizzle-orm";
 
 import { createDatabase } from "@/db";
 import { companies } from "@/db/schema";
+import {
+  AuthenticationRequiredError,
+  ResourceNotFoundError,
+} from "@/lib/api/errors";
 import { auth } from "@/lib/auth";
 import { createUuidV7 } from "@/lib/ids";
 
-export class AuthenticationRequiredError extends Error {
-  constructor() {
-    super("Necesitas iniciar sesión para continuar.");
-  }
-}
-
-export class ResourceNotFoundError extends Error {
-  constructor() {
-    super("No se ha encontrado el recurso solicitado.");
-  }
-}
+export { AuthenticationRequiredError, ResourceNotFoundError };
 
 export interface CompanyContext {
   userId: string;

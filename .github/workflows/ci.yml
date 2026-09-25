@@ -65,6 +65,9 @@ jobs:
   integration_tests:
     name: Integration tests
     runs-on: ubuntu-latest
+    env:
+      INTEGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/invoice_flash_test
+      BETTER_AUTH_SECRET: ci-integration-tests-secret-do-not-use-in-prod
     services:
       postgres:
         image: postgres:16
@@ -94,6 +97,23 @@ jobs:
   e2e_tests:
     name: E2E tests
     runs-on: ubuntu-latest
+    env:
+      E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/invoice_flash_e2e
+      E2E_BETTER_AUTH_SECRET: ci-e2e-tests-secret-do-not-use-in-prod
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: invoice_flash_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

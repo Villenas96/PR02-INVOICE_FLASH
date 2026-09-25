@@ -1,8 +1,3 @@
-import {
-  AuthenticationRequiredError,
-  ResourceNotFoundError,
-} from "@/services/context";
-
 export type ApiErrorCode =
   | "authentication_required"
   | "company_incomplete"
@@ -13,6 +8,18 @@ export type ApiErrorCode =
   | "plan_limit_reached"
   | "resource_not_found"
   | "validation_error";
+
+export class AuthenticationRequiredError extends Error {
+  constructor() {
+    super("Necesitas iniciar sesión para continuar.");
+  }
+}
+
+export class ResourceNotFoundError extends Error {
+  constructor() {
+    super("No se ha encontrado el recurso solicitado.");
+  }
+}
 
 export class ApiError extends Error {
   constructor(

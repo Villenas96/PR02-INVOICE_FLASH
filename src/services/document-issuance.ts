@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 
 import { createDatabase, type Database } from "@/db";
+import { firstExecutionRow } from "@/db/result";
 import { clients } from "@/db/schema/client";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
@@ -145,21 +146,6 @@ interface AtomicIssueRow extends Record<string, unknown> {
   series_locked: boolean;
 }
 
-function firstAtomicIssueRow(result: unknown): AtomicIssueRow | undefined {
-  if (Array.isArray(result)) {
-    return result[0] as AtomicIssueRow | undefined;
-  }
-  if (
-    result &&
-    typeof result === "object" &&
-    "rows" in result &&
-    Array.isArray(result.rows)
-  ) {
-    return result.rows[0] as AtomicIssueRow | undefined;
-  }
-  return undefined;
-}
-
 async function executeIssuanceTransaction(
   database: Database,
   lockStatement: SQL,
@@ -170,7 +156,7 @@ async function executeIssuanceTransaction(
       database.execute(lockStatement),
       database.execute<AtomicIssueRow>(issueStatement),
     ]);
-    return firstAtomicIssueRow(issueResult);
+    return firstExecutionRow<AtomicIssueRow>(issueResult);
   }
 
   const transactionalDatabase = database as unknown as {
@@ -192,7 +178,7 @@ async function executeIssuanceTransaction(
       return transaction.execute(issueStatement);
     },
   );
-  return firstAtomicIssueRow(issueResult);
+  return firstExecutionRow<AtomicIssueRow>(issueResult);
 }
 
 function companyIncompleteError(

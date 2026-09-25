@@ -74,6 +74,13 @@ export const auth = betterAuth({
     schema: authSchema,
     camelCase: true,
   }),
+  // Better Auth activa por defecto su límite de 3 registros/10s en cualquier
+  // build de producción (incluida la vista previa de Playwright, que ejecuta
+  // el build real). El flag solo lo desactiva en esa vista previa E2E.
+  rateLimit: {
+    enabled:
+      process.env.E2E_DISABLE_AUTH_RATE_LIMIT === "true" ? false : undefined,
+  },
   advanced: {
     database: {
       generateId: () => createUuidV7(),

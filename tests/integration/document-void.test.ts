@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { voidIssuedDocument } from "@/app/api/v1/documents/[id]/void/route";
 import {
   clients,
   companies,
@@ -11,6 +10,7 @@ import {
   users,
 } from "@/db/schema";
 import type { ApiError } from "@/lib/api/errors";
+import { voidIssuedDocument } from "@/services/document-void";
 
 import { createIntegrationDatabase } from "./database";
 

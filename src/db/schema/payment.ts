@@ -35,7 +35,7 @@ export const payments = pgTable(
     confirmedOverpayment: boolean("confirmed_overpayment")
       .notNull()
       .default(false),
-    paidOn: date("paid_on").notNull(),
+    paidOn: date("paid_on", { mode: "string" }).notNull(),
     method: paymentMethodEnum("method"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
+import { executionRows } from "@/db/result";
 import { clients } from "@/db/schema/client";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
@@ -384,21 +385,21 @@ export async function createDraftDocument(
     ),
     inserted_document AS (
       INSERT INTO ${documents} (
-        ${documents.id},
-        ${documents.companyId},
-        ${documents.documentType},
-        ${documents.status},
-        ${documents.clientId},
-        ${documents.issueDate},
-        ${documents.dueDate},
-        ${documents.notes},
-        ${documents.subtotalCents},
-        ${documents.taxBreakdown},
-        ${documents.retentionRate},
-        ${documents.retentionCents},
-        ${documents.totalCents},
-        ${documents.createdAt},
-        ${documents.updatedAt}
+        ${sql.identifier(documents.id.name)},
+        ${sql.identifier(documents.companyId.name)},
+        ${sql.identifier(documents.documentType.name)},
+        ${sql.identifier(documents.status.name)},
+        ${sql.identifier(documents.clientId.name)},
+        ${sql.identifier(documents.issueDate.name)},
+        ${sql.identifier(documents.dueDate.name)},
+        ${sql.identifier(documents.notes.name)},
+        ${sql.identifier(documents.subtotalCents.name)},
+        ${sql.identifier(documents.taxBreakdown.name)},
+        ${sql.identifier(documents.retentionRate.name)},
+        ${sql.identifier(documents.retentionCents.name)},
+        ${sql.identifier(documents.totalCents.name)},
+        ${sql.identifier(documents.createdAt.name)},
+        ${sql.identifier(documents.updatedAt.name)}
       )
       SELECT
         ${documentId},
@@ -414,8 +415,8 @@ export async function createDraftDocument(
         scoped_company.retention_rate,
         ${billing.retentionCents},
         ${billing.totalCents},
-        ${now},
-        ${now}
+        ${now.toISOString()},
+        ${now.toISOString()}
       FROM scoped_company
       LEFT JOIN scoped_client ON TRUE
       WHERE ${input.clientId === null}
@@ -439,17 +440,17 @@ export async function createDraftDocument(
     ),
     inserted_lines AS (
       INSERT INTO ${documentLines} (
-        ${documentLines.id},
-        ${documentLines.documentId},
-        ${documentLines.position},
-        ${documentLines.description},
-        ${documentLines.quantity},
-        ${documentLines.unitPriceCents},
-        ${documentLines.taxRate},
-        ${documentLines.discountPercentage},
-        ${documentLines.lineSubtotalCents},
-        ${documentLines.lineTaxCents},
-        ${documentLines.lineTotalCents}
+        ${sql.identifier(documentLines.id.name)},
+        ${sql.identifier(documentLines.documentId.name)},
+        ${sql.identifier(documentLines.position.name)},
+        ${sql.identifier(documentLines.description.name)},
+        ${sql.identifier(documentLines.quantity.name)},
+        ${sql.identifier(documentLines.unitPriceCents.name)},
+        ${sql.identifier(documentLines.taxRate.name)},
+        ${sql.identifier(documentLines.discountPercentage.name)},
+        ${sql.identifier(documentLines.lineSubtotalCents.name)},
+        ${sql.identifier(documentLines.lineTaxCents.name)},
+        ${sql.identifier(documentLines.lineTotalCents.name)}
       )
       SELECT
         line_input.id,
@@ -473,12 +474,12 @@ export async function createDraftDocument(
     ),
     inserted_event AS (
       INSERT INTO ${documentEvents} (
-        ${documentEvents.id},
-        ${documentEvents.companyId},
-        ${documentEvents.documentId},
-        ${documentEvents.actor},
-        ${documentEvents.event},
-        ${documentEvents.createdAt}
+        ${sql.identifier(documentEvents.id.name)},
+        ${sql.identifier(documentEvents.companyId.name)},
+        ${sql.identifier(documentEvents.documentId.name)},
+        ${sql.identifier(documentEvents.actor.name)},
+        ${sql.identifier(documentEvents.event.name)},
+        ${sql.identifier(documentEvents.createdAt.name)}
       )
       SELECT
         ${eventId},
@@ -486,7 +487,7 @@ export async function createDraftDocument(
         inserted_document.id,
         ${input.actor},
         'created'::document_event_type,
-        ${now}
+        ${now.toISOString()}
       FROM inserted_document
       CROSS JOIN line_barrier
       RETURNING document_id
@@ -497,7 +498,7 @@ export async function createDraftDocument(
       ON inserted_event.document_id = inserted_document.id
   `);
 
-  if (result.rows.length === 0) {
+  if (executionRows(result).length === 0) {
     return throwCreateFailure(
       database,
       input.companyId,
@@ -617,7 +618,7 @@ export async function updateDraftDocument(
           WHEN ${replacesLines} THEN ${billing.totalCents}
           ELSE target_document.total_cents
         END,
-        updated_at = ${now}
+        updated_at = ${now.toISOString()}
       FROM target
       WHERE target_document.id = target.id
       RETURNING target_document.id, target_document.company_id
@@ -650,17 +651,17 @@ export async function updateDraftDocument(
     ),
     inserted_lines AS (
       INSERT INTO ${documentLines} (
-        ${documentLines.id},
-        ${documentLines.documentId},
-        ${documentLines.position},
-        ${documentLines.description},
-        ${documentLines.quantity},
-        ${documentLines.unitPriceCents},
-        ${documentLines.taxRate},
-        ${documentLines.discountPercentage},
-        ${documentLines.lineSubtotalCents},
-        ${documentLines.lineTaxCents},
-        ${documentLines.lineTotalCents}
+        ${sql.identifier(documentLines.id.name)},
+        ${sql.identifier(documentLines.documentId.name)},
+        ${sql.identifier(documentLines.position.name)},
+        ${sql.identifier(documentLines.description.name)},
+        ${sql.identifier(documentLines.quantity.name)},
+        ${sql.identifier(documentLines.unitPriceCents.name)},
+        ${sql.identifier(documentLines.taxRate.name)},
+        ${sql.identifier(documentLines.discountPercentage.name)},
+        ${sql.identifier(documentLines.lineSubtotalCents.name)},
+        ${sql.identifier(documentLines.lineTaxCents.name)},
+        ${sql.identifier(documentLines.lineTotalCents.name)}
       )
       SELECT
         line_input.id,
@@ -686,12 +687,12 @@ export async function updateDraftDocument(
     ),
     inserted_event AS (
       INSERT INTO ${documentEvents} (
-        ${documentEvents.id},
-        ${documentEvents.companyId},
-        ${documentEvents.documentId},
-        ${documentEvents.actor},
-        ${documentEvents.event},
-        ${documentEvents.createdAt}
+        ${sql.identifier(documentEvents.id.name)},
+        ${sql.identifier(documentEvents.companyId.name)},
+        ${sql.identifier(documentEvents.documentId.name)},
+        ${sql.identifier(documentEvents.actor.name)},
+        ${sql.identifier(documentEvents.event.name)},
+        ${sql.identifier(documentEvents.createdAt.name)}
       )
       SELECT
         ${eventId},
@@ -699,7 +700,7 @@ export async function updateDraftDocument(
         updated_document.id,
         ${input.actor},
         'updated'::document_event_type,
-        ${now}
+        ${now.toISOString()}
       FROM updated_document
       CROSS JOIN line_barrier
       RETURNING document_id
@@ -710,7 +711,7 @@ export async function updateDraftDocument(
       ON inserted_event.document_id = updated_document.id
   `);
 
-  if (result.rows.length === 0) {
+  if (executionRows(result).length === 0) {
     return throwMutationFailure(database, input.companyId, input.documentId);
   }
 
@@ -741,8 +742,8 @@ export async function softDeleteDraftDocument(
     deleted_document AS (
       UPDATE ${documents} target_document
       SET
-        deleted_at = ${now},
-        updated_at = ${now}
+        deleted_at = ${now.toISOString()},
+        updated_at = ${now.toISOString()}
       FROM scoped_company
       WHERE target_document.id = ${input.documentId}
         AND target_document.company_id = scoped_company.id
@@ -752,13 +753,13 @@ export async function softDeleteDraftDocument(
     ),
     inserted_event AS (
       INSERT INTO ${documentEvents} (
-        ${documentEvents.id},
-        ${documentEvents.companyId},
-        ${documentEvents.documentId},
-        ${documentEvents.actor},
-        ${documentEvents.event},
-        ${documentEvents.payload},
-        ${documentEvents.createdAt}
+        ${sql.identifier(documentEvents.id.name)},
+        ${sql.identifier(documentEvents.companyId.name)},
+        ${sql.identifier(documentEvents.documentId.name)},
+        ${sql.identifier(documentEvents.actor.name)},
+        ${sql.identifier(documentEvents.event.name)},
+        ${sql.identifier(documentEvents.payload.name)},
+        ${sql.identifier(documentEvents.createdAt.name)}
       )
       SELECT
         ${createUuidV7(now.getTime())},
@@ -767,7 +768,7 @@ export async function softDeleteDraftDocument(
         ${input.actor},
         'updated'::document_event_type,
         '{"operation":"draft_deleted"}'::jsonb,
-        ${now}
+        ${now.toISOString()}
       FROM deleted_document
       RETURNING document_id
     )
@@ -777,7 +778,7 @@ export async function softDeleteDraftDocument(
       ON inserted_event.document_id = deleted_document.id
   `);
 
-  if (result.rows.length === 0) {
+  if (executionRows(result).length === 0) {
     return throwMutationFailure(database, input.companyId, input.documentId);
   }
 }

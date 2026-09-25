@@ -170,12 +170,12 @@ async function ensureInvoiceSeries(
       FOR UPDATE
     )
     INSERT INTO ${documentSeries} (
-      ${documentSeries.id},
-      ${documentSeries.companyId},
-      ${documentSeries.documentType},
-      ${documentSeries.prefix},
-      ${documentSeries.nextNumber},
-      ${documentSeries.isDefault}
+      ${sql.identifier(documentSeries.id.name)},
+      ${sql.identifier(documentSeries.companyId.name)},
+      ${sql.identifier(documentSeries.documentType.name)},
+      ${sql.identifier(documentSeries.prefix.name)},
+      ${sql.identifier(documentSeries.nextNumber.name)},
+      ${sql.identifier(documentSeries.isDefault.name)}
     )
     SELECT
       ${crypto.randomUUID()},
@@ -302,12 +302,12 @@ export async function POST(request: Request): Promise<Response> {
         FROM unset_default
       )
       INSERT INTO ${documentSeries} (
-        ${documentSeries.id},
-        ${documentSeries.companyId},
-        ${documentSeries.documentType},
-        ${documentSeries.prefix},
-        ${documentSeries.nextNumber},
-        ${documentSeries.isDefault}
+        ${sql.identifier(documentSeries.id.name)},
+        ${sql.identifier(documentSeries.companyId.name)},
+        ${sql.identifier(documentSeries.documentType.name)},
+        ${sql.identifier(documentSeries.prefix.name)},
+        ${sql.identifier(documentSeries.nextNumber.name)},
+        ${sql.identifier(documentSeries.isDefault.name)}
       )
       SELECT
         ${seriesId},

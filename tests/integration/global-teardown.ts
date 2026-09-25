@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -13,6 +13,52 @@ import {
 } from "./database";
 
 const execFileAsync = promisify(execFile);
+
+const NEON_HTTP_PROXY_PORT = 55434;
+
+/**
+ * `src/lib/auth.ts` builds its Better Auth instance at import time via
+ * `createDatabase()`, which always speaks the `neon-http` driver. Locally
+ * and in CI, `INTEGRATION_DATABASE_URL` points at a plain Postgres service,
+ * so we front it with the same HTTP shim used for E2E and point
+ * `DATABASE_URL`/`NEON_HTTP_ENDPOINT` at it before any test file (and thus
+ * `@/lib/auth`) is imported.
+ */
+async function startNeonHttpProxy(databaseUrl: string) {
+  const proxy = spawn(
+    process.execPath,
+    [resolve("tests/e2e/neon-http-proxy.mjs")],
+    {
+      env: {
+        ...process.env,
+        E2E_DATABASE_URL: databaseUrl,
+        NEON_HTTP_PROXY_PORT: String(NEON_HTTP_PROXY_PORT),
+      },
+      stdio: "inherit",
+    },
+  );
+
+  const healthUrl = `http://127.0.0.1:${NEON_HTTP_PROXY_PORT}/health`;
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(healthUrl);
+      if (response.ok) {
+        process.env.NEON_HTTP_ENDPOINT = `http://127.0.0.1:${NEON_HTTP_PROXY_PORT}/sql`;
+        process.env.DATABASE_URL = databaseUrl;
+        return proxy;
+      }
+    } catch {
+      // Proxy socket not ready yet; retry until the deadline.
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  }
+
+  proxy.kill();
+  throw new Error(
+    "El proxy HTTP local de Neon no respondió a tiempo para las pruebas de integración.",
+  );
+}
 
 type CleanupTarget = "docker" | "neon" | "none";
 
@@ -77,6 +123,7 @@ export default async function integrationGlobalSetup() {
     await migrationClient.end({ timeout: 5 });
   }
 
+  const proxy = await startNeonHttpProxy(databaseUrl);
   const target = cleanupTarget();
   return async () => {
     try {
@@ -85,7 +132,11 @@ export default async function integrationGlobalSetup() {
       try {
         await closeIntegrationDatabase();
       } finally {
-        await cleanupEphemeralDatabase(target);
+        try {
+          proxy.kill();
+        } finally {
+          await cleanupEphemeralDatabase(target);
+        }
       }
     }
   };

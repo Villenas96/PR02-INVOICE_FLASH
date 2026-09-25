@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase } from "@/db";
+import { executionRows } from "@/db/result";
 import { companies } from "@/db/schema/company";
 import { documents } from "@/db/schema/document";
 import { documentSeries } from "@/db/schema/document-series";
@@ -96,23 +97,6 @@ function seriesResponse(series: typeof documentSeries.$inferSelect) {
     next_number: series.nextNumber,
     is_default: series.isDefault,
   };
-}
-
-function executionRows<TResult>(result: unknown): TResult[] {
-  if (Array.isArray(result)) {
-    return result as TResult[];
-  }
-
-  if (
-    typeof result === "object" &&
-    result !== null &&
-    "rows" in result &&
-    Array.isArray(result.rows)
-  ) {
-    return result.rows as TResult[];
-  }
-
-  return [];
 }
 
 export async function PATCH(

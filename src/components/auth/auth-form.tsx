@@ -64,7 +64,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
         const response = await authClient.signIn.email({
           email,
           password,
-          callbackURL: "/dashboard",
+          callbackURL: "/documents",
         });
         errorFromResponse(response);
         return null;
@@ -108,7 +108,7 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     }
 
     if (mode === "login") {
-      router.replace("/dashboard");
+      router.replace("/documents");
       router.refresh();
       return;
     }

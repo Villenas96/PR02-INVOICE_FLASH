@@ -46,8 +46,8 @@ export const documents = pgTable(
     clientId: uuid("client_id").references(() => clients.id, {
       onDelete: "restrict",
     }),
-    issueDate: date("issue_date").notNull(),
-    dueDate: date("due_date"),
+    issueDate: date("issue_date", { mode: "string" }).notNull(),
+    dueDate: date("due_date", { mode: "string" }),
     notes: text("notes"),
     subtotalCents: integer("subtotal_cents").notNull().default(0),
     taxBreakdown: jsonb("tax_breakdown").notNull().default(sql`'[]'::jsonb`),
