@@ -30,8 +30,13 @@ export default defineConfig({
       timeout: 10_000,
     },
     {
+      // `BETTER_AUTH_SECRET` must also be a real process env var (not just
+      // a `--var` runtime binding): `opennextjs-cloudflare build`'s `next
+      // build` step imports route modules to collect page data, which
+      // constructs the Better Auth instance at import time and throws if
+      // `process.env.BETTER_AUTH_SECRET` is unset.
       command:
-        "DATABASE_URL=$E2E_DATABASE_URL pnpm preview -- --port 3000 --var DATABASE_URL:$E2E_DATABASE_URL --var BETTER_AUTH_SECRET:$E2E_BETTER_AUTH_SECRET --var BETTER_AUTH_URL:http://127.0.0.1:3000 --var NEON_HTTP_ENDPOINT:http://127.0.0.1:55433/sql --var E2E_DISABLE_AUTH_RATE_LIMIT:true",
+        "DATABASE_URL=$E2E_DATABASE_URL BETTER_AUTH_SECRET=$E2E_BETTER_AUTH_SECRET pnpm preview -- --port 3000 --var DATABASE_URL:$E2E_DATABASE_URL --var BETTER_AUTH_SECRET:$E2E_BETTER_AUTH_SECRET --var BETTER_AUTH_URL:http://127.0.0.1:3000 --var NEON_HTTP_ENDPOINT:http://127.0.0.1:55433/sql --var E2E_DISABLE_AUTH_RATE_LIMIT:true",
       url: "http://127.0.0.1:3000",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

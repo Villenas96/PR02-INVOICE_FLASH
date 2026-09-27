@@ -13,9 +13,6 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/invoice_flash_test
-
 jobs:
   lint:
     name: Lint (Biome)
