@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { DocumentActions } from "@/components/documents/document-actions";
 import { IssueAction } from "@/components/documents/editor/issue-action";
+import {
+  type DocumentPayment,
+  PaymentsPanel,
+} from "@/components/documents/payments-panel";
 import { PdfDownload } from "@/components/documents/pdf-download";
+import { SharePanel } from "@/components/documents/share-panel";
 import { useAsyncAction } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,11 +98,14 @@ interface DocumentDetailData {
   total_cents: number;
   issuer_snapshot: IssuerSnapshot | null;
   client_snapshot: ClientSnapshot | null;
+  converted_to_id: string | null;
+  invoice_id: string | null;
   pdf_status: PdfStatus | null;
   issued_at: string | null;
   voided_at: string | null;
   lines: DocumentLine[];
   events: DocumentEvent[];
+  payments: DocumentPayment[];
   paid_cents: number;
   outstanding_cents: number;
   payment_status: "overdue" | "paid" | "partial" | "pending" | null;
@@ -106,6 +115,7 @@ interface CompanyCapabilityData {
   is_ready_to_issue: boolean;
   docs_issued_this_month: number;
   doc_limit: number;
+  can_send_email: boolean;
 }
 
 const eventLabels: Record<string, string> = {
@@ -250,7 +260,10 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
   if (!document) {
     return (
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="text-sm text-[color-mix(in_oklch,var(--destructive),var(--foreground)_35%)]"
+        >
           {error ?? "No se ha podido cargar el documento."}
         </p>
         <Button
@@ -272,7 +285,11 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             {statusBadge(document.status)}
             <span className="text-sm text-muted-foreground">
-              {document.doc_type === "invoice" ? "Factura" : "Documento"}
+              {document.doc_type === "invoice"
+                ? "Factura"
+                : document.doc_type === "proforma"
+                  ? "Proforma"
+                  : "Recibo"}
             </span>
           </div>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -289,6 +306,9 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           {document.status === "draft" && company ? (
             <IssueAction
               documentId={document.id}
+              documentType={
+                document.doc_type === "proforma" ? "proforma" : "invoice"
+              }
               isCompanyReady={company.is_ready_to_issue}
               issuedDocuments={company.docs_issued_this_month}
               documentLimit={company.doc_limit}
@@ -340,7 +360,16 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
             <h2 className="font-semibold">Cliente al emitir</h2>
             <address className="mt-3 space-y-1 text-sm not-italic text-muted-foreground">
               <p className="font-medium text-foreground">
-                {document.client_snapshot.name}
+                {document.client_id ? (
+                  <Link
+                    className="underline-offset-4 hover:underline"
+                    href={`/clients/${document.client_id}`}
+                  >
+                    {document.client_snapshot.name}
+                  </Link>
+                ) : (
+                  document.client_snapshot.name
+                )}
               </p>
               <p>{document.client_snapshot.taxId ?? "Sin NIF"}</p>
               <p>{document.client_snapshot.address ?? "Sin dirección"}</p>
@@ -361,67 +390,121 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
         </section>
       ) : null}
 
-      <section className="rounded-xl border bg-card shadow-sm">
-        <div className="p-5 pb-2">
-          <h2 className="font-semibold">Conceptos</h2>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Descripción</TableHead>
-              <TableHead>Cantidad</TableHead>
-              <TableHead className="text-right">Precio</TableHead>
-              <TableHead className="text-right">IVA</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {document.lines.map((line) => (
-              <TableRow key={line.id}>
-                <TableCell className="max-w-sm whitespace-normal">
-                  {line.description}
-                </TableCell>
-                <TableCell>
-                  {Number(line.quantity).toLocaleString("es-ES")}
-                </TableCell>
-                <TableCell className="text-right">
-                  {formatEur(createCents(line.unit_price_cents))}
-                </TableCell>
-                <TableCell className="text-right">
-                  {Number(line.tax_rate).toLocaleString("es-ES")} %
-                </TableCell>
-                <TableCell className="text-right font-medium">
-                  {formatEur(createCents(line.line_total_cents))}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        <div className="ml-auto w-full max-w-sm space-y-3 border-t p-5 text-sm">
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">Base imponible</span>
-            <span>{formatEur(createCents(document.subtotal_cents))}</span>
-          </div>
-          {document.tax_breakdown.map((tax) => (
-            <div key={tax.rate} className="flex justify-between gap-4">
-              <span className="text-muted-foreground">
-                IVA {Number(tax.rate).toLocaleString("es-ES")} %
-              </span>
-              <span>{formatEur(createCents(tax.taxCents))}</span>
-            </div>
-          ))}
-          {document.retention_cents > 0 ? (
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Retención</span>
-              <span>-{formatEur(createCents(document.retention_cents))}</span>
-            </div>
+      {document.doc_type === "receipt" ? (
+        <section className="rounded-xl border bg-card p-5 shadow-sm">
+          <h2 className="font-semibold">Recibo</h2>
+          <p className="mt-3 text-sm">
+            Importe cobrado{" "}
+            <span className="font-semibold">
+              {formatEur(createCents(document.total_cents))}
+            </span>
+          </p>
+          {document.invoice_id ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Factura relacionada:{" "}
+              <Link
+                className="underline-offset-4 hover:underline"
+                href={`/documents/${document.invoice_id}`}
+              >
+                Ver factura
+              </Link>
+            </p>
           ) : null}
-          <div className="flex justify-between gap-4 border-t pt-3 text-base font-semibold">
-            <span>Total</span>
-            <span>{formatEur(createCents(document.total_cents))}</span>
+        </section>
+      ) : (
+        <section className="rounded-xl border bg-card shadow-sm">
+          <div className="p-5 pb-2">
+            <h2 className="font-semibold">Conceptos</h2>
           </div>
-        </div>
-      </section>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Descripción</TableHead>
+                <TableHead>Cantidad</TableHead>
+                <TableHead className="text-right">Precio</TableHead>
+                <TableHead className="text-right">IVA</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {document.lines.map((line) => (
+                <TableRow key={line.id}>
+                  <TableCell className="max-w-sm whitespace-normal">
+                    {line.description}
+                  </TableCell>
+                  <TableCell>
+                    {Number(line.quantity).toLocaleString("es-ES")}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatEur(createCents(line.unit_price_cents))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {Number(line.tax_rate).toLocaleString("es-ES")} %
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    {formatEur(createCents(line.line_total_cents))}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          <div className="ml-auto w-full max-w-sm space-y-3 border-t p-5 text-sm">
+            <div className="flex justify-between gap-4">
+              <span className="text-muted-foreground">Base imponible</span>
+              <span>{formatEur(createCents(document.subtotal_cents))}</span>
+            </div>
+            {document.tax_breakdown.map((tax) => (
+              <div key={tax.rate} className="flex justify-between gap-4">
+                <span className="text-muted-foreground">
+                  IVA {Number(tax.rate).toLocaleString("es-ES")} %
+                </span>
+                <span>{formatEur(createCents(tax.taxCents))}</span>
+              </div>
+            ))}
+            {document.retention_cents > 0 ? (
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground">Retención</span>
+                <span>-{formatEur(createCents(document.retention_cents))}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between gap-4 border-t pt-3 text-base font-semibold">
+              <span>Total</span>
+              <span>{formatEur(createCents(document.total_cents))}</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {document.doc_type === "invoice" && document.status === "issued" ? (
+        <PaymentsPanel
+          documentId={document.id}
+          totalCents={document.total_cents}
+          paidCents={document.paid_cents}
+          outstandingCents={document.outstanding_cents}
+          paymentStatus={document.payment_status}
+          payments={document.payments}
+          onChanged={loadDocument}
+        />
+      ) : null}
+
+      {company ? (
+        <DocumentActions
+          documentId={document.id}
+          documentType={document.doc_type}
+          convertedToId={document.converted_to_id}
+          issuedDocuments={company.docs_issued_this_month}
+          documentLimit={company.doc_limit}
+          payments={document.payments}
+        />
+      ) : null}
+
+      {(document.status === "issued" || document.status === "voided") &&
+      company ? (
+        <SharePanel
+          documentId={document.id}
+          canSendEmail={company.can_send_email}
+        />
+      ) : null}
 
       {document.notes ? (
         <section className="rounded-xl border bg-card p-5 shadow-sm">

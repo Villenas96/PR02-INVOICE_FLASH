@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { ClientSelector } from "@/components/documents/editor/client-selector";
+import { ClientPicker } from "@/components/documents/editor/client-picker";
+import {
+  DocumentTypeSelector,
+  type EditableDocumentType,
+} from "@/components/documents/editor/document-type-selector";
 import {
   createInitialEditorLine,
   InvoiceLines,
@@ -17,13 +21,7 @@ import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { calculateBilling } from "@/lib/billing";
 import { createCents, formatEur, parseEuroInput } from "@/lib/money";
 
-import type {
-  ClientPage,
-  CreatedDraft,
-  EditorClient,
-  EditorCompany,
-  EditorLine,
-} from "./types";
+import type { CreatedDraft, EditorCompany, EditorLine } from "./types";
 
 function madridToday(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en", {
@@ -47,8 +45,8 @@ function addCalendarDays(date: string, days: number): string {
 export function InvoiceEditor() {
   const router = useRouter();
   const [company, setCompany] = useState<EditorCompany>();
-  const [clients, setClients] = useState<EditorClient[]>([]);
-  const [nextClientCursor, setNextClientCursor] = useState<string | null>(null);
+  const [documentType, setDocumentType] =
+    useState<EditableDocumentType>("invoice");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [issueDate, setIssueDate] = useState(() => madridToday());
   const [dueDate, setDueDate] = useState("");
@@ -57,24 +55,16 @@ export function InvoiceEditor() {
     createInitialEditorLine(),
   ]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [loadError, setLoadError] = useState<string>();
   const saveAction = useAsyncAction<CreatedDraft>();
 
   useEffect(() => {
     const controller = new AbortController();
-    void Promise.all([
-      apiRequest<EditorCompany>("/api/v1/company", {
-        signal: controller.signal,
-      }),
-      apiRequest<ClientPage>("/api/v1/clients?limit=100", {
-        signal: controller.signal,
-      }),
-    ])
-      .then(([companyResult, clientResult]) => {
+    apiRequest<EditorCompany>("/api/v1/company", {
+      signal: controller.signal,
+    })
+      .then((companyResult) => {
         setCompany(companyResult);
-        setClients(clientResult.items);
-        setNextClientCursor(clientResult.next_cursor);
         setDueDate(
           (current) =>
             current ||
@@ -126,40 +116,13 @@ export function InvoiceEditor() {
     }
   }, [company, lines]);
 
-  async function loadMoreClients() {
-    if (!nextClientCursor || isLoadingClients) {
-      return;
-    }
-    setIsLoadingClients(true);
-    try {
-      const page = await apiRequest<ClientPage>(
-        `/api/v1/clients?limit=100&cursor=${encodeURIComponent(nextClientCursor)}`,
-      );
-      setClients((current) => [...current, ...page.items]);
-      setNextClientCursor(page.next_cursor);
-    } catch (error) {
-      setLoadError(
-        error instanceof Error
-          ? error.message
-          : "No se han podido cargar más clientes.",
-      );
-    } finally {
-      setIsLoadingClients(false);
-    }
-  }
-
-  function addClient(client: EditorClient) {
-    setClients((current) => [client, ...current]);
-    setSelectedClientId(client.id);
-  }
-
   async function handleSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const created = await saveAction.run(() =>
       apiRequest<CreatedDraft>(
         "/api/v1/documents",
         jsonRequest("POST", {
-          doc_type: "invoice",
+          doc_type: documentType,
           client_id: selectedClientId || null,
           issue_date: issueDate,
           due_date: dueDate || null,
@@ -190,7 +153,10 @@ export function InvoiceEditor() {
   if (!company) {
     return (
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="text-sm text-[color-mix(in_oklch,var(--destructive),var(--foreground)_35%)]"
+        >
           {loadError ?? "No se ha podido preparar el editor."}
         </p>
       </div>
@@ -217,14 +183,13 @@ export function InvoiceEditor() {
       ) : null}
       <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6">
         <div className="grid gap-5 lg:grid-cols-2">
-          <ClientSelector
-            clients={clients}
+          <DocumentTypeSelector
+            value={documentType}
+            onChange={setDocumentType}
+          />
+          <ClientPicker
             selectedId={selectedClientId}
-            nextCursor={nextClientCursor}
-            isLoadingMore={isLoadingClients}
             onChange={setSelectedClientId}
-            onCreate={addClient}
-            onLoadMore={loadMoreClients}
           />
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">

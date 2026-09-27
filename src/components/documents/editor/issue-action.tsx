@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/api/client";
 
 interface IssueActionProps {
   documentId: string;
+  documentType?: "invoice" | "proforma";
   isCompanyReady: boolean;
   issuedDocuments: number;
   documentLimit: number;
@@ -14,6 +15,7 @@ interface IssueActionProps {
 
 export function IssueAction({
   documentId,
+  documentType = "invoice",
   isCompanyReady,
   issuedDocuments,
   documentLimit,
@@ -21,6 +23,7 @@ export function IssueAction({
 }: IssueActionProps) {
   const action = useAsyncAction<unknown>();
   const limitReached = issuedDocuments >= documentLimit;
+  const label = documentType === "proforma" ? "proforma" : "factura";
 
   async function handleIssue() {
     const issued = await action.run(() =>
@@ -40,7 +43,7 @@ export function IssueAction({
         disabled={action.isLoading || limitReached || !isCompanyReady}
         onClick={handleIssue}
       >
-        {action.isLoading ? "Emitiendo…" : "Emitir factura"}
+        {action.isLoading ? "Emitiendo…" : `Emitir ${label}`}
       </Button>
       {!isCompanyReady ? (
         <p className="mt-2 max-w-md text-sm text-destructive">

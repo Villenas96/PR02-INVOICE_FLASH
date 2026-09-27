@@ -3,13 +3,27 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { createDatabase } from "@/db";
 import { emailDeliveries, verifications } from "@/db/schema";
+import { companies } from "@/db/schema/company";
+import { documents } from "@/db/schema/document";
+import { documentEvents } from "@/db/schema/document-event";
 import type { AuthEmailPurpose } from "@/lib/auth";
+import { createUuidV7 } from "@/lib/ids";
+import { createCents, formatEur } from "@/lib/money";
+import {
+  claimDocumentDelivery,
+  markDocumentDeliveryFailed,
+  markDocumentDeliverySent,
+} from "@/services/email/deliveries";
 import { renderAuthEmailTemplate } from "@/services/email/templates/auth";
+import { renderDocumentEmailTemplate } from "@/services/email/templates/document";
+import { createOrReactivateShareLink } from "@/services/share-links";
 import {
   EMAIL_RETRY_WINDOW_MS,
   type EmailSendMessage,
 } from "@/workers/messages";
 import { RetryableQueueError } from "@/workers/queue-consumer";
+
+const SYSTEM_ACTOR = "system";
 
 export interface TransactionalEmail {
   to: string;
@@ -255,6 +269,131 @@ async function handleAuthEmail(
       retryUntil,
     );
   }
+}
+
+export interface DocumentEmailHandlerDependencies {
+  database?: Database;
+  provider: TransactionalEmailProvider;
+  appBaseUrl: string;
+  now?: () => Date;
+}
+
+/**
+ * Document deliveries ensure a share link exists (creating or reactivating
+ * it) so the recipient always has a URL to view the document, then send and
+ * mark the delivery terminal. Only a successful send appends the single
+ * `email_sent` document_event (FR-021, data-model.md).
+ */
+export function createDocumentEmailHandler(
+  dependencies: DocumentEmailHandlerDependencies,
+): DocumentEmailHandler {
+  return async (message) => {
+    const database = dependencies.database ?? createDatabase();
+    const now = dependencies.now?.() ?? new Date();
+    const claimed = await claimDocumentDelivery(
+      database,
+      message.deliveryId,
+      now,
+    );
+
+    if (!claimed) {
+      return;
+    }
+
+    const retryUntil = new Date(
+      claimed.createdAt.getTime() + EMAIL_RETRY_WINDOW_MS,
+    );
+    if (now.getTime() >= retryUntil.getTime()) {
+      await markDocumentDeliveryFailed(
+        database,
+        claimed.id,
+        "document_delivery_expired",
+        now,
+      );
+      return;
+    }
+
+    const [document] = await database
+      .select({
+        documentType: documents.documentType,
+        status: documents.status,
+        fullNumber: documents.fullNumber,
+        totalCents: documents.totalCents,
+        legalName: companies.legalName,
+      })
+      .from(documents)
+      .innerJoin(companies, eq(companies.id, documents.companyId))
+      .where(eq(documents.id, claimed.documentId))
+      .limit(1);
+
+    if (
+      !document ||
+      document.status === "draft" ||
+      !document.fullNumber ||
+      !document.legalName
+    ) {
+      await markDocumentDeliveryFailed(
+        database,
+        claimed.id,
+        "document_not_ready",
+        now,
+      );
+      return;
+    }
+
+    const link = await createOrReactivateShareLink({
+      database,
+      companyId: claimed.companyId,
+      documentId: claimed.documentId,
+      actor: SYSTEM_ACTOR,
+      now,
+    });
+    const shareUrl = new URL(
+      `/d/${link.token}`,
+      dependencies.appBaseUrl,
+    ).toString();
+    const template = renderDocumentEmailTemplate({
+      documentType: document.documentType,
+      fullNumber: document.fullNumber,
+      totalFormatted: formatEur(createCents(document.totalCents)),
+      issuerLegalName: document.legalName,
+      shareUrl,
+      customMessage: claimed.customMessage,
+    });
+
+    try {
+      const providerResult = await dependencies.provider.send({
+        to: claimed.recipientEmail,
+        ...template,
+        idempotencyKey: `email/${claimed.id}`,
+      });
+      await markDocumentDeliverySent(
+        database,
+        claimed.id,
+        providerResult.id,
+        now,
+      );
+      await database.insert(documentEvents).values({
+        id: createUuidV7(now.getTime()),
+        companyId: claimed.companyId,
+        documentId: claimed.documentId,
+        actor: SYSTEM_ACTOR,
+        event: "email_sent",
+        createdAt: now,
+      });
+    } catch {
+      await markDocumentDeliveryFailed(
+        database,
+        claimed.id,
+        "provider_unavailable",
+        now,
+      );
+      throw new RetryableQueueError(
+        "El proveedor de correo no está disponible.",
+        retryUntil,
+      );
+    }
+  };
 }
 
 /**

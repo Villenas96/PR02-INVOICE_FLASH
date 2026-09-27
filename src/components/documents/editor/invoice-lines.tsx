@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  type CatalogItemSelection,
+  CatalogPicker,
+} from "@/components/documents/editor/catalog-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +32,17 @@ function emptyLine(defaultTaxRate: string): EditorLine {
 
 export function createInitialEditorLine(): EditorLine {
   return emptyLine("");
+}
+
+function lineFromCatalogItem(item: CatalogItemSelection): EditorLine {
+  return {
+    localId: crypto.randomUUID(),
+    description: item.description,
+    quantity: "1",
+    unitPrice: (item.unitPriceCents / 100).toFixed(2).replace(".", ","),
+    taxRate: item.taxRate,
+    discountPercentage: "0",
+  };
 }
 
 export function InvoiceLines({
@@ -63,13 +78,18 @@ export function InvoiceLines({
             Los importes se calculan y redondean por línea.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onChange([...lines, emptyLine(defaultTaxRate)])}
-        >
-          Añadir línea
-        </Button>
+        <div className="flex gap-2">
+          <CatalogPicker
+            onSelect={(item) => onChange([...lines, lineFromCatalogItem(item)])}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onChange([...lines, emptyLine(defaultTaxRate)])}
+          >
+            Añadir línea
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-3">

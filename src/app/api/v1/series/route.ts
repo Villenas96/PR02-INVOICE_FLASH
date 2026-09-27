@@ -12,6 +12,7 @@ import {
   ResourceNotFoundError,
   resolveCompanyContext,
 } from "@/services/context";
+import { ensureDefaultSeries } from "@/services/series";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -134,67 +135,6 @@ function decodeCursor(cursor: string | undefined): string | undefined {
   }
 }
 
-function currentMadridYear(now = new Date()): number {
-  return Number(
-    new Intl.DateTimeFormat("en", {
-      timeZone: "Europe/Madrid",
-      year: "numeric",
-    }).format(now),
-  );
-}
-
-async function ensureInvoiceSeries(
-  database: Database,
-  companyId: string,
-): Promise<void> {
-  const [existingSeries] = await database
-    .select({ id: documentSeries.id })
-    .from(documentSeries)
-    .where(
-      and(
-        eq(documentSeries.companyId, companyId),
-        eq(documentSeries.documentType, "invoice"),
-      ),
-    )
-    .limit(1);
-
-  if (existingSeries) {
-    return;
-  }
-
-  await database.execute(sql`
-    WITH locked_company AS MATERIALIZED (
-      SELECT ${companies.id} AS id
-      FROM ${companies}
-      WHERE ${companies.id} = ${companyId}
-      FOR UPDATE
-    )
-    INSERT INTO ${documentSeries} (
-      ${sql.identifier(documentSeries.id.name)},
-      ${sql.identifier(documentSeries.companyId.name)},
-      ${sql.identifier(documentSeries.documentType.name)},
-      ${sql.identifier(documentSeries.prefix.name)},
-      ${sql.identifier(documentSeries.nextNumber.name)},
-      ${sql.identifier(documentSeries.isDefault.name)}
-    )
-    SELECT
-      ${crypto.randomUUID()},
-      locked_company.id,
-      'invoice'::document_type,
-      ${`${currentMadridYear()}-`},
-      1,
-      TRUE
-    FROM locked_company
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM ${documentSeries} existing
-      WHERE existing.company_id = locked_company.id
-        AND existing.document_type = 'invoice'::document_type
-    )
-    ON CONFLICT DO NOTHING
-  `);
-}
-
 async function loadCreatedSeries(
   database: Database,
   companyId: string,
@@ -231,7 +171,11 @@ export async function GET(request: Request): Promise<Response> {
     const context = await resolveCompanyContext(request);
     const database = createDatabase();
 
-    await ensureInvoiceSeries(database, context.companyId);
+    await ensureDefaultSeries(
+      database,
+      context.companyId,
+      documentType ?? "invoice",
+    );
 
     const conditions = [
       eq(documentSeries.companyId, context.companyId),
@@ -270,7 +214,7 @@ export async function POST(request: Request): Promise<Response> {
     const database = createDatabase();
     const seriesId = crypto.randomUUID();
 
-    await ensureInvoiceSeries(database, context.companyId);
+    await ensureDefaultSeries(database, context.companyId, input.doc_type);
 
     await database.execute(sql`
       WITH locked_company AS MATERIALIZED (

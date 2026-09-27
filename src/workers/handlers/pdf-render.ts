@@ -3,6 +3,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { createDatabase, type Database } from "@/db";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
+import { payments } from "@/db/schema/payment";
 import { createUuidV7 } from "@/lib/ids";
 import { renderDocumentPdf } from "@/services/pdf/render";
 import type {
@@ -85,6 +86,36 @@ function taxBreakdown(value: unknown): DocumentPdfInput["taxBreakdown"] {
   });
 }
 
+async function loadReceiptDetails(
+  database: Database,
+  invoiceId: string | null,
+  paymentId: string | null,
+): Promise<DocumentPdfInput["receipt"]> {
+  if (!invoiceId || !paymentId) {
+    throw new Error("Falta la factura o el pago de origen del recibo.");
+  }
+
+  const [sourceInvoice] = await database
+    .select({ fullNumber: documents.fullNumber })
+    .from(documents)
+    .where(eq(documents.id, invoiceId))
+    .limit(1);
+  const [payment] = await database
+    .select({ paidOn: payments.paidOn })
+    .from(payments)
+    .where(eq(payments.id, paymentId))
+    .limit(1);
+
+  if (!sourceInvoice?.fullNumber || !payment) {
+    throw new Error("No se han encontrado los datos de origen del recibo.");
+  }
+
+  return {
+    sourceInvoiceFullNumber: sourceInvoice.fullNumber,
+    paymentDate: payment.paidOn,
+  };
+}
+
 async function loadPdfInput(
   database: Database,
   documentId: string,
@@ -105,6 +136,8 @@ async function loadPdfInput(
       issuerSnapshot: documents.issuerSnapshot,
       clientSnapshot: documents.clientSnapshot,
       pdfStatus: documents.pdfStatus,
+      invoiceId: documents.invoiceId,
+      paymentId: documents.paymentId,
     })
     .from(documents)
     .where(eq(documents.id, documentId))
@@ -120,27 +153,39 @@ async function loadPdfInput(
   if (
     (document.status !== "issued" && document.status !== "voided") ||
     (document.documentType !== "invoice" &&
-      document.documentType !== "proforma") ||
+      document.documentType !== "proforma" &&
+      document.documentType !== "receipt") ||
     !document.fullNumber ||
     document.pdfStatus !== "pending"
   ) {
     throw new Error("El documento no admite generación de PDF.");
   }
 
-  const lines = await database
-    .select({
-      position: documentLines.position,
-      description: documentLines.description,
-      quantity: documentLines.quantity,
-      unitPriceCents: documentLines.unitPriceCents,
-      taxRate: documentLines.taxRate,
-      lineSubtotalCents: documentLines.lineSubtotalCents,
-      lineTaxCents: documentLines.lineTaxCents,
-      lineTotalCents: documentLines.lineTotalCents,
-    })
-    .from(documentLines)
-    .where(eq(documentLines.documentId, documentId))
-    .orderBy(asc(documentLines.position));
+  const lines =
+    document.documentType === "receipt"
+      ? []
+      : await database
+          .select({
+            position: documentLines.position,
+            description: documentLines.description,
+            quantity: documentLines.quantity,
+            unitPriceCents: documentLines.unitPriceCents,
+            taxRate: documentLines.taxRate,
+            lineSubtotalCents: documentLines.lineSubtotalCents,
+            lineTaxCents: documentLines.lineTaxCents,
+            lineTotalCents: documentLines.lineTotalCents,
+          })
+          .from(documentLines)
+          .where(eq(documentLines.documentId, documentId))
+          .orderBy(asc(documentLines.position));
+  const receipt =
+    document.documentType === "receipt"
+      ? await loadReceiptDetails(
+          database,
+          document.invoiceId,
+          document.paymentId,
+        )
+      : undefined;
 
   return {
     documentType: document.documentType,
@@ -157,6 +202,7 @@ async function loadPdfInput(
     retentionCents: document.retentionCents,
     totalCents: document.totalCents,
     notes: document.notes,
+    receipt,
   };
 }
 

@@ -44,8 +44,13 @@ export interface DocumentPdfParty {
   email?: string | null;
 }
 
+export interface DocumentPdfReceiptDetails {
+  sourceInvoiceFullNumber: string;
+  paymentDate: string;
+}
+
 export interface DocumentPdfInput {
-  documentType: "invoice" | "proforma";
+  documentType: "invoice" | "proforma" | "receipt";
   fullNumber: string;
   issueDate: string;
   dueDate?: string | null;
@@ -63,6 +68,8 @@ export interface DocumentPdfInput {
   retentionCents: number;
   totalCents: number;
   notes?: string | null;
+  /** Only present (and only used) for receipts. */
+  receipt?: DocumentPdfReceiptDetails;
 }
 
 export interface PdfTextElement {
@@ -215,6 +222,107 @@ function totalsText(input: DocumentPdfInput): string {
   ].join("\n");
 }
 
+export function documentTitle(
+  documentType: DocumentPdfInput["documentType"],
+): string {
+  if (documentType === "invoice") {
+    return "Factura";
+  }
+  if (documentType === "proforma") {
+    return "Proforma";
+  }
+  return "Recibo";
+}
+
+function buildReceiptPdfLayout(input: DocumentPdfInput): DocumentPdfLayout {
+  const receipt = input.receipt;
+  if (!receipt) {
+    throw new Error("Falta la información de pago para el PDF del recibo.");
+  }
+
+  const title = documentTitle("receipt");
+  const elements: PdfLayoutElement[] = [
+    {
+      kind: "text",
+      role: "brand",
+      text: "INVOICE FLASH",
+      x: PDF_MARGINS.left,
+      y: 790,
+    },
+    {
+      kind: "text",
+      role: "document_title",
+      text: title,
+      x: PDF_MARGINS.left,
+      y: 744,
+    },
+    {
+      kind: "text",
+      role: "document_number",
+      text: `${title} ${input.fullNumber}`,
+      x: PDF_PAGE_SIZE.width - PDF_MARGINS.right,
+      y: 752,
+    },
+    {
+      kind: "text",
+      role: "issuer_heading",
+      text: "Emisor",
+      x: PDF_MARGINS.left,
+      y: 686,
+    },
+    {
+      kind: "text",
+      role: "issuer_details",
+      text: partyDetails(input.issuer),
+      x: PDF_MARGINS.left,
+      y: 666,
+    },
+    {
+      kind: "text",
+      role: "client_heading",
+      text: "Cliente",
+      x: 310,
+      y: 686,
+    },
+    {
+      kind: "text",
+      role: "client_details",
+      text: partyDetails(input.client),
+      x: 310,
+      y: 666,
+    },
+    {
+      kind: "text",
+      role: "receipt_invoice_reference",
+      text: `Factura relacionada\n${receipt.sourceInvoiceFullNumber}`,
+      x: PDF_MARGINS.left,
+      y: 558,
+    },
+    {
+      kind: "text",
+      role: "receipt_payment_date",
+      text: `Fecha de pago\n${formatDate(receipt.paymentDate)}`,
+      x: 310,
+      y: 558,
+    },
+    {
+      kind: "text",
+      role: "totals",
+      text: `Importe cobrado    ${formatMoney(input.totalCents)}`,
+      x: PDF_MARGINS.left,
+      y: 480,
+    },
+    pageFooter(1, 1),
+  ];
+
+  return {
+    pageSize: PDF_PAGE_SIZE,
+    margins: PDF_MARGINS,
+    theme: PDF_THEME,
+    pages: [{ elements }],
+  };
+}
+
 export function buildDocumentPdfLayout(
   input: DocumentPdfInput,
 ): DocumentPdfLayout {
@@ -222,9 +330,13 @@ export function buildDocumentPdfLayout(
     throw new RangeError("El renderizador v1 solo admite importes en EUR.");
   }
 
+  if (input.documentType === "receipt") {
+    return buildReceiptPdfLayout(input);
+  }
+
   const linePages = paginateLines(input.lines);
   const pageCount = linePages.length;
-  const title = input.documentType === "invoice" ? "Factura" : "Proforma";
+  const title = documentTitle(input.documentType);
   const pages = linePages.map((pageLines, pageIndex) => {
     const isFirstPage = pageIndex === 0;
     const isLastPage = pageIndex === pageCount - 1;
@@ -248,6 +360,16 @@ export function buildDocumentPdfLayout(
           y: 744,
         },
       );
+
+      if (input.documentType === "proforma") {
+        elements.push({
+          kind: "text",
+          role: "fiscal_notice",
+          text: "Documento sin validez fiscal.",
+          x: PDF_MARGINS.left,
+          y: 724,
+        });
+      }
     }
 
     elements.push({

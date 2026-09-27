@@ -1,9 +1,13 @@
+import { captureException } from "@/lib/sentry";
+
 export type ApiErrorCode =
   | "authentication_required"
   | "company_incomplete"
   | "conflict"
+  | "feature_not_in_plan"
   | "idempotency_key_invalid"
   | "internal_error"
+  | "overpayment_confirmation_required"
   | "pdf_generation_failed"
   | "plan_limit_reached"
   | "resource_not_found"
@@ -52,8 +56,20 @@ export function toApiError(error: unknown): ApiError {
   );
 }
 
+/**
+ * Every API route funnels its error responses through this single function,
+ * making it the one place that needs to report unexpected (5xx) failures to
+ * Sentry — no route handler has to remember to call it individually.
+ */
 export function apiErrorResponse(error: unknown, requestId?: string): Response {
   const apiError = toApiError(error);
+
+  if (apiError.status >= 500) {
+    void captureException(apiError, {
+      request_id: requestId,
+      error_code: apiError.code,
+    });
+  }
 
   return Response.json(
     {

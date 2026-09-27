@@ -134,7 +134,10 @@ export function SettingsPanel() {
   if (!company) {
     return (
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="text-sm text-[color-mix(in_oklch,var(--destructive),var(--foreground)_35%)]"
+        >
           {error ?? "No se ha podido cargar la configuración."}
         </p>
         <Button
@@ -181,7 +184,7 @@ export function SettingsPanel() {
       {error ? (
         <p
           role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-[color-mix(in_oklch,var(--destructive),var(--foreground)_35%)]"
         >
           {error}
         </p>

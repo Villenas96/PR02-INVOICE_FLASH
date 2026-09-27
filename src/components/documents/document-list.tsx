@@ -206,7 +206,10 @@ export function DocumentList() {
 
       {error ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-          <p role="alert" className="text-sm text-destructive">
+          <p
+            role="alert"
+            className="text-sm text-[color-mix(in_oklch,var(--destructive),var(--foreground)_35%)]"
+          >
             {error}
           </p>
           <Button

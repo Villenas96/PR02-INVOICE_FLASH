@@ -1,10 +1,22 @@
 interface ErrorPayload {
   error?: {
+    code?: string;
     message?: string;
   };
 }
 
-async function responseError(response: Response): Promise<Error> {
+/** Preserves the stable `code` so callers can branch on specific API errors
+ * (e.g. `overpayment_confirmation_required`) instead of parsing messages. */
+export class ApiClientError extends Error {
+  constructor(
+    message: string,
+    public readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+
+async function responseError(response: Response): Promise<ApiClientError> {
   let payload: ErrorPayload | undefined;
   try {
     payload = (await response.json()) as ErrorPayload;
@@ -12,9 +24,10 @@ async function responseError(response: Response): Promise<Error> {
     payload = undefined;
   }
 
-  return new Error(
+  return new ApiClientError(
     payload?.error?.message ??
       "No se ha podido completar la acción. Inténtalo de nuevo.",
+    payload?.error?.code,
   );
 }
 

@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { logSafe } from "@/lib/log";
@@ -11,7 +12,47 @@ const PRIVATE_PAGE_PREFIXES = [
   "/catalog",
   "/settings",
 ];
+const PUBLIC_SHARE_PREFIX = "/d/";
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
+
+interface RateLimiterBinding {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
+function isPublicSharePath(pathname: string): boolean {
+  return pathname.startsWith(PUBLIC_SHARE_PREFIX);
+}
+
+/** Cloudflare's own connecting-IP header; never the token in the path. */
+function clientIp(request: NextRequest): string {
+  return (
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "unknown"
+  );
+}
+
+/**
+ * Best-effort: the `PUBLIC_RATE_LIMITER` binding only exists in the deployed
+ * Cloudflare Workers runtime (see wrangler.jsonc), so local dev and tests
+ * without it simply skip the check rather than failing open or closed.
+ */
+async function isPublicShareRateLimited(
+  request: NextRequest,
+): Promise<boolean> {
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    const limiter = (env as { PUBLIC_RATE_LIMITER?: RateLimiterBinding })
+      .PUBLIC_RATE_LIMITER;
+    if (!limiter) {
+      return false;
+    }
+    const { success } = await limiter.limit({ key: clientIp(request) });
+    return !success;
+  } catch {
+    return false;
+  }
+}
 
 function getRequestId(request: NextRequest): string {
   const supplied = request.headers.get("x-request-id");
@@ -57,6 +98,29 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-request-id", requestId);
     const { pathname } = request.nextUrl;
+
+    if (
+      isPublicSharePath(pathname) &&
+      (await isPublicShareRateLimited(request))
+    ) {
+      // The token itself is never logged, matching the public surface's
+      // no-token-logging requirement (US5-AC2, FR-020).
+      logSafe("warn", "public.share_rate_limited", { request_id: requestId });
+      return withRequestId(
+        NextResponse.json(
+          {
+            error: {
+              code: "validation_error",
+              message:
+                "Demasiadas solicitudes. Inténtalo de nuevo en un momento.",
+              requestId,
+            },
+          },
+          { status: 429 },
+        ),
+        requestId,
+      );
+    }
 
     if (isPrivatePath(pathname) && !hasSessionCookie(request)) {
       if (isPrivateApi(pathname)) {

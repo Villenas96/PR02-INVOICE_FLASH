@@ -105,6 +105,13 @@ interface IssuePreparation {
     dueDate: string | null;
     deletedAt: Date | null;
     updatedAt: Date;
+    /** Only read for receipts: pre-set by the receipt service and preserved
+     * as-is rather than recalculated from (nonexistent) lines. */
+    subtotalCents: number;
+    taxBreakdown: unknown;
+    retentionRate: string;
+    retentionCents: number;
+    totalCents: number;
   };
   client: {
     id: string;
@@ -256,6 +263,11 @@ async function loadIssuePreparation(
         dueDate: documents.dueDate,
         deletedAt: documents.deletedAt,
         updatedAt: documents.updatedAt,
+        subtotalCents: documents.subtotalCents,
+        taxBreakdown: documents.taxBreakdown,
+        retentionRate: documents.retentionRate,
+        retentionCents: documents.retentionCents,
+        totalCents: documents.totalCents,
       },
       client: {
         id: clients.id,
@@ -315,21 +327,20 @@ function validatePreparation(preparation: IssuePreparation): void {
   if (preparation.document.status !== "draft") {
     throw documentStateConflict(preparation.document.status);
   }
-  if (
-    preparation.document.documentType !== "invoice" &&
-    preparation.document.documentType !== "proforma"
-  ) {
-    throw new ApiError(
-      "conflict",
-      409,
-      "Los recibos solo pueden generarse desde un pago.",
-    );
-  }
 
   const readiness = getCompanyReadiness(preparation.company);
   if (!readiness.ready) {
     throw companyIncompleteError(readiness.missingFields);
   }
+
+  if (preparation.document.documentType === "receipt") {
+    // The receipt service (src/services/document-receipts.ts) already
+    // resolved the client and totals from the source invoice/payment before
+    // creating this draft; there are no lines to validate and archival of
+    // the client afterwards must not block recording a historical receipt.
+    return;
+  }
+
   const validation = validateIssue({
     company: preparation.company,
     clientId: preparation.document.clientId,
@@ -386,6 +397,23 @@ function calculateIssueBilling(preparation: IssuePreparation): {
   billing: BillingResult;
   preparedLines: PreparedLine[];
 } {
+  if (preparation.document.documentType === "receipt") {
+    // Preserve the totals the receipt service already stored (exact payment
+    // amount, zero fiscal base/tax/retention) instead of recalculating from
+    // lines, since receipts never have any.
+    return {
+      billing: {
+        lines: [],
+        taxBreakdown: (preparation.document.taxBreakdown ??
+          []) as BillingResult["taxBreakdown"],
+        subtotalCents: createCents(preparation.document.subtotalCents),
+        retentionCents: createCents(preparation.document.retentionCents),
+        totalCents: createCents(preparation.document.totalCents),
+      },
+      preparedLines: [],
+    };
+  }
+
   try {
     const billing = calculateBilling({
       lines: preparation.lines.map((line) => ({
@@ -711,8 +739,14 @@ async function executeAtomicIssue(
           ${preparation.company.logoKey}
         AND quota_slot.retention_rate =
           ${preparation.company.retentionRate}::numeric
-        AND EXISTS (SELECT 1 FROM active_client)
-        AND (SELECT count(*) FROM line_input) > 0
+        AND (
+          target_document.document_type = 'receipt'::document_type
+          OR EXISTS (SELECT 1 FROM active_client)
+        )
+        AND (
+          target_document.document_type = 'receipt'::document_type
+          OR (SELECT count(*) FROM line_input) > 0
+        )
         AND (
           SELECT count(*)
           FROM ${documentLines} current_line
@@ -776,7 +810,10 @@ async function executeAtomicIssue(
         END,
         subtotal_cents = ${billing.subtotalCents},
         tax_breakdown = ${JSON.stringify(billing.taxBreakdown)}::jsonb,
-        retention_rate = quota_slot.retention_rate,
+        retention_rate = CASE
+          WHEN target.document_type = 'receipt'::document_type THEN '0.00'::numeric
+          ELSE quota_slot.retention_rate
+        END,
         retention_cents = ${billing.retentionCents},
         total_cents = ${billing.totalCents},
         issuer_snapshot = ${JSON.stringify(issuerSnapshot)}::jsonb,
@@ -909,10 +946,6 @@ export async function issueDocument(
 ): Promise<IssuedDocumentResult> {
   const database = dependencies.database ?? createDatabase();
   const now = dependencies.now ?? new Date();
-  const existing = await resolveExistingIdempotentDocument(database, input);
-  if (existing) {
-    return existing;
-  }
 
   for (
     let attempt = 0;
@@ -920,6 +953,19 @@ export async function issueDocument(
     attempt += 1
   ) {
     const preparation = await loadIssuePreparation(database, input);
+
+    // A concurrent call sharing the same idempotency key (converting the
+    // same proforma, or receipting the same payment) may have issued this
+    // exact document between our previous attempt and this one; resolving it
+    // here — before the hard "must be draft" gate — keeps every racer
+    // converging on that single result instead of failing with a conflict.
+    if (preparation.document.status !== "draft") {
+      const existing = await resolveExistingIdempotentDocument(database, input);
+      if (existing) {
+        return existing;
+      }
+    }
+
     validatePreparation(preparation);
     const row = await executeAtomicIssue(database, input, preparation, now);
 

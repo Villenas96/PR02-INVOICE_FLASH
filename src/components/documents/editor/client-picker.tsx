@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useAsyncAction } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
@@ -18,16 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 
-import type { EditorClient } from "./types";
+import type { ClientPage, EditorClient } from "./types";
 
-interface ClientSelectorProps {
-  clients: EditorClient[];
+const SEARCH_DEBOUNCE_MS = 250;
+
+interface ClientPickerProps {
   selectedId: string;
-  nextCursor: string | null;
-  isLoadingMore: boolean;
   onChange: (clientId: string) => void;
-  onCreate: (client: EditorClient) => void;
-  onLoadMore: () => Promise<void>;
 }
 
 function InlineClientForm({
@@ -144,19 +141,103 @@ function InlineClientForm({
   );
 }
 
-export function ClientSelector({
-  clients,
-  selectedId,
-  nextCursor,
-  isLoadingMore,
-  onChange,
-  onCreate,
-  onLoadMore,
-}: ClientSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false);
+/**
+ * Self-contained picker: owns its own paginated, debounced search against
+ * `GET /api/v1/clients` (archived clients are excluded by that endpoint's
+ * default), so the editor only needs the selected id. Live-fetching on every
+ * open keeps a later archive/edit from ever surfacing stale client data here.
+ */
+export function ClientPicker({ selectedId, onChange }: ClientPickerProps) {
+  const [query, setQuery] = useState("");
+  const [clients, setClients] = useState<EditorClient[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const trimmed = query.trim();
+    const timeout = setTimeout(
+      () => {
+        const params = new URLSearchParams({ limit: "25" });
+        if (trimmed) {
+          params.set("q", trimmed);
+        }
+        apiRequest<ClientPage>(`/api/v1/clients?${params.toString()}`, {
+          signal: controller.signal,
+        })
+          .then((page) => {
+            setClients(page.items);
+            setNextCursor(page.next_cursor);
+            setError(undefined);
+          })
+          .catch((loadError: unknown) => {
+            if (
+              loadError instanceof DOMException &&
+              loadError.name === "AbortError"
+            ) {
+              return;
+            }
+            setError(
+              loadError instanceof Error
+                ? loadError.message
+                : "No se han podido cargar los clientes.",
+            );
+          });
+      },
+      trimmed ? SEARCH_DEBOUNCE_MS : 0,
+    );
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [query]);
+
+  async function loadMore() {
+    if (!nextCursor || isLoadingMore) {
+      return;
+    }
+    setIsLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ limit: "25", cursor: nextCursor });
+      const trimmed = query.trim();
+      if (trimmed) {
+        params.set("q", trimmed);
+      }
+      const page = await apiRequest<ClientPage>(
+        `/api/v1/clients?${params.toString()}`,
+      );
+      setClients((current) => [...current, ...page.items]);
+      setNextCursor(page.next_cursor);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "No se han podido cargar más clientes.",
+      );
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }
+
+  function handleCreated(client: EditorClient) {
+    setClients((current) => [client, ...current]);
+    onChange(client.id);
+  }
 
   return (
     <div className="space-y-2">
+      <div className="space-y-2">
+        <Label htmlFor="invoice-client-search">Buscar cliente</Label>
+        <Input
+          id="invoice-client-search"
+          placeholder="Nombre o NIF"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
       <Label htmlFor="invoice-client">Cliente</Label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <select
@@ -173,7 +254,7 @@ export function ClientSelector({
             </option>
           ))}
         </select>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button type="button" variant="outline">
               Crear cliente
@@ -181,12 +262,17 @@ export function ClientSelector({
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <InlineClientForm
-              onCreate={onCreate}
-              onClose={() => setIsOpen(false)}
+              onCreate={handleCreated}
+              onClose={() => setIsCreateOpen(false)}
             />
           </DialogContent>
         </Dialog>
       </div>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
       <div className="flex items-center justify-between gap-4">
         <p className="text-xs text-muted-foreground">
           El cliente es obligatorio para emitir, pero puedes guardar el borrador
@@ -198,7 +284,7 @@ export function ClientSelector({
             variant="ghost"
             size="sm"
             disabled={isLoadingMore}
-            onClick={onLoadMore}
+            onClick={loadMore}
           >
             {isLoadingMore ? "Cargando…" : "Cargar más"}
           </Button>

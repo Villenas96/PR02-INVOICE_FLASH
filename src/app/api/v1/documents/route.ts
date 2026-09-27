@@ -209,12 +209,20 @@ function draftResponse(document: DocumentDetail) {
 }
 
 function paidCentsExpression(companyId: string) {
-  return sql<number>`COALESCE((
+  /**
+   * Drizzle only fully qualifies `${documents.id}` when this fragment is
+   * nested inside another `sql` template; used bare as a top-level select
+   * field it resolves the bare `document_id = "id"` predicate against
+   * `scoped_payment.id` instead of the outer document, always summing zero.
+   * The inner/outer split forces qualification in both usages.
+   */
+  const correlatedSum = sql`COALESCE((
     SELECT SUM(scoped_payment.amount_cents)
     FROM ${payments} scoped_payment
     WHERE scoped_payment.document_id = ${documents.id}
       AND scoped_payment.company_id = ${companyId}
-  ), 0)`.mapWith(Number);
+  ), 0)`;
+  return sql<number>`${correlatedSum}`.mapWith(Number);
 }
 
 function paymentStatusExpression(companyId: string) {

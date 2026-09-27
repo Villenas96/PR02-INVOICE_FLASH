@@ -1,11 +1,13 @@
 import type { PrivateBucket } from "@/services/storage";
 import {
+  createDocumentEmailHandler,
   createEmailSendHandler,
   createResendEmailProvider,
 } from "@/workers/handlers/email-send";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
 import type { EmailSendMessage, PdfRenderMessage } from "@/workers/messages";
 import { processQueueBatch, type QueueBatch } from "@/workers/queue-consumer";
+import { runScheduledPurge } from "@/workers/scheduled";
 import openNextWorker, {
   BucketCachePurge,
   DOQueueHandler,
@@ -47,12 +49,18 @@ async function queue(
   };
 
   const renderPdf = createPdfRenderHandler({ bucket: env.STORAGE_BUCKET });
+  const emailProvider = createResendEmailProvider({
+    apiKey: env.RESEND_API_KEY ?? "",
+    from: env.RESEND_FROM_EMAIL ?? "facturas@invoiceflash.app",
+  });
+  const appBaseUrl = env.BETTER_AUTH_URL ?? "http://localhost:3000";
   const sendEmail = createEmailSendHandler({
-    provider: createResendEmailProvider({
-      apiKey: env.RESEND_API_KEY ?? "",
-      from: env.RESEND_FROM_EMAIL ?? "facturas@invoiceflash.app",
+    provider: emailProvider,
+    appBaseUrl,
+    documentHandler: createDocumentEmailHandler({
+      provider: emailProvider,
+      appBaseUrl,
     }),
-    appBaseUrl: env.BETTER_AUTH_URL ?? "http://localhost:3000",
   });
 
   await processQueueBatch(adaptedBatch, {
@@ -61,7 +69,12 @@ async function queue(
   });
 }
 
+async function scheduled(): Promise<void> {
+  await runScheduledPurge();
+}
+
 export default {
   ...openNextWorker,
   queue,
+  scheduled,
 };

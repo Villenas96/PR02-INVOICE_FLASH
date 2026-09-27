@@ -127,19 +127,19 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 
 ### Tests for User Story 2
 
-- [ ] T066 [P] [US2] Write failing unit tests for pending/partial/paid/overdue derivation, due-date boundary, void exclusion and overpayment detection in `tests/unit/payments.test.ts`
-- [ ] T067 [P] [US2] Write payment and dashboard contract tests including validation, filters, aggregate shape and foreign payment/document 404 responses in `tests/integration/payments-contract.test.ts`
-- [ ] T068 [P] [US2] Write the real-Postgres payment lifecycle integration test for partial→paid, overdue, delete/rederive and aggregate exclusion in `tests/integration/payments.test.ts`
+- [X] T066 [P] [US2] Write failing unit tests for pending/partial/paid/overdue derivation, due-date boundary, void exclusion and overpayment detection in `tests/unit/payments.test.ts`
+- [X] T067 [P] [US2] Write payment and dashboard contract tests including validation, filters, aggregate shape and foreign payment/document 404 responses in `tests/integration/payments-contract.test.ts`
+- [X] T068 [P] [US2] Write the real-Postgres payment lifecycle integration test for partial→paid, overdue, delete/rederive and aggregate exclusion in `tests/integration/payments.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T069 [US2] Implement pure payment status, paid/pending amounts and overpayment rules after T066 fails in `src/lib/payments/index.ts`
-- [ ] T070 [US2] Implement tenant-scoped payment POST/PATCH/DELETE with confirmation and append-only events in `src/app/api/v1/documents/[id]/payments/route.ts` and `src/app/api/v1/payments/[id]/route.ts`
-- [ ] T071 [US2] Implement aggregate-only dashboard GET without embedded unpaginated invoice collections in `src/app/api/v1/dashboard/route.ts`
-- [ ] T072 [US2] Extend the paginated document list with derived payment status, client and date-range filters in `src/app/api/v1/documents/route.ts`
-- [ ] T073 [P] [US2] Build the one-screen dashboard that composes aggregate totals and the cursor-paginated invoice collection with shared period/status/client filters and overdue emphasis in `src/app/(app)/dashboard/page.tsx` and `src/components/dashboard/`
-- [ ] T074 [P] [US2] Build payment create/edit/delete and overpayment confirmation UI in `src/components/documents/payments-panel.tsx`
-- [ ] T075 [US2] Add the timed under-10-seconds dashboard E2E flow proving four statuses, matching filtered totals plus paginated invoice rows, payment correction and axe in `tests/e2e/payments.spec.ts`
+- [X] T069 [US2] Implement pure payment status, paid/pending amounts and overpayment rules after T066 fails in `src/lib/payments/index.ts`
+- [X] T070 [US2] Implement tenant-scoped payment POST/PATCH/DELETE with confirmation and append-only events in `src/app/api/v1/documents/[id]/payments/route.ts` and `src/app/api/v1/payments/[id]/route.ts`
+- [X] T071 [US2] Implement aggregate-only dashboard GET without embedded unpaginated invoice collections in `src/app/api/v1/dashboard/route.ts`
+- [X] T072 [US2] Extend the paginated document list with derived payment status, client and date-range filters in `src/app/api/v1/documents/route.ts`
+- [X] T073 [P] [US2] Build the one-screen dashboard that composes aggregate totals and the cursor-paginated invoice collection with shared period/status/client filters and overdue emphasis in `src/app/(app)/dashboard/page.tsx` and `src/components/dashboard/`
+- [X] T074 [P] [US2] Build payment create/edit/delete and overpayment confirmation UI in `src/components/documents/payments-panel.tsx`
+- [X] T075 [US2] Add the timed under-10-seconds dashboard E2E flow proving four statuses, matching filtered totals plus paginated invoice rows, payment correction and axe in `tests/e2e/payments.spec.ts`
 
 **Checkpoint**: US1 y US2 funcionan conjuntamente; el estado de cobro nunca se almacena.
 
@@ -153,18 +153,18 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 
 ### Tests for User Story 3
 
-- [ ] T076 [P] [US3] Write client collection/detail contract tests for cursor pagination, search, archive/unarchive, paginated history and foreign-client 404 responses in `tests/integration/clients-contract.test.ts`
-- [ ] T077 [P] [US3] Write the issued-snapshot integration test across client edit/archive operations in `tests/integration/client-snapshot.test.ts`
-- [ ] T078 [P] [US3] Add the indexed client-search p95 <200 ms scenario with a documented dataset in `tests/performance/client-search.test.ts` and `tests/performance/fixtures/clients.ts`
+- [X] T076 [P] [US3] Write client collection/detail contract tests for cursor pagination, search, archive/unarchive, paginated history and foreign-client 404 responses in `tests/integration/clients-contract.test.ts`
+- [X] T077 [P] [US3] Write the issued-snapshot integration test across client edit/archive operations in `tests/integration/client-snapshot.test.ts`
+- [X] T078 [P] [US3] Add the indexed client-search p95 <200 ms scenario with a documented dataset in `tests/performance/client-search.test.ts` and `tests/performance/fixtures/clients.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T079 [US3] Extend the client collection with immediate indexed name/NIF search and archived filters while preserving cursor pagination in `src/app/api/v1/clients/route.ts`
-- [ ] T080 [US3] Implement client detail, pending/overdue aggregates, paginated document history and archive/unarchive endpoints in `src/app/api/v1/clients/[id]/route.ts`, `src/app/api/v1/clients/[id]/documents/route.ts`, `src/app/api/v1/clients/[id]/archive/route.ts` and `src/app/api/v1/clients/[id]/unarchive/route.ts`
-- [ ] T081 [P] [US3] Build the paginated searchable client list and validated create/edit/archive UI in `src/app/(app)/clients/page.tsx` and `src/components/clients/`
-- [ ] T082 [P] [US3] Build client detail with paginated history and receivable totals in `src/app/(app)/clients/[id]/page.tsx`
-- [ ] T083 [US3] Upgrade the editor client picker for paginated search, archived exclusion and snapshot-safe autofill in `src/components/documents/editor/client-picker.tsx`
-- [ ] T084 [US3] Add the create/search/invoice/edit/archive snapshot E2E flow with axe and responsive checks in `tests/e2e/clients.spec.ts`
+- [X] T079 [US3] Extend the client collection with immediate indexed name/NIF search and archived filters while preserving cursor pagination in `src/app/api/v1/clients/route.ts`
+- [X] T080 [US3] Implement client detail, pending/overdue aggregates, paginated document history and archive/unarchive endpoints in `src/app/api/v1/clients/[id]/route.ts`, `src/app/api/v1/clients/[id]/documents/route.ts`, `src/app/api/v1/clients/[id]/archive/route.ts` and `src/app/api/v1/clients/[id]/unarchive/route.ts`
+- [X] T081 [P] [US3] Build the paginated searchable client list and validated create/edit/archive UI in `src/app/(app)/clients/page.tsx` and `src/components/clients/`
+- [X] T082 [P] [US3] Build client detail with paginated history and receivable totals in `src/app/(app)/clients/[id]/page.tsx`
+- [X] T083 [US3] Upgrade the editor client picker for paginated search, archived exclusion and snapshot-safe autofill in `src/components/documents/editor/client-picker.tsx`
+- [X] T084 [US3] Add the create/search/invoice/edit/archive snapshot E2E flow with axe and responsive checks in `tests/e2e/clients.spec.ts`
 
 **Checkpoint**: US3 es verificable sobre US1 sin modificar documentos emitidos.
 
@@ -178,15 +178,15 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 
 ### Tests for User Story 4
 
-- [ ] T085 [P] [US4] Write catalog contract tests for cursor pagination, search, create/edit, archive/restore, selector exclusion and foreign-item 404 responses in `tests/integration/catalog-contract.test.ts`
-- [ ] T086 [P] [US4] Write the catalog-to-line decoupling integration test across edit/archive in `tests/integration/catalog-snapshot.test.ts`
+- [X] T085 [P] [US4] Write catalog contract tests for cursor pagination, search, create/edit, archive/restore, selector exclusion and foreign-item 404 responses in `tests/integration/catalog-contract.test.ts`
+- [X] T086 [P] [US4] Write the catalog-to-line decoupling integration test across edit/archive in `tests/integration/catalog-snapshot.test.ts`
 
 ### Implementation for User Story 4
 
-- [ ] T087 [US4] Implement cursor-paginated catalog GET/search, POST, PATCH, reversible archive via DELETE and restore action in `src/app/api/v1/catalog-items/route.ts`, `src/app/api/v1/catalog-items/[id]/route.ts` and `src/app/api/v1/catalog-items/[id]/restore/route.ts`
-- [ ] T088 [P] [US4] Build paginated catalog search and create/edit/archive/restore UI in `src/app/(app)/catalog/page.tsx` and `src/components/catalog/`
-- [ ] T089 [US4] Add a paginated catalog picker that copies editable values without a document-line foreign key in `src/components/documents/editor/catalog-picker.tsx`
-- [ ] T090 [US4] Add the catalog copy/edit/archive/selector-exclusion/restore invariance E2E flow with axe in `tests/e2e/catalog.spec.ts`
+- [X] T087 [US4] Implement cursor-paginated catalog GET/search, POST, PATCH, reversible archive via DELETE and restore action in `src/app/api/v1/catalog-items/route.ts`, `src/app/api/v1/catalog-items/[id]/route.ts` and `src/app/api/v1/catalog-items/[id]/restore/route.ts`
+- [X] T088 [P] [US4] Build paginated catalog search and create/edit/archive/restore UI in `src/app/(app)/catalog/page.tsx` and `src/components/catalog/`
+- [X] T089 [US4] Add a paginated catalog picker that copies editable values without a document-line foreign key in `src/components/documents/editor/catalog-picker.tsx`
+- [X] T090 [US4] Add the catalog copy/edit/archive/selector-exclusion/restore invariance E2E flow with axe in `tests/e2e/catalog.spec.ts`
 
 **Checkpoint**: US4 acelera la facturación sin acoplar documentos al catálogo.
 
@@ -200,26 +200,26 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 
 ### Tests for User Story 5
 
-- [ ] T091 [P] [US5] Write failing unit tests for 32-byte base64url share tokens, one-active-link rules and disable/reactivate transitions in `tests/unit/share-links.test.ts`
-- [ ] T092 [P] [US5] Write share/public/email contract tests for tokens, PDF 200/202, required idempotency key, paginated delivery history and foreign-document/delivery 404 responses in `tests/integration/share-email-contract.test.ts`
-- [ ] T093 [P] [US5] Write integration tests for valid/disabled/invented/voided public access and free/pro email gating in `tests/integration/share-email.test.ts`
-- [ ] T094 [P] [US5] Write the at-least-once email integration test proving duplicate API/queue delivery within 24 hours yields one provider call and one event in `tests/integration/email-idempotency.test.ts`
-- [ ] T095 [P] [US5] Write security tests proving public/email logs and queue bodies exclude tokens, NIF, amounts, recipients and messages in `tests/integration/log-redaction.test.ts`
+- [X] T091 [P] [US5] Write failing unit tests for 32-byte base64url share tokens, one-active-link rules and disable/reactivate transitions in `tests/unit/share-links.test.ts`
+- [X] T092 [P] [US5] Write share/public/email contract tests for tokens, PDF 200/202, required idempotency key, paginated delivery history and foreign-document/delivery 404 responses in `tests/integration/share-email-contract.test.ts`
+- [X] T093 [P] [US5] Write integration tests for valid/disabled/invented/voided public access and free/pro email gating in `tests/integration/share-email.test.ts`
+- [X] T094 [P] [US5] Write the at-least-once email integration test proving duplicate API/queue delivery within 24 hours yields one provider call and one event in `tests/integration/email-idempotency.test.ts`
+- [X] T095 [P] [US5] Write security tests proving public/email logs and queue bodies exclude tokens, NIF, amounts, recipients and messages in `tests/integration/log-redaction.test.ts`
 
 ### Implementation for User Story 5
 
-- [ ] T096 [US5] Implement CSPRNG share-link creation/reactivation/disable and append-only events after T091 fails in `src/services/share-links.ts` and `src/app/api/v1/documents/[id]/share-link/route.ts`
-- [ ] T097 [P] [US5] Build the responsive SSR public document page with generic 404 and clear void status in `src/app/d/[token]/page.tsx`
-- [ ] T098 [P] [US5] Implement public PDF download as R2-only 200 or pending 202 + `Retry-After` with no HTTP render in `src/app/d/[token]/pdf/route.ts`
-- [ ] T099 [US5] Implement atomic create/reuse/claim/terminal transitions for `email_delivery` in `src/services/email/deliveries.ts`
-- [ ] T100 [US5] Implement the plan-gated email endpoint requiring `Idempotency-Key`, persisting delivery before enqueue and returning 202 in `src/app/api/v1/documents/[id]/email/route.ts`
-- [ ] T101 [US5] Implement the email delivery-history endpoint with cursor pagination and redacted recipients in `src/app/api/v1/documents/[id]/email-deliveries/route.ts`
-- [ ] T102 [US5] Extend the purpose-aware Resend consumer with document templates, atomic claims, `email/{delivery_id}`, retry age <24 hours, document-only unique events and DLQ in `src/services/email/templates/document.ts` and `src/workers/handlers/email-send.ts`
-- [ ] T103 [US5] Implement the scheduled purge of terminal document/auth delivery recipient/message PII and expired auth references within their retention limits in `src/workers/scheduled.ts`
-- [ ] T104 [P] [US5] Build document sharing UI for copy/disable link, PDF processing, email, delivery history and free-plan alternatives in `src/components/documents/share-panel.tsx`
-- [ ] T105 [US5] Add first-attempt anonymous mobile/desktop link, PDF processing/download, disable and void-state E2E coverage with axe in `tests/e2e/share-link.spec.ts`
-- [ ] T106 [US5] Add free/pro email UI and repeated-submit idempotency E2E coverage in `tests/e2e/email-sharing.spec.ts`
-- [ ] T107 [US5] Configure and validate `/d/*` rate limiting without token logging in `wrangler.jsonc` and `tests/integration/public-rate-limit.test.ts`
+- [X] T096 [US5] Implement CSPRNG share-link creation/reactivation/disable and append-only events after T091 fails in `src/services/share-links.ts` and `src/app/api/v1/documents/[id]/share-link/route.ts`
+- [X] T097 [P] [US5] Build the responsive SSR public document page with generic 404 and clear void status in `src/app/d/[token]/page.tsx`
+- [X] T098 [P] [US5] Implement public PDF download as R2-only 200 or pending 202 + `Retry-After` with no HTTP render in `src/app/d/[token]/pdf/route.ts`
+- [X] T099 [US5] Implement atomic create/reuse/claim/terminal transitions for `email_delivery` in `src/services/email/deliveries.ts`
+- [X] T100 [US5] Implement the plan-gated email endpoint requiring `Idempotency-Key`, persisting delivery before enqueue and returning 202 in `src/app/api/v1/documents/[id]/email/route.ts`
+- [X] T101 [US5] Implement the email delivery-history endpoint with cursor pagination and redacted recipients in `src/app/api/v1/documents/[id]/email-deliveries/route.ts`
+- [X] T102 [US5] Extend the purpose-aware Resend consumer with document templates, atomic claims, `email/{delivery_id}`, retry age <24 hours, document-only unique events and DLQ in `src/services/email/templates/document.ts` and `src/workers/handlers/email-send.ts`
+- [X] T103 [US5] Implement the scheduled purge of terminal document/auth delivery recipient/message PII and expired auth references within their retention limits in `src/workers/scheduled.ts`
+- [X] T104 [P] [US5] Build document sharing UI for copy/disable link, PDF processing, email, delivery history and free-plan alternatives in `src/components/documents/share-panel.tsx`
+- [X] T105 [US5] Add first-attempt anonymous mobile/desktop link, PDF processing/download, disable and void-state E2E coverage with axe in `tests/e2e/share-link.spec.ts`
+- [X] T106 [US5] Add free/pro email UI and repeated-submit idempotency E2E coverage in `tests/e2e/email-sharing.spec.ts`
+- [X] T107 [US5] Configure and validate `/d/*` rate limiting without token logging in `wrangler.jsonc` and `tests/integration/public-rate-limit.test.ts`
 
 **Checkpoint**: US5 entrega documentos sin sesión y resiste reintentos sin duplicar correos.
 
@@ -233,21 +233,21 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 
 ### Tests for User Story 6
 
-- [ ] T108 [P] [US6] Write failing unit tests for one-time issued-proforma conversion, inherited copies, numberless invoice drafts, direct-issue delegation and existing-conversion idempotency in `tests/unit/document-conversion.test.ts`
-- [ ] T109 [P] [US6] Write failing unit tests for direct issued-receipt generation from total/partial payment, exact copied total, zero fiscal base/tax/retention, one-receipt-per-payment and existing-receipt resolution before new-emission quota evaluation in `tests/unit/receipts.test.ts`
-- [ ] T110 [P] [US6] Write conversion/receipt/duplicate contract tests including manual receipt rejection, 402 without side effects for new direct emissions at 5/100, existing conversion/receipt 200 after quota exhaustion, invoice/proforma-only duplication and foreign-resource 404 responses in `tests/integration/document-variants-contract.test.ts`
-- [ ] T111 [P] [US6] Write the concurrent conversion integration test proving at most one linked invoice and no quota overflow or numbering side effects at the final monthly slot in `tests/integration/proforma-conversion.test.ts`
-- [ ] T112 [P] [US6] Write the concurrent mixed-route integration test proving conventional issue, direct conversion and new receipt share the final monthly slot, while receipt replays return the existing document without another number/PDF/event or quota consumption, in `tests/integration/receipt.test.ts`
+- [X] T108 [P] [US6] Write failing unit tests for one-time issued-proforma conversion, inherited copies, numberless invoice drafts, direct-issue delegation and existing-conversion idempotency in `tests/unit/document-conversion.test.ts`
+- [X] T109 [P] [US6] Write failing unit tests for direct issued-receipt generation from total/partial payment, exact copied total, zero fiscal base/tax/retention, one-receipt-per-payment and existing-receipt resolution before new-emission quota evaluation in `tests/unit/receipts.test.ts`
+- [X] T110 [P] [US6] Write conversion/receipt/duplicate contract tests including manual receipt rejection, 402 without side effects for new direct emissions at 5/100, existing conversion/receipt 200 after quota exhaustion, invoice/proforma-only duplication and foreign-resource 404 responses in `tests/integration/document-variants-contract.test.ts`
+- [X] T111 [P] [US6] Write the concurrent conversion integration test proving at most one linked invoice and no quota overflow or numbering side effects at the final monthly slot in `tests/integration/proforma-conversion.test.ts`
+- [X] T112 [P] [US6] Write the concurrent mixed-route integration test proving conventional issue, direct conversion and new receipt share the final monthly slot, while receipt replays return the existing document without another number/PDF/event or quota consumption, in `tests/integration/receipt.test.ts`
 
 ### Implementation for User Story 6
 
-- [ ] T113 [US6] Add default proforma/receipt series while exposing only invoice/proforma in the generic editor selector in `src/services/series.ts` and `src/components/documents/editor/document-type-selector.tsx`
-- [ ] T114 [US6] Implement pure conversion rules and the idempotent proforma-to-invoice endpoint after T108 fails, routing `{issue:true}` through the T053 shared issuance guard and resolving an existing conversion before quota evaluation, in `src/lib/documents/conversion.ts` and `src/app/api/v1/documents/[id]/convert/route.ts`
-- [ ] T115 [US6] Implement direct-issued receipt generation after T109 fails by resolving the unique payment claim before quota evaluation and routing every new receipt through the T053 shared issuance guard for company/series locks, snapshots, exact payment total, zero fiscal base/tax/retention, pending PDF and audit in `src/lib/documents/receipts.ts` and `src/app/api/v1/documents/[id]/receipt/route.ts`
-- [ ] T116 [US6] Implement invoice/proforma duplication to a numberless draft with new dates and audit event while rejecting receipts in `src/app/api/v1/documents/[id]/duplicate/route.ts`
-- [ ] T117 [US6] Extend PDF rendering and snapshots for proforma notices and receipt-specific payment/date/invoice layout without fiscal lines in `src/services/pdf/template.ts` and `tests/fixtures/pdf/`
-- [ ] T118 [P] [US6] Add conversion, duplication and receipt actions with shared async and actionable plan-limit feedback to document detail in `src/components/documents/document-actions.tsx`
-- [ ] T119 [US6] Add the proforma→invoice→partial-payment→unique-receipt E2E flow with direct-emission plan gating, existing-result idempotency after exhaustion, duplication rejection, numbering, linkage, PDF snapshots and axe in `tests/e2e/proforma-receipt.spec.ts`
+- [X] T113 [US6] Add default proforma/receipt series while exposing only invoice/proforma in the generic editor selector in `src/services/series.ts` and `src/components/documents/editor/document-type-selector.tsx`
+- [X] T114 [US6] Implement pure conversion rules and the idempotent proforma-to-invoice endpoint after T108 fails, routing `{issue:true}` through the T053 shared issuance guard and resolving an existing conversion before quota evaluation, in `src/lib/documents/conversion.ts` and `src/app/api/v1/documents/[id]/convert/route.ts`
+- [X] T115 [US6] Implement direct-issued receipt generation after T109 fails by resolving the unique payment claim before quota evaluation and routing every new receipt through the T053 shared issuance guard for company/series locks, snapshots, exact payment total, zero fiscal base/tax/retention, pending PDF and audit in `src/lib/documents/receipts.ts` and `src/app/api/v1/documents/[id]/receipt/route.ts`
+- [X] T116 [US6] Implement invoice/proforma duplication to a numberless draft with new dates and audit event while rejecting receipts in `src/app/api/v1/documents/[id]/duplicate/route.ts`
+- [X] T117 [US6] Extend PDF rendering and snapshots for proforma notices and receipt-specific payment/date/invoice layout without fiscal lines in `src/services/pdf/template.ts` and `tests/fixtures/pdf/`
+- [X] T118 [P] [US6] Add conversion, duplication and receipt actions with shared async and actionable plan-limit feedback to document detail in `src/components/documents/document-actions.tsx`
+- [X] T119 [US6] Add the proforma→invoice→partial-payment→unique-receipt E2E flow with direct-emission plan gating, existing-result idempotency after exhaustion, duplication rejection, numbering, linkage, PDF snapshots and axe in `tests/e2e/proforma-receipt.spec.ts`
 
 **Checkpoint**: las seis historias entregan el ciclo factura/proforma/cobro/recibo definido para v1.
 
@@ -257,14 +257,14 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 
 **Purpose**: observabilidad, rendimiento global, seguridad operativa, coste y validación final.
 
-- [ ] T120 [P] Create deterministic demo data for `free=5|pro=100` plan usage boundaries across invoices, proformas and receipts, clients, catalog, document/payment states and queues in `src/db/seed.ts`
-- [ ] T121 [P] Run the final Sentry/request-id and `logSafe` sweep across every implemented handler in `src/proxies/middleware.ts`, `src/lib/sentry.ts` and `src/lib/log.ts`
+- [X] T120 [P] Create deterministic demo data for `free=5|pro=100` plan usage boundaries across invoices, proformas and receipts, clients, catalog, document/payment states and queues in `src/db/seed.ts`
+- [X] T121 [P] Run the final Sentry/request-id and `logSafe` sweep across every implemented handler in `src/proxies/middleware.ts`, `src/lib/sentry.ts` and `src/lib/log.ts`
 - [ ] T122 [P] Reverify Neon TLS/encryption, R2 private encryption/HTTPS and CI branch expiry before production release in `docs/security/storage-encryption.md`
 - [ ] T123 [P] Reverify the real Cloudflare budget alert plus Neon Free monitoring/paid Spending Limit gate and recipients before production release in `docs/operations/cloud-cost-controls.md`
-- [ ] T124 Add a non-decreasing business-module coverage gate to `.github/workflows/ci.yml` and `vitest.config.ts`
-- [ ] T125 Add a final API-invariants matrix proving every collection uses opaque cursor pagination default 25/max 100 and every private endpoint returns 404 for foreign resources in `tests/integration/api-invariants.test.ts`
-- [ ] T126 Run the all-page axe, responsive and delayed-network <100 ms feedback sweep and fix violations in `tests/e2e/accessibility-feedback.spec.ts` and `src/components/`
-- [ ] T127 Implement reproducible staging CRUD p95 <300 ms and documented dataset/load profiles in `tests/performance/api-crud.test.ts` and `tests/performance/fixtures/`
+- [X] T124 Add a non-decreasing business-module coverage gate to `.github/workflows/ci.yml` and `vitest.config.ts`
+- [X] T125 Add a final API-invariants matrix proving every collection uses opaque cursor pagination default 25/max 100 and every private endpoint returns 404 for foreign resources in `tests/integration/api-invariants.test.ts`
+- [X] T126 Run the all-page axe, responsive and delayed-network <100 ms feedback sweep and fix violations in `tests/e2e/accessibility-feedback.spec.ts` and `src/components/`
+- [X] T127 Implement reproducible staging CRUD p95 <300 ms and documented dataset/load profiles in `tests/performance/api-crud.test.ts` and `tests/performance/fixtures/`
 - [ ] T128 Add the controlled staging performance job and threshold reports to `.github/workflows/performance.yml`
 - [ ] T129 Reverify OpenNext deploy, migrations, queues, R2, pre-deploy evidence and post-deploy mobile/Sentry smoke flow for production in `scripts/verify-postdeploy.ts` and `docs/operations/deployment-checklist.md`
 - [ ] T130 Run the moderated V13 protocol with at least 10 first-time target users, anonymizing completion time, autonomous success and abandonment data in `specs/001-invoice-flash/usability-report.md`

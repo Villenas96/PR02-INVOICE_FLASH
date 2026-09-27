@@ -1,4 +1,5 @@
 import { logSafe } from "@/lib/log";
+import { captureException } from "@/lib/sentry";
 import {
   canRetryEmail,
   type EmailSendMessage,
@@ -91,6 +92,15 @@ export async function processQueueBatch(
           error_type: error instanceof Error ? error.name : "UnknownError",
           terminal,
         });
+        if (terminal) {
+          // Only report once retries are exhausted (DLQ) or the message can
+          // no longer recover (expired auth email); transient attempts still
+          // within backoff are expected and would otherwise be noisy.
+          void captureException(error, {
+            message_type: message.type,
+            attempts: delivery.attempts,
+          });
+        }
 
         if (emailRetryWindowElapsed) {
           // The persistent delivery handler records terminal failure. Acking

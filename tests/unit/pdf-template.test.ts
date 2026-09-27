@@ -236,4 +236,113 @@ describe("professional invoice PDF template", () => {
       expect(page.getHeight()).toBeCloseTo(approvedLayout.pageSize.height, 1);
     }
   });
+
+  it("renders byte-identical output for the exact same input, regardless of when it runs", async () => {
+    const input = createInput();
+    const first = await renderDocumentPdf(input);
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    const second = await renderDocumentPdf(input);
+
+    expect(second).toEqual(first);
+  });
+});
+
+describe("proforma PDF notice", () => {
+  function createProformaInput(): DocumentPdfInput {
+    const { linePattern: _, ...document } = invoiceFixture;
+    return {
+      ...document,
+      documentType: "proforma",
+      fullNumber: "PRO-2026-0001",
+      currency: "EUR",
+      lines: [
+        {
+          position: 1,
+          description: "Servicio de consultoría",
+          quantity: "1.000",
+          unitPriceCents: 10_000,
+          taxRate: "21.00",
+          lineSubtotalCents: 10_000,
+          lineTaxCents: 2_100,
+          lineTotalCents: 12_100,
+        },
+      ],
+    };
+  }
+
+  it("titles the document Proforma and states it has no fiscal validity", () => {
+    const layout = buildDocumentPdfLayout(createProformaInput()) as PdfLayout;
+    const text = visibleText(layout).join("\n");
+
+    expect(text).toContain("Proforma");
+    expect(text).toContain("Documento sin validez fiscal.");
+  });
+
+  it("titles the pdf-lib document with the proforma prefix", async () => {
+    const input = createProformaInput();
+    const bytes = await renderDocumentPdf(input);
+    const { PDFDocument } = await import("pdf-lib");
+    const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+
+    expect(pdf.getTitle()).toBe(`Proforma ${input.fullNumber}`);
+  });
+});
+
+describe("receipt PDF layout", () => {
+  function createReceiptInput(): DocumentPdfInput {
+    return {
+      documentType: "receipt",
+      fullNumber: "REC-2026-0001",
+      issueDate: "2026-09-20",
+      currency: "EUR",
+      issuer: invoiceFixture.issuer,
+      client: invoiceFixture.client,
+      lines: [],
+      subtotalCents: 0,
+      taxBreakdown: [],
+      retentionRate: "0.00",
+      retentionCents: 0,
+      totalCents: 5_000,
+      notes: null,
+      receipt: {
+        sourceInvoiceFullNumber: "2026-0001",
+        paymentDate: "2026-09-20",
+      },
+    };
+  }
+
+  it("lays out a single page with payment details and no fiscal lines", () => {
+    const layout = buildDocumentPdfLayout(createReceiptInput()) as PdfLayout;
+    const text = visibleText(layout).join("\n");
+
+    expect(layout.pages).toHaveLength(1);
+    expect(lineTables(layout)).toHaveLength(0);
+    expect(text).toContain("Recibo");
+    expect(text).toContain(invoiceFixture.issuer.legalName);
+    expect(text).toContain(invoiceFixture.client.legalName);
+    expect(text).toContain("Factura relacionada");
+    expect(text).toContain("2026-0001");
+    expect(text).toContain("Fecha de pago");
+    expect(text).toContain("20/09/2026");
+    expect(text).toMatch(/Importe cobrado\s+50,00\s*€/);
+    expect(text).not.toContain("Base imponible");
+    expect(text).not.toContain("Retención");
+  });
+
+  it("throws when the source payment details are missing", () => {
+    const input = createReceiptInput();
+    input.receipt = undefined;
+
+    expect(() => buildDocumentPdfLayout(input)).toThrow();
+  });
+
+  it("renders a single-page pdf-lib document titled with the receipt prefix", async () => {
+    const input = createReceiptInput();
+    const bytes = await renderDocumentPdf(input);
+    const { PDFDocument } = await import("pdf-lib");
+    const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+
+    expect(pdf.getPageCount()).toBe(1);
+    expect(pdf.getTitle()).toBe(`Recibo ${input.fullNumber}`);
+  });
 });

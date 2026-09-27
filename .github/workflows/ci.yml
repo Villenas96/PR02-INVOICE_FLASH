@@ -48,7 +48,7 @@ jobs:
       - run: pnpm typecheck
 
   unit_tests:
-    name: Unit tests
+    name: Unit tests + coverage gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      # Enforces the non-decreasing business-module coverage floor from
+      # vitest.config.ts (src/lib/billing, documents, money, numbering,
+      # payments, plan, share-links) in addition to running the unit suite.
+      - run: pnpm test:coverage
 
   integration_tests:
     name: Integration tests

@@ -34,6 +34,11 @@ export default defineConfig({
           name: "performance",
           environment: "node",
           include: ["tests/performance/**/*.test.ts"],
+          // Every performance file shares one Postgres database and
+          // truncates it before seeding its own fixture; running files
+          // concurrently would let one file's truncation wipe another's
+          // in-progress data.
+          fileParallelism: false,
           testTimeout: 60000,
         },
       },
@@ -41,7 +46,29 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
-      include: ["src/lib/**"],
+      // Pure business-logic modules only (constitution: "Lógica de negocio
+      // pura en src/lib/* con pruebas unitarias obligatorias") — this
+      // deliberately excludes thin infra/glue (auth, log, sentry, the
+      // generic api/* request helpers) whose real coverage comes from the
+      // integration suite, not unit tests.
+      include: [
+        "src/lib/billing/**",
+        "src/lib/documents/**",
+        "src/lib/money/**",
+        "src/lib/numbering/**",
+        "src/lib/payments/**",
+        "src/lib/plan.ts",
+        "src/lib/share-links.ts",
+      ],
+      // Floor set at today's achieved level (with a small margin) so CI
+      // fails on any real regression; raise it whenever coverage improves,
+      // never lower it to make a drop pass.
+      thresholds: {
+        statements: 90,
+        branches: 80,
+        functions: 100,
+        lines: 90,
+      },
     },
   },
 });

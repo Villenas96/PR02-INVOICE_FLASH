@@ -15,6 +15,7 @@ const navigation = [
   { href: "/dashboard", label: "Resumen" },
   { href: "/documents", label: "Facturas" },
   { href: "/clients", label: "Clientes" },
+  { href: "/catalog", label: "Catálogo" },
   { href: "/settings", label: "Configuración" },
 ];
 

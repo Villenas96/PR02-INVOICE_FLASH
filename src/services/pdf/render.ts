@@ -9,6 +9,7 @@ import {
 import {
   buildDocumentPdfLayout,
   type DocumentPdfInput,
+  documentTitle,
   type PdfTableElement,
   type PdfTextElement,
 } from "./template";
@@ -93,7 +94,8 @@ function drawTextElement(
   const color =
     element.role.endsWith("_heading") ||
     element.role === "page_footer" ||
-    element.role === "brand"
+    element.role === "brand" ||
+    element.role === "fiscal_notice"
       ? colors.muted
       : colors.text;
   const lines = normalizePdfText(element.text).split("\n");
@@ -198,13 +200,17 @@ export async function renderDocumentPdf(
     border: colorFromHex(layout.theme.borderHex),
   };
 
-  document.setTitle(
-    `${input.documentType === "invoice" ? "Factura" : "Proforma"} ${input.fullNumber}`,
-  );
+  document.setTitle(`${documentTitle(input.documentType)} ${input.fullNumber}`);
   document.setAuthor("Invoice Flash");
   document.setCreator("Invoice Flash");
   document.setProducer("Invoice Flash");
   document.setSubject("Documento de facturación");
+  // Derived from the document's own data (never the wall clock) so that
+  // re-rendering the exact same input — e.g. from an immutable issued
+  // snapshot — always produces byte-identical output.
+  const referenceDate = new Date(`${input.issueDate}T00:00:00.000Z`);
+  document.setCreationDate(referenceDate);
+  document.setModificationDate(referenceDate);
 
   for (const pageLayout of layout.pages) {
     const page = document.addPage([

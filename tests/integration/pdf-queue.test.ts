@@ -8,8 +8,10 @@ import {
   documentLines,
   documentSeries,
   documents,
+  payments,
   users,
 } from "@/db/schema";
+import { renderDocumentPdf } from "@/services/pdf/render";
 import {
   type PrivateBucket,
   pdfObjectKey,
@@ -350,5 +352,130 @@ describe("pdf queue re-delivery", () => {
         .from(documentEvents)
         .where(eq(documentEvents.documentId, documentId)),
     ).resolves.toEqual([{ event: "pdf_failed" }]);
+  });
+});
+
+describe("receipt pdf rendering", () => {
+  it("renders a real single-page receipt PDF referencing the source invoice and payment", async () => {
+    const userId = crypto.randomUUID();
+    const companyId = crypto.randomUUID();
+    const clientId = crypto.randomUUID();
+    const invoiceId = crypto.randomUUID();
+    const receiptId = crypto.randomUUID();
+    const paymentId = crypto.randomUUID();
+    const now = new Date("2026-09-20T12:00:00.000Z");
+
+    await database.insert(users).values({
+      id: userId,
+      name: "Receipt PDF User",
+      email: `receipt-pdf-${userId}@example.test`,
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await database.insert(companies).values({
+      id: companyId,
+      userId,
+      legalName: "Estudio Recibos, S.L.",
+      taxId: "B12345678",
+      address: "Calle del Recibo, 1, Madrid",
+      email: "receipts@example.test",
+    });
+    await database.insert(clients).values({
+      id: clientId,
+      companyId,
+      name: "Cliente Recibo, S.L.",
+      taxId: "B87654321",
+      address: "Avenida del Cobro, 2, Valencia",
+    });
+    await database.insert(documents).values({
+      id: invoiceId,
+      companyId,
+      documentType: "invoice",
+      status: "issued",
+      number: 1,
+      fullNumber: "2026-0001",
+      clientId,
+      issueDate: "2026-09-01",
+      totalCents: 5_000,
+      pdfStatus: "ready",
+      issuedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await database.insert(payments).values({
+      id: paymentId,
+      companyId,
+      documentId: invoiceId,
+      amountCents: 5_000,
+      paidOn: "2026-09-20",
+    });
+    await database.insert(documents).values({
+      id: receiptId,
+      companyId,
+      documentType: "receipt",
+      status: "issued",
+      number: 1,
+      fullNumber: "REC-2026-0001",
+      clientId,
+      invoiceId,
+      paymentId,
+      issueDate: "2026-09-20",
+      subtotalCents: 0,
+      taxBreakdown: [],
+      retentionRate: "0.00",
+      retentionCents: 0,
+      totalCents: 5_000,
+      issuerSnapshot: {
+        legalName: "Estudio Recibos, S.L.",
+        taxId: "B12345678",
+        address: "Calle del Recibo, 1, Madrid",
+      },
+      clientSnapshot: {
+        legalName: "Cliente Recibo, S.L.",
+        taxId: "B87654321",
+        address: "Avenida del Cobro, 2, Valencia",
+      },
+      pdfStatus: "pending",
+      issuedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const bucket = new InMemoryPrivateBucket();
+    const renderPdfMessage = createPdfRenderHandler({
+      database,
+      bucket,
+      renderPdf: renderDocumentPdf,
+    });
+    const consumers: QueueConsumers = {
+      renderPdf: renderPdfMessage,
+      sendEmail: () =>
+        Promise.reject(
+          new Error("El consumidor de email no debe recibir mensajes PDF."),
+        ),
+    };
+    const delivery = createQueueDelivery(createPdfRenderMessage(receiptId));
+
+    await processQueueBatch({ messages: [delivery.delivery] }, consumers);
+
+    expect(delivery.ackCount()).toBe(1);
+    expect(delivery.retryCount()).toBe(0);
+
+    const [storedReceipt] = await database
+      .select({ pdfStatus: documents.pdfStatus })
+      .from(documents)
+      .where(eq(documents.id, receiptId));
+    expect(storedReceipt?.pdfStatus).toBe("ready");
+
+    const stored = await bucket.get(pdfObjectKey(receiptId));
+    expect(stored).not.toBeNull();
+    const bytes = new Uint8Array(
+      await new Response(stored?.body).arrayBuffer(),
+    );
+    const { PDFDocument } = await import("pdf-lib");
+    const pdf = await PDFDocument.load(bytes, { updateMetadata: false });
+    expect(pdf.getPageCount()).toBe(1);
+    expect(pdf.getTitle()).toBe("Recibo REC-2026-0001");
   });
 });

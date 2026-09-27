@@ -39,6 +39,18 @@
   "triggers": {
     "crons": ["0 3 * * *"]
   },
+  // Limita por IP las rutas públicas /d/* (US5-AC2, FR-020); los tokens
+  // nunca se registran, solo la IP conectante.
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "PUBLIC_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 30, "period": 60 }
+      }
+    ]
+  },
   "observability": {
     "enabled": true
   }

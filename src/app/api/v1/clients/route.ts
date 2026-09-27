@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase } from "@/db/index";
@@ -19,6 +19,8 @@ const paginationQuerySchema = z
   .object({
     cursor: z.string().optional(),
     limit: z.string().optional(),
+    q: z.string().trim().max(200).optional(),
+    archived: z.enum(["true", "false"]).optional(),
   })
   .strict();
 const cursorSchema = z
@@ -206,11 +208,15 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     const searchParams = new URL(request.url).searchParams;
-    validate(paginationQuerySchema, Object.fromEntries(searchParams.entries()));
+    const query = validate(
+      paginationQuerySchema,
+      Object.fromEntries(searchParams.entries()),
+    );
     const pagination = parsePagination(searchParams);
     const cursorId = decodeCursor(pagination.cursor);
     const context = await resolveCompanyContext(request);
     const database = createDatabase();
+    const searchTerm = query.q ? `%${query.q}%` : undefined;
 
     const rows = await database
       .select()
@@ -218,7 +224,15 @@ export async function GET(request: Request): Promise<Response> {
       .where(
         and(
           eq(clients.companyId, context.companyId),
-          isNull(clients.archivedAt),
+          query.archived === "true"
+            ? isNotNull(clients.archivedAt)
+            : isNull(clients.archivedAt),
+          searchTerm
+            ? or(
+                sql`${clients.name} ILIKE ${searchTerm}`,
+                sql`${clients.taxId} ILIKE ${searchTerm}`,
+              )
+            : undefined,
           cursorId ? gt(clients.id, cursorId) : undefined,
         ),
       )
