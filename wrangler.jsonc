@@ -53,7 +53,109 @@
   },
   "observability": {
     "enabled": true
-  }
+  },
   // Secretos (DATABASE_URL, BETTER_AUTH_SECRET, RESEND_API_KEY): nunca aquí.
-  // Local: .dev.vars (ver .dev.vars.example). Producción: `wrangler secret put <NAME>`.
+  // Local: .dev.vars (ver .dev.vars.example). Remoto:
+  // `pnpm exec wrangler secret put <NAME> --env <staging|production>`.
+  //
+  // La configuración de nivel superior solo se usa en local (`pnpm preview`,
+  // E2E). Todo despliegue remoto elige un entorno explícito (`pnpm
+  // deploy:staging` / `pnpm deploy:production`), cada uno con su propio
+  // Worker, bucket, colas y limitador. Wrangler no hereda los bindings
+  // (r2_buckets, queues, unsafe) en los entornos: se repiten completos.
+  "env": {
+    "staging": {
+      "name": "invoice-flash-staging",
+      "r2_buckets": [
+        {
+          "binding": "STORAGE_BUCKET",
+          "bucket_name": "invoice-flash-storage-staging"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "queue": "invoice-flash-staging-pdf-render",
+            "binding": "PDF_RENDER_QUEUE"
+          },
+          {
+            "queue": "invoice-flash-staging-email-send",
+            "binding": "EMAIL_SEND_QUEUE"
+          }
+        ],
+        "consumers": [
+          {
+            "queue": "invoice-flash-staging-pdf-render",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "dead_letter_queue": "invoice-flash-staging-pdf-render-dlq"
+          },
+          {
+            "queue": "invoice-flash-staging-email-send",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "dead_letter_queue": "invoice-flash-staging-email-send-dlq"
+          }
+        ]
+      },
+      "triggers": {
+        "crons": ["0 3 * * *"]
+      },
+      "unsafe": {
+        "bindings": [
+          {
+            "name": "PUBLIC_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1002",
+            "simple": { "limit": 30, "period": 60 }
+          }
+        ]
+      }
+    },
+    "production": {
+      "name": "invoice-flash",
+      "r2_buckets": [
+        {
+          "binding": "STORAGE_BUCKET",
+          "bucket_name": "invoice-flash-storage"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "queue": "invoice-flash-pdf-render",
+            "binding": "PDF_RENDER_QUEUE"
+          },
+          { "queue": "invoice-flash-email-send", "binding": "EMAIL_SEND_QUEUE" }
+        ],
+        "consumers": [
+          {
+            "queue": "invoice-flash-pdf-render",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "dead_letter_queue": "invoice-flash-pdf-render-dlq"
+          },
+          {
+            "queue": "invoice-flash-email-send",
+            "max_batch_size": 10,
+            "max_retries": 3,
+            "dead_letter_queue": "invoice-flash-email-send-dlq"
+          }
+        ]
+      },
+      "triggers": {
+        "crons": ["0 3 * * *"]
+      },
+      "unsafe": {
+        "bindings": [
+          {
+            "name": "PUBLIC_RATE_LIMITER",
+            "type": "ratelimit",
+            "namespace_id": "1001",
+            "simple": { "limit": 30, "period": 60 }
+          }
+        ]
+      }
+    }
+  }
 }
