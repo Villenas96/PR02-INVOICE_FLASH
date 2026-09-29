@@ -18,6 +18,8 @@ interface PerformanceResult {
   samples: number;
   p95Ms: number;
   thresholdMs: number;
+  queries?: number;
+  queryBudget?: number;
   passed: boolean;
 }
 
@@ -43,7 +45,7 @@ const verdict =
 
 const rows = results.map(
   (result) =>
-    `| ${result.passed ? "✅" : "❌"} | ${result.scenario} | ${result.samples} | ${result.p95Ms.toFixed(2)} | < ${result.thresholdMs} |`,
+    `| ${result.passed ? "✅" : "❌"} | ${result.scenario} | ${result.samples} | ${result.p95Ms.toFixed(2)} | < ${result.thresholdMs} | ${result.queries === undefined ? "—" : `${result.queries} / ≤ ${result.queryBudget}`} |`,
 );
 
 const report = [
@@ -51,8 +53,8 @@ const report = [
   "",
   verdict,
   "",
-  "| | Escenario | Muestras | p95 (ms) | Umbral (ms) |",
-  "|---|---|---:|---:|---:|",
+  "| | Escenario | Muestras | p95 (ms) | Umbral (ms) | Consultas/petición (mediana / límite) |",
+  "|---|---|---:|---:|---:|---:|",
   ...rows,
   "",
   `Commit: \`${process.env.GITHUB_SHA ?? "local"}\` · Runner: \`${process.env.RUNNER_NAME ?? "local"}\``,

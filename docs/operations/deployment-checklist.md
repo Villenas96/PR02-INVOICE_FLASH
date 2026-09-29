@@ -55,19 +55,13 @@ propios:
 - [ ] Proyecto Sentry creado y token de solo lectura de eventos para
   `verify:postdeploy`.
 
-**GitHub (job de rendimiento, `.github/workflows/performance.yml`)**
+**Rendimiento (`.github/workflows/performance.yml`)**
 
-El job no usa la base de staging: mide contra un **proyecto de Neon dedicado a
-rendimiento**, vacío y en una región de EE. UU. (p. ej. AWS US East 1), junto a los
-runners de GitHub. Desde Europa, cada consulta pagaría unos 100 ms de viaje y el
-p95 mediría la distancia, no la aplicación. En producción, Smart Placement
-(`wrangler.jsonc`) da la misma cercanía entre Worker y base de datos.
-
-- [ ] Proyecto Neon de rendimiento creado, sin datos, solo Postgres.
-- [ ] Variable `NEON_PERF_PROJECT_ID` (ID de ese proyecto) y variable
-  `NEON_PERF_PARENT_BRANCH` (su rama por defecto, padre de las ramas efímeras).
-- [ ] Secreto `NEON_API_KEY` con permiso para crear y borrar ramas en ese proyecto.
-- [ ] Opcionales: `NEON_DATABASE` y `NEON_ROLE` si no son `neondb`/`neondb_owner`.
+No necesita configuración: corre con un Postgres local en el runner, igual que la
+integración, y comprueba el p95 de la app y un **límite de consultas por petición**.
+No se mide contra Neon desde GitHub porque no se puede elegir la región del runner y
+cada consulta pagaría 60–130 ms de distancia. La latencia real extremo a extremo se
+mide contra el Worker de staging tras desplegar (sección 3).
 
 ## 1. Antes de desplegar
 
@@ -118,6 +112,13 @@ sus bindings sin subir nada con
 - [ ] Enlace público abierto sin sesión desde otro dispositivo; al desactivarlo
   devuelve 404.
 - [ ] Sin mensajes acumulándose en las DLQ.
+
+**Latencia real (quickstart V9)**
+
+- [ ] p95 de las operaciones CRUD contra el Worker desplegado por debajo de 300 ms,
+  medido por HTTP con una cuenta de prueba. Con Smart Placement el Worker corre
+  junto a Neon, así que cada petición paga un solo viaje largo, no uno por
+  consulta. *(Pendiente: script de medición contra staging.)*
 
 **Sentry y verificador**
 

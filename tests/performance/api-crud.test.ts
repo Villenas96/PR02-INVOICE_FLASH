@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clients, companies, documents, users } from "@/db/schema";
 
 import {
+  countQueries,
   createIntegrationDatabase,
   truncateIntegrationDatabase,
 } from "../integration/database";
@@ -40,11 +41,35 @@ const CRUD_P95_MS = 300;
 const ITERATIONS = 20;
 const INSERT_BATCH_SIZE = 500;
 
+/**
+ * Median database round trips per request, set at today's measured values.
+ * In production each round trip costs a Worker <-> Neon hop, so a new
+ * sequential query is a latency regression even when local p95 stays low:
+ * lower a budget when a route gets cheaper, never raise one to make a
+ * regression pass without reviewing it.
+ */
+const QUERY_BUDGET = {
+  createClient: 4,
+  listClients: 4,
+  readClient: 5,
+  updateClient: 5,
+  createDraft: 7,
+  listDocuments: 4,
+  readDocument: 8,
+} as const;
+
+let queryCounts: number[] = [];
+
+function budget(queries: number) {
+  return { counts: queryCounts, budget: queries };
+}
+
 async function measure(action: () => Promise<Response>): Promise<number> {
   const startedAt = performance.now();
-  const response = await action();
+  const { result: response, queries } = await countQueries(action);
   const duration = performance.now() - startedAt;
   expect(response.status).toBeLessThan(400);
+  queryCounts.push(queries);
   return duration;
 }
 
@@ -196,6 +221,10 @@ describe("API CRUD performance", () => {
     fixture = await seedFixture();
   }, 60_000);
 
+  beforeEach(() => {
+    queryCounts = [];
+  });
+
   it(`creates a client with p95 under ${CRUD_P95_MS} ms`, async () => {
     const durations: number[] = [];
     for (let index = 0; index < ITERATIONS; index += 1) {
@@ -212,7 +241,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expectP95Below(durations, CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS, budget(QUERY_BUDGET.createClient));
   });
 
   it(`lists a page of ${CLIENT_COUNT} clients with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -224,7 +253,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expectP95Below(durations, CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS, budget(QUERY_BUDGET.listClients));
   });
 
   it(`reads a single client with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -242,7 +271,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expectP95Below(durations, CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS, budget(QUERY_BUDGET.readClient));
   });
 
   it(`updates a client with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -267,7 +296,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expectP95Below(durations, CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS, budget(QUERY_BUDGET.updateClient));
   });
 
   it(`creates a draft document with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -298,7 +327,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expectP95Below(durations, CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS, budget(QUERY_BUDGET.createDraft));
   });
 
   it(`lists a page of ${DOCUMENT_COUNT} documents with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -312,7 +341,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expectP95Below(durations, CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS, budget(QUERY_BUDGET.listDocuments));
   });
 
   it(`reads a single document with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -333,6 +362,6 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expectP95Below(durations, CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS, budget(QUERY_BUDGET.readDocument));
   });
 });
