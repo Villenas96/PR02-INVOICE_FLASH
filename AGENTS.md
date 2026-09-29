@@ -11,9 +11,9 @@ Facturación web para autónomos y pequeños negocios (mercado español). Promes
 - **TypeScript 5 `strict`** · **Next.js 15 App Router** · React 19 · **pnpm** (único gestor de paquetes permitido).
 - Hosting: **Cloudflare Workers** vía `@opennextjs/cloudflare` (+ R2, Queues). Fallback documentado: Vercel.
 - BD: **Neon Postgres** + **Drizzle ORM** (migraciones drizzle-kit versionadas y reversibles).
-- Auth: **Better Auth** (adaptador Drizzle). PDF: **pdf-lib** + caché en R2 (job de cola). Email: **Resend** vía Cloudflare Queues.
+- Auth: **Better Auth** (adaptador Drizzle). PDF: **pdf-lib** exclusivamente en cola + caché R2 (`202 pdf_processing` mientras no esté listo; nunca render HTTP). Email: **Resend** vía Cloudflare Queues con `email_delivery` y clave idempotente.
 - UI: **Tailwind CSS 4 + shadcn/ui** (sistema de diseño único; WCAG 2.1 AA).
-- Calidad: **Biome** (lint+formato), `tsc --noEmit`, **Vitest** (unit + integración con Postgres real), **Playwright** (+axe), GitHub Actions.
+- Calidad: **Biome** (lint+formato), `tsc --noEmit`, **Vitest** (unit + integración con Postgres real), **Playwright** (+axe, responsive, feedback <100 ms), benchmarks p95 y GitHub Actions.
 
 ## Reglas clave (constitución `.specify/memory/constitution.md` v1.0.0 — prevalece siempre)
 
@@ -22,7 +22,8 @@ Facturación web para autónomos y pequeños negocios (mercado español). Promes
 - Documentos emitidos: **inmutables** (snapshot de emisor y cliente); nunca se borran, solo se anulan. Auditoría en `document_events` (solo INSERT).
 - Estados de cobro (pendiente/parcial/pagada/vencida): **derivados en consulta**, nunca almacenados.
 - Toda consulta filtrada por `company_id` de la sesión (recurso ajeno → 404). Validación Zod en servidor. Sin secretos en el repo.
-- Colecciones siempre paginadas (default 25, máx 100). Trabajo pesado (PDF, email) vía Cloudflare Queues.
+- Colecciones siempre paginadas (default 25, máx 100). Trabajo pesado (PDF, email) exclusivamente vía Cloudflare Queues; consumidores idempotentes ante entrega al menos una vez.
+- Neon y R2 cifrados en reposo y TLS en tránsito, con verificación pre-deploy. Alerta real de gasto Cloudflare desde el primer despliegue; Neon Free monitorizado y Spending Limit obligatorio antes de cualquier upgrade.
 - UI y docs de producto en **español**; código, identificadores y commits en **inglés**.
 
 ## Workflow

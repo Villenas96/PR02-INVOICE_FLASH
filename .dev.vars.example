@@ -4,3 +4,14 @@
 DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 BETTER_AUTH_SECRET=
 RESEND_API_KEY=
+RESEND_FROM_EMAIL=facturas@invoiceflash.app
+SENTRY_DSN=
+
+# Solo integración: usa una base aislada; nunca reutilices DATABASE_URL.
+INTEGRATION_DATABASE_URL=
+# docker (exige INTEGRATION_POSTGRES_CONTAINER=invoice-flash-test-*) | neon | none
+INTEGRATION_CLEANUP_TARGET=none
+INTEGRATION_POSTGRES_CONTAINER=
+NEON_PROJECT_ID=
+INTEGRATION_NEON_BRANCH_ID=
+NEON_API_KEY=

@@ -1,0 +1,56 @@
+{
+  "documentType": "invoice",
+  "fullNumber": "2026-0001",
+  "issueDate": "2026-07-30",
+  "dueDate": "2026-08-29",
+  "currency": "EUR",
+  "issuer": {
+    "legalName": "Estudio Relámpago, S.L.",
+    "taxId": "B12345678",
+    "addressLines": ["Calle de Alcalá, 42", "28014 Madrid, España"],
+    "email": "facturacion@estudio-relampago.example"
+  },
+  "client": {
+    "legalName": "Cliente Demostración, S.L.",
+    "taxId": "B87654321",
+    "addressLines": ["Avenida del Puerto, 18", "46021 Valencia, España"],
+    "email": "administracion@cliente-demostracion.example"
+  },
+  "linePattern": {
+    "count": 48,
+    "descriptionPrefix": "Servicio de consultoría",
+    "odd": {
+      "quantity": "1.000",
+      "unitPriceCents": 10000,
+      "taxRate": "21.00",
+      "lineSubtotalCents": 10000,
+      "lineTaxCents": 2100,
+      "lineTotalCents": 12100
+    },
+    "even": {
+      "quantity": "1.000",
+      "unitPriceCents": 5000,
+      "taxRate": "10.00",
+      "lineSubtotalCents": 5000,
+      "lineTaxCents": 500,
+      "lineTotalCents": 5500
+    }
+  },
+  "subtotalCents": 360000,
+  "taxBreakdown": [
+    {
+      "rate": "21.00",
+      "baseCents": 240000,
+      "taxCents": 50400
+    },
+    {
+      "rate": "10.00",
+      "baseCents": 120000,
+      "taxCents": 12000
+    }
+  ],
+  "retentionRate": "15.00",
+  "retentionCents": 54000,
+  "totalCents": 368400,
+  "notes": "Pago mediante transferencia bancaria en un plazo de 30 días."
+}
