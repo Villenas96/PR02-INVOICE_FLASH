@@ -1,16 +1,19 @@
 name: Performance
 
-# Controlled p95 gate (plan.md "Performance Goals", quickstart V9): CRUD <300 ms,
-# client search <200 ms, PDF render <500 ms, PDF availability <3 s.
+# p95 gate (plan.md "Performance Goals", quickstart V9): CRUD <300 ms, client
+# search <200 ms, PDF render <500 ms, PDF availability <3 s, plus a budget of
+# database round trips per CRUD request.
 #
-# The suite TRUNCATEs its database, so it never runs against the real staging
-# branch: every run gets its own schema-only Neon branch forked from staging
-# (same region and compute class, no staging data copied), which is deleted
-# by the suite's global teardown, by the always() step below and, as a last
-# resort, by the branch expiry.
+# The suite runs against a Postgres service on the runner, like the
+# integration job: GitHub does not let us choose the runner's region, so any
+# remote database would measure the runner <-> database distance (60-130 ms
+# per query in practice) instead of the app. In production Smart Placement
+# (wrangler.jsonc) keeps the Worker next to Neon, so what matters is the app's
+# own cost and how many sequential queries each request issues: the round-trip
+# budget catches regressions there. End-to-end latency against the deployed
+# staging Worker is checked after deploying (docs/operations/deployment-checklist.md).
 #
-# Not a required PR check: it needs Neon credentials and a real network hop.
-# Setup and operation: docs/operations/deployment-checklist.md.
+# Not a required PR check: shared runners add timing noise.
 
 on:
   workflow_dispatch:
@@ -22,6 +25,17 @@ on:
     paths:
       - "src/**"
       - "tests/performance/**"
+      - "tests/integration/database.ts"
+      - "vitest.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/performance.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/performance/**"
+      - "tests/integration/database.ts"
       - "vitest.config.ts"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -30,37 +44,33 @@ on:
 permissions:
   contents: read
 
-# One run at a time: parallel runs would share Neon compute and skew p95.
 concurrency:
-  group: performance
-  cancel-in-progress: false
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   performance:
-    name: Performance (p95 thresholds)
-    # Scheduled/push runs stay silent until Neon is configured; a manual run
-    # always executes so a missing configuration fails loudly.
-    if: vars.NEON_PROJECT_ID != '' || github.event_name == 'workflow_dispatch'
+    name: Performance (p95 + round trips)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
-      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      INTEGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/invoice_flash_perf
       PERF_REPORT_FILE: ${{ github.workspace }}/perf-results/results.jsonl
-    steps:
-      - name: Check Neon configuration
+    services:
+      postgres:
+        image: postgres:16
         env:
-          NEON_STAGING_BRANCH: ${{ vars.NEON_STAGING_BRANCH }}
-        run: |
-          missing=""
-          [ -n "$NEON_PROJECT_ID" ] || missing="$missing vars.NEON_PROJECT_ID"
-          [ -n "$NEON_STAGING_BRANCH" ] || missing="$missing vars.NEON_STAGING_BRANCH"
-          [ -n "$NEON_API_KEY" ] || missing="$missing secrets.NEON_API_KEY"
-          if [ -n "$missing" ]; then
-            echo "::error::Falta configuración de Neon:$missing (ver docs/operations/deployment-checklist.md)."
-            exit 1
-          fi
-
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: invoice_flash_perf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
@@ -71,56 +81,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
-      - name: Compute branch expiry
-        id: expiry
-        run: echo "at=$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      - name: Create ephemeral Neon branch
-        id: neon
-        uses: neondatabase/create-branch-action@v6
-        with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
-          api_key: ${{ secrets.NEON_API_KEY }}
-          parent_branch: ${{ vars.NEON_STAGING_BRANCH }}
-          branch_name: perf-${{ github.run_id }}-${{ github.run_attempt }}
-          branch_type: schema-only
-          database: ${{ vars.NEON_DATABASE || 'neondb' }}
-          role: ${{ vars.NEON_ROLE || 'neondb_owner' }}
-          expires_at: ${{ steps.expiry.outputs.at }}
-
       - name: Run performance suite
-        env:
-          # Direct (unpooled) URL: the global setup runs drizzle migrations.
-          INTEGRATION_DATABASE_URL: ${{ steps.neon.outputs.db_url }}
-          INTEGRATION_CLEANUP_TARGET: neon
-          INTEGRATION_NEON_BRANCH_ID: ${{ steps.neon.outputs.branch_id }}
         run: |
           mkdir -p perf-results
           pnpm test:performance
 
       - name: Threshold report
-        if: always() && steps.neon.outcome == 'success'
+        if: always()
         run: pnpm perf:report perf-results/results.jsonl perf-results/report.md
 
       - name: Upload threshold report
-        if: always() && steps.neon.outcome == 'success'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: performance-report-${{ github.run_id }}
           path: perf-results/
           retention-days: 90
-
-      - name: Delete ephemeral Neon branch
-        if: always() && steps.neon.outputs.branch_id != ''
-        env:
-          BRANCH_ID: ${{ steps.neon.outputs.branch_id }}
-          EXPIRES_AT: ${{ steps.expiry.outputs.at }}
-        run: |
-          status=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
-            -H "Authorization: Bearer $NEON_API_KEY" \
-            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$BRANCH_ID")
-          # 404: the suite's global teardown already removed it.
-          case "$status" in
-            2*|404) echo "Rama efímera eliminada ($status)." ;;
-            *) echo "::error::No se pudo eliminar la rama $BRANCH_ID ($status); caduca en $EXPIRES_AT."; exit 1 ;;
-          esac

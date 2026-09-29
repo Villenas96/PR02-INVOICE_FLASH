@@ -36,12 +36,36 @@ export function integrationDatabaseUrl(): string {
 
 let integrationClient: ReturnType<typeof postgres> | undefined;
 let integrationDatabase: Database | undefined;
+let queryCounter: { count: number } | undefined;
+
+/**
+ * Counts the statements `action` sends through the integration database
+ * client, i.e. its database round trips. Used by the performance suite to
+ * catch regressions that add sequential queries to a request.
+ */
+export async function countQueries<T>(
+  action: () => Promise<T>,
+): Promise<{ result: T; queries: number }> {
+  const counter = { count: 0 };
+  queryCounter = counter;
+  try {
+    const result = await action();
+    return { result, queries: counter.count };
+  } finally {
+    queryCounter = undefined;
+  }
+}
 
 export function createIntegrationDatabase(): Database {
   if (!integrationClient) {
     integrationClient = postgres(integrationDatabaseUrl(), {
       max: 10,
       idle_timeout: 1,
+      debug: () => {
+        if (queryCounter) {
+          queryCounter.count += 1;
+        }
+      },
     });
   }
   if (!integrationDatabase) {
