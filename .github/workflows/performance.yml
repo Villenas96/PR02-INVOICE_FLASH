@@ -3,11 +3,14 @@ name: Performance
 # Controlled p95 gate (plan.md "Performance Goals", quickstart V9): CRUD <300 ms,
 # client search <200 ms, PDF render <500 ms, PDF availability <3 s.
 #
-# The suite TRUNCATEs its database, so it never runs against the real staging
-# branch: every run gets its own schema-only Neon branch forked from staging
-# (same region and compute class, no staging data copied), which is deleted
-# by the suite's global teardown, by the always() step below and, as a last
-# resort, by the branch expiry.
+# It runs against a dedicated Neon project in a US region next to the GitHub
+# runners, never against staging or production: the suite TRUNCATEs its
+# database, and a transatlantic runner <-> Frankfurt hop (~100 ms per round
+# trip) would measure network distance instead of the app. Production gets
+# the same app <-> database proximity through Cloudflare Smart Placement
+# (wrangler.jsonc). Every run forks its own schema-only branch, deleted by the
+# suite's global teardown, by the always() step below and, as a last resort,
+# by the branch expiry.
 #
 # Not a required PR check: it needs Neon credentials and a real network hop.
 # Setup and operation: docs/operations/deployment-checklist.md.
@@ -40,21 +43,22 @@ jobs:
     name: Performance (p95 thresholds)
     # Scheduled/push runs stay silent until Neon is configured; a manual run
     # always executes so a missing configuration fails loudly.
-    if: vars.NEON_PROJECT_ID != '' || github.event_name == 'workflow_dispatch'
+    if: vars.NEON_PERF_PROJECT_ID != '' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      # The suite's global teardown reads NEON_PROJECT_ID to delete the branch.
+      NEON_PROJECT_ID: ${{ vars.NEON_PERF_PROJECT_ID }}
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       PERF_REPORT_FILE: ${{ github.workspace }}/perf-results/results.jsonl
     steps:
       - name: Check Neon configuration
         env:
-          NEON_STAGING_BRANCH: ${{ vars.NEON_STAGING_BRANCH }}
+          NEON_PERF_PARENT_BRANCH: ${{ vars.NEON_PERF_PARENT_BRANCH }}
         run: |
           missing=""
-          [ -n "$NEON_PROJECT_ID" ] || missing="$missing vars.NEON_PROJECT_ID"
-          [ -n "$NEON_STAGING_BRANCH" ] || missing="$missing vars.NEON_STAGING_BRANCH"
+          [ -n "$NEON_PROJECT_ID" ] || missing="$missing vars.NEON_PERF_PROJECT_ID"
+          [ -n "$NEON_PERF_PARENT_BRANCH" ] || missing="$missing vars.NEON_PERF_PARENT_BRANCH"
           [ -n "$NEON_API_KEY" ] || missing="$missing secrets.NEON_API_KEY"
           if [ -n "$missing" ]; then
             echo "::error::Falta configuración de Neon:$missing (ver docs/operations/deployment-checklist.md)."
@@ -79,9 +83,9 @@ jobs:
         id: neon
         uses: neondatabase/create-branch-action@v6
         with:
-          project_id: ${{ vars.NEON_PROJECT_ID }}
+          project_id: ${{ vars.NEON_PERF_PROJECT_ID }}
           api_key: ${{ secrets.NEON_API_KEY }}
-          parent_branch: ${{ vars.NEON_STAGING_BRANCH }}
+          parent_branch: ${{ vars.NEON_PERF_PARENT_BRANCH }}
           branch_name: perf-${{ github.run_id }}-${{ github.run_attempt }}
           branch_type: schema-only
           database: ${{ vars.NEON_DATABASE || 'neondb' }}

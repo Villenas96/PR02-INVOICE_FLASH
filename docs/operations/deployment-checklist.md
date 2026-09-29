@@ -57,9 +57,16 @@ propios:
 
 **GitHub (job de rendimiento, `.github/workflows/performance.yml`)**
 
-- [ ] Variable `NEON_PROJECT_ID` y variable `NEON_STAGING_BRANCH` (rama padre de
-  las ramas efímeras).
-- [ ] Secreto `NEON_API_KEY` con permiso para crear y borrar ramas.
+El job no usa la base de staging: mide contra un **proyecto de Neon dedicado a
+rendimiento**, vacío y en una región de EE. UU. (p. ej. AWS US East 1), junto a los
+runners de GitHub. Desde Europa, cada consulta pagaría unos 100 ms de viaje y el
+p95 mediría la distancia, no la aplicación. En producción, Smart Placement
+(`wrangler.jsonc`) da la misma cercanía entre Worker y base de datos.
+
+- [ ] Proyecto Neon de rendimiento creado, sin datos, solo Postgres.
+- [ ] Variable `NEON_PERF_PROJECT_ID` (ID de ese proyecto) y variable
+  `NEON_PERF_PARENT_BRANCH` (su rama por defecto, padre de las ramas efímeras).
+- [ ] Secreto `NEON_API_KEY` con permiso para crear y borrar ramas en ese proyecto.
 - [ ] Opcionales: `NEON_DATABASE` y `NEON_ROLE` si no son `neondb`/`neondb_owner`.
 
 ## 1. Antes de desplegar

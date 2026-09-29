@@ -54,6 +54,13 @@
   "observability": {
     "enabled": true
   },
+  // Ejecuta el Worker cerca de Neon (Frankfurt) y no del usuario: cada
+  // petición hace varias consultas en serie, y con el Worker en el edge cada
+  // una pagaría el viaje de ida y vuelta hasta la base de datos. Se hereda en
+  // los entornos staging y production.
+  "placement": {
+    "mode": "smart"
+  },
   // Secretos (DATABASE_URL, BETTER_AUTH_SECRET, RESEND_API_KEY): nunca aquí.
   // Local: .dev.vars (ver .dev.vars.example). Remoto:
   // `pnpm exec wrangler secret put <NAME> --env <staging|production>`.
