@@ -1,0 +1,126 @@
+name: Performance
+
+# Controlled p95 gate (plan.md "Performance Goals", quickstart V9): CRUD <300 ms,
+# client search <200 ms, PDF render <500 ms, PDF availability <3 s.
+#
+# The suite TRUNCATEs its database, so it never runs against the real staging
+# branch: every run gets its own schema-only Neon branch forked from staging
+# (same region and compute class, no staging data copied), which is deleted
+# by the suite's global teardown, by the always() step below and, as a last
+# resort, by the branch expiry.
+#
+# Not a required PR check: it needs Neon credentials and a real network hop.
+# Setup and operation: docs/operations/deployment-checklist.md.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays 05:00 UTC, outside Spanish business hours.
+    - cron: "0 5 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/performance/**"
+      - "vitest.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/performance.yml"
+
+permissions:
+  contents: read
+
+# One run at a time: parallel runs would share Neon compute and skew p95.
+concurrency:
+  group: performance
+  cancel-in-progress: false
+
+jobs:
+  performance:
+    name: Performance (p95 thresholds)
+    # Scheduled/push runs stay silent until Neon is configured; a manual run
+    # always executes so a missing configuration fails loudly.
+    if: vars.NEON_PROJECT_ID != '' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      PERF_REPORT_FILE: ${{ github.workspace }}/perf-results/results.jsonl
+    steps:
+      - name: Check Neon configuration
+        env:
+          NEON_STAGING_BRANCH: ${{ vars.NEON_STAGING_BRANCH }}
+        run: |
+          missing=""
+          [ -n "$NEON_PROJECT_ID" ] || missing="$missing vars.NEON_PROJECT_ID"
+          [ -n "$NEON_STAGING_BRANCH" ] || missing="$missing vars.NEON_STAGING_BRANCH"
+          [ -n "$NEON_API_KEY" ] || missing="$missing secrets.NEON_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Falta configuración de Neon:$missing (ver docs/operations/deployment-checklist.md)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Compute branch expiry
+        id: expiry
+        run: echo "at=$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Create ephemeral Neon branch
+        id: neon
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          parent_branch: ${{ vars.NEON_STAGING_BRANCH }}
+          branch_name: perf-${{ github.run_id }}-${{ github.run_attempt }}
+          branch_type: schema-only
+          database: ${{ vars.NEON_DATABASE || 'neondb' }}
+          role: ${{ vars.NEON_ROLE || 'neondb_owner' }}
+          expires_at: ${{ steps.expiry.outputs.at }}
+
+      - name: Run performance suite
+        env:
+          # Direct (unpooled) URL: the global setup runs drizzle migrations.
+          INTEGRATION_DATABASE_URL: ${{ steps.neon.outputs.db_url }}
+          INTEGRATION_CLEANUP_TARGET: neon
+          INTEGRATION_NEON_BRANCH_ID: ${{ steps.neon.outputs.branch_id }}
+        run: |
+          mkdir -p perf-results
+          pnpm test:performance
+
+      - name: Threshold report
+        if: always() && steps.neon.outcome == 'success'
+        run: pnpm perf:report perf-results/results.jsonl perf-results/report.md
+
+      - name: Upload threshold report
+        if: always() && steps.neon.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report-${{ github.run_id }}
+          path: perf-results/
+          retention-days: 90
+
+      - name: Delete ephemeral Neon branch
+        if: always() && steps.neon.outputs.branch_id != ''
+        env:
+          BRANCH_ID: ${{ steps.neon.outputs.branch_id }}
+          EXPIRES_AT: ${{ steps.expiry.outputs.at }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+            -H "Authorization: Bearer $NEON_API_KEY" \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches/$BRANCH_ID")
+          # 404: the suite's global teardown already removed it.
+          case "$status" in
+            2*|404) echo "Rama efímera eliminada ($status)." ;;
+            *) echo "::error::No se pudo eliminar la rama $BRANCH_ID ($status); caduca en $EXPIRES_AT."; exit 1 ;;
+          esac

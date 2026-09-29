@@ -137,7 +137,7 @@ Si falla cualquier comprobación, el despliegue queda bloqueado.
 pnpm verify:predeploy  # bloquea sin Sentry, cifrado/TLS, R2 privado y controles de coste
 pnpm build             # build Next.js + adaptador OpenNext
 pnpm db:migrate:prod   # migraciones versionadas contra la rama objetivo de Neon
-pnpm deploy            # wrangler deploy (Workers + Queues + R2 bindings)
+pnpm run deploy        # wrangler deploy (Workers + Queues + R2 bindings); `pnpm deploy` es un comando nativo de pnpm
 pnpm verify:postdeploy # smoke móvil + flujo de error a Sentry
 ```
 

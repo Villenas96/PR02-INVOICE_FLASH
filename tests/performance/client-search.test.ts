@@ -12,20 +12,12 @@ import {
   generateClientFixtures,
   SEARCH_NEEDLE_TERM,
 } from "./fixtures/clients";
+import { expectP95Below } from "./report";
 
 const database = createIntegrationDatabase();
 const SEARCH_P95_MS = 200;
 const ITERATIONS = 20;
 const INSERT_BATCH_SIZE = 500;
-
-function percentile(durationsMs: number[], p: number): number {
-  const sorted = [...durationsMs].sort((a, b) => a - b);
-  const index = Math.min(
-    sorted.length - 1,
-    Math.ceil((p / 100) * sorted.length) - 1,
-  );
-  return sorted[index];
-}
 
 describe("client search performance", () => {
   it(`keeps indexed name/tax-id search p95 under ${SEARCH_P95_MS}ms across ${CLIENT_FIXTURE_COUNT} clients`, async () => {
@@ -87,7 +79,6 @@ describe("client search performance", () => {
       expect(rows.length).toBe(1);
     }
 
-    const p95 = percentile(durations, 95);
-    expect(p95).toBeLessThan(SEARCH_P95_MS);
+    expectP95Below(durations, SEARCH_P95_MS);
   }, 60_000);
 });

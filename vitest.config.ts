@@ -40,6 +40,9 @@ export default defineConfig({
           // in-progress data.
           fileParallelism: false,
           testTimeout: 60000,
+          // Same migrate-first + ephemeral-cleanup lifecycle as the
+          // integration project, so the suite runs against a fresh database.
+          globalSetup: ["tests/integration/global-teardown.ts"],
         },
       },
     ],

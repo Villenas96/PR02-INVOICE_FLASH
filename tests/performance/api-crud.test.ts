@@ -13,6 +13,7 @@ import {
   generateClientFixtures,
   generateDocumentFixtures,
 } from "./fixtures/api-crud";
+import { expectP95Below } from "./report";
 
 const appBaseUrl = "http://localhost:3000";
 process.env.BETTER_AUTH_SECRET =
@@ -38,15 +39,6 @@ const { GET: getDocument } = await import("@/app/api/v1/documents/[id]/route");
 const CRUD_P95_MS = 300;
 const ITERATIONS = 20;
 const INSERT_BATCH_SIZE = 500;
-
-function percentile(durationsMs: number[], p: number): number {
-  const sorted = [...durationsMs].sort((a, b) => a - b);
-  const index = Math.min(
-    sorted.length - 1,
-    Math.ceil((p / 100) * sorted.length) - 1,
-  );
-  return sorted[index];
-}
 
 async function measure(action: () => Promise<Response>): Promise<number> {
   const startedAt = performance.now();
@@ -220,7 +212,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expect(percentile(durations, 95)).toBeLessThan(CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS);
   });
 
   it(`lists a page of ${CLIENT_COUNT} clients with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -232,7 +224,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expect(percentile(durations, 95)).toBeLessThan(CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS);
   });
 
   it(`reads a single client with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -250,7 +242,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expect(percentile(durations, 95)).toBeLessThan(CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS);
   });
 
   it(`updates a client with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -275,7 +267,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expect(percentile(durations, 95)).toBeLessThan(CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS);
   });
 
   it(`creates a draft document with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -306,7 +298,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expect(percentile(durations, 95)).toBeLessThan(CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS);
   });
 
   it(`lists a page of ${DOCUMENT_COUNT} documents with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -320,7 +312,7 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expect(percentile(durations, 95)).toBeLessThan(CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS);
   });
 
   it(`reads a single document with p95 under ${CRUD_P95_MS} ms`, async () => {
@@ -341,6 +333,6 @@ describe("API CRUD performance", () => {
         ),
       );
     }
-    expect(percentile(durations, 95)).toBeLessThan(CRUD_P95_MS);
+    expectP95Below(durations, CRUD_P95_MS);
   });
 });

@@ -5,6 +5,7 @@ import type { DocumentPdfInput } from "@/services/pdf/template";
 import type { PrivateBucket } from "@/services/storage";
 import { storeDocumentPdf } from "@/services/storage";
 import invoiceFixture from "../fixtures/pdf/invoice-multipage.json";
+import { expectP95Below } from "./report";
 
 const ITERATIONS = 20;
 const RENDER_P95_MS = 500;
@@ -66,15 +67,6 @@ function createMemoryBucket(): PrivateBucket {
   };
 }
 
-function percentile(durationsMs: number[], p: number): number {
-  const sorted = [...durationsMs].sort((a, b) => a - b);
-  const index = Math.min(
-    sorted.length - 1,
-    Math.ceil((p / 100) * sorted.length) - 1,
-  );
-  return sorted[index];
-}
-
 async function measure(action: () => Promise<void>): Promise<number> {
   const startedAt = performance.now();
   await action();
@@ -92,7 +84,7 @@ describe("PDF render performance", () => {
       );
     }
 
-    expect(percentile(durations, 95)).toBeLessThan(RENDER_P95_MS);
+    expectP95Below(durations, RENDER_P95_MS);
   });
 
   it(`makes a rendered PDF available in storage with p95 under ${AVAILABILITY_P95_MS} ms`, async () => {
@@ -113,6 +105,6 @@ describe("PDF render performance", () => {
       ).resolves.not.toBeNull();
     }
 
-    expect(percentile(durations, 95)).toBeLessThan(AVAILABILITY_P95_MS);
+    expectP95Below(durations, AVAILABILITY_P95_MS);
   });
 });

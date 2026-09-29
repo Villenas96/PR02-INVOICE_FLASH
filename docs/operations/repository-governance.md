@@ -17,6 +17,18 @@ que verificarla en **Settings → Rules → Rulesets** antes de la primera fusi�
 - Restringir las eliminaciones de rama y permitir solo merge commits aprobados por
   la política del repositorio.
 
+## Excepción temporal vigente: aprobaciones requeridas = 0
+
+- **Desde**: 2026-09-29. **Motivo**: el repositorio tiene un único desarrollador y
+  GitHub no permite aprobar una pull request propia, por lo que la regla de una
+  aprobación bloquearía cualquier fusión.
+- **Qué cambia**: solo el número de aprobaciones requeridas (1 → 0). Siguen
+  vigentes la pull request obligatoria, los checks requeridos en verde, la
+  resolución de conversaciones y el bloqueo de push directo y force push.
+- **Fin**: se restablece a una aprobación en cuanto se incorpore una segunda
+  persona con permisos de revisión. Mientras dure, cada informe de validación
+  indica que la fusión se hizo sin revisión humana independiente.
+
 ## Operación
 
 CI se ejecuta en pull requests y en actualizaciones de `main`. Dependabot abre

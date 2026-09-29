@@ -59,3 +59,6 @@ cloudflare-env.d.ts
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# performance reports (tests/performance/report.ts)
+/perf-results
