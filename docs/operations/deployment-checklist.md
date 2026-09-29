@@ -17,23 +17,32 @@ tickets ni en los ficheros de evidencia.
 
 Se hace una vez por entorno y se revisa si cambia la cuenta, el bucket o la rama.
 
-> ⚠️ **Hueco abierto:** `wrangler.jsonc` define hoy un solo Worker (`invoice-flash`),
-> un solo bucket y unas únicas colas, sin bloque `env.staging`. Mientras no exista,
-> staging y producción desplegarían sobre los mismos recursos. Antes del primer
-> despliegue a producción hay que añadir un entorno `staging` con Worker, bucket y
-> colas propios, o usar cuentas de Cloudflare separadas.
+Staging y producción comparten una cuenta de Cloudflare con plan **Workers Paid**
+(el plan gratuito limita la CPU a 10 ms por petición y el hash de contraseñas de
+Better Auth lo supera). Cada uno es un entorno de `wrangler.jsonc` con recursos
+propios:
 
-**Cloudflare**
+| Recurso | `staging` | `production` |
+|---|---|---|
+| Worker | `invoice-flash-staging` | `invoice-flash` |
+| Bucket R2 | `invoice-flash-storage-staging` | `invoice-flash-storage` |
+| Cola PDF (+ DLQ `-dlq`) | `invoice-flash-staging-pdf-render` | `invoice-flash-pdf-render` |
+| Cola email (+ DLQ `-dlq`) | `invoice-flash-staging-email-send` | `invoice-flash-email-send` |
+| Limitador `/d/*` | namespace `1002` | namespace `1001` |
+| Rama Neon | rama de staging | rama principal |
 
-- [ ] Bucket R2 `invoice-flash-storage` creado, privado, sin dominio público ni
-  `r2.dev` (ver storage-encryption.md).
-- [ ] Colas creadas: `invoice-flash-pdf-render`, `invoice-flash-email-send` y sus DLQ
-  `invoice-flash-pdf-render-dlq`, `invoice-flash-email-send-dlq`.
-- [ ] Namespace de rate limiting `PUBLIC_RATE_LIMITER` disponible para `/d/*`.
-- [ ] Secretos cargados con `pnpm exec wrangler secret put <NOMBRE>`:
+**Cloudflare** (repetir con `ENV=staging` y `ENV=production`)
+
+- [ ] Bucket R2 del entorno creado, privado, sin dominio público ni `r2.dev` (ver
+  storage-encryption.md):
+  `pnpm exec wrangler r2 bucket create <bucket>`.
+- [ ] Las cuatro colas del entorno creadas, DLQ incluidas:
+  `pnpm exec wrangler queues create <cola>`.
+- [ ] Secretos cargados con `pnpm exec wrangler secret put <NOMBRE> --env $ENV`:
   `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `RESEND_API_KEY`,
-  `RESEND_FROM_EMAIL`, `SENTRY_DSN`.
-- [ ] Alerta de presupuesto activa y probada (cloud-cost-controls.md § Cloudflare).
+  `RESEND_FROM_EMAIL`, `SENTRY_DSN`. Nunca se reutiliza un secreto entre entornos.
+- [ ] Alerta de presupuesto de la cuenta activa y probada (cloud-cost-controls.md
+  § Cloudflare).
 
 **Neon**
 
@@ -80,13 +89,14 @@ Exporta siempre `DATABASE_URL` en la propia orden: `drizzle.config.ts` carga
 `.dev.vars` como respaldo, así que olvidarla migraría la base de desarrollo sin aviso.
 
 ```bash
-pnpm build                                           # Next.js + OpenNext
 DATABASE_URL='<url directa del entorno>' pnpm db:migrate:prod
-pnpm run deploy                                      # Worker + colas + R2
+pnpm deploy:staging        # o pnpm deploy:production: build OpenNext + wrangler
 ```
 
-Usa `pnpm run deploy`, no `pnpm deploy`: este último es un comando nativo de pnpm
-para workspaces y no ejecuta el script.
+No existe un script de despliegue sin entorno, para que producción nunca se
+despliegue por omisión. Antes del primer despliegue de un entorno puedes comprobar
+sus bindings sin subir nada con
+`pnpm exec opennextjs-cloudflare build && pnpm exec wrangler deploy --dry-run --env <entorno>`.
 
 - [ ] Migraciones aplicadas sin error.
 - [ ] `wrangler` confirma el despliegue; apunta el ID de versión.
@@ -119,7 +129,7 @@ pnpm verify:postdeploy
 
 ## 4. Marcha atrás
 
-- **Código:** `pnpm exec wrangler rollback <version-id>` vuelve a la versión anterior
+- **Código:** `pnpm exec wrangler rollback <version-id> --env <entorno>` vuelve a la versión anterior
   del Worker. Los mensajes ya encolados se procesan con la versión restaurada, y los
   consumidores son idempotentes.
 - **Esquema:** solo si la migración es incompatible con la versión restaurada, aplica

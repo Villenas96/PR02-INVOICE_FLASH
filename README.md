@@ -19,4 +19,5 @@ Abre [http://localhost:3000](http://localhost:3000).
 - `pnpm typecheck` — `tsc --noEmit`
 - `pnpm test` / `pnpm test:integration` — Vitest
 - `pnpm test:e2e` — Playwright
-- `pnpm build` / `pnpm run deploy` — build y despliegue en Cloudflare Workers (OpenNext)
+- `pnpm build` — build de Next.js
+- `pnpm deploy:staging` / `pnpm deploy:production` — despliegue en Cloudflare Workers (OpenNext); ver `docs/operations/deployment-checklist.md`
