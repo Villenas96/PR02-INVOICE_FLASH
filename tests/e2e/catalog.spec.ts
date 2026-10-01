@@ -129,7 +129,12 @@ test("copia un concepto del catálogo en una línea sin acoplar el documento a e
   await expect(page.getByText("Hora de consultoría E2E")).toBeVisible();
 
   const clientResponse = await page.request.post("/api/v1/clients", {
-    data: { name: "Cliente Catálogo E2E" },
+    data: {
+      name: "Cliente Catálogo E2E",
+      // Issuing an invoice requires the client's tax id and address.
+      tax_id: "A87654321",
+      address: "Avenida del Cliente 2, 46001 Valencia",
+    },
   });
   expect(clientResponse.status(), await clientResponse.text()).toBe(201);
 
@@ -137,7 +142,7 @@ test("copia un concepto del catálogo en una línea sin acoplar el documento a e
   await page.getByLabel("Buscar cliente").fill("Cliente Catálogo E2E");
   await page
     .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente Catálogo E2E" });
+    .selectOption({ label: "Cliente Catálogo E2E · A87654321" });
   await page.getByRole("button", { name: "Añadir desde catálogo" }).click();
   await page.getByRole("button", { name: /Hora de consultoría E2E/ }).click();
   const catalogLine = page.getByRole("group", { name: "Línea 2" });

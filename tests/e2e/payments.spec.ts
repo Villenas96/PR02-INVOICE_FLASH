@@ -99,7 +99,12 @@ async function configureCompany(page: Page, email: string): Promise<void> {
 
 async function createClient(page: Page): Promise<string> {
   const response = await page.request.post("/api/v1/clients", {
-    data: { name: "Cliente Cobros, S.L." },
+    data: {
+      name: "Cliente Cobros, S.L.",
+      // Issuing an invoice requires the client's tax id and address.
+      tax_id: "A87654321",
+      address: "Avenida del Cliente 2, 46001 Valencia",
+    },
   });
   expect(response.status(), await response.text()).toBe(201);
   const body = (await response.json()) as { id: string };
