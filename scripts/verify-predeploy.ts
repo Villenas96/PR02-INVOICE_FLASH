@@ -37,12 +37,21 @@ const evidenceSchema = z.object({
     tlsConnectionVerifiedAt: timestampSchema,
     encryptionAtRestVerified: z.literal(true),
     encryptionEvidenceUrl: evidenceReferenceSchema,
-    ciBranchCleanup: z.object({
-      enabled: z.literal(true),
-      mode: z.enum(["expiration", "automated-deletion"]),
-      verifiedAt: timestampSchema,
-      evidenceUrl: evidenceReferenceSchema,
-    }),
+    // CI either cleans up the Neon branches it creates, or creates none
+    // (since the perf gate moved to a runner-local Postgres, CI uses no Neon).
+    ciBranchCleanup: z.discriminatedUnion("mode", [
+      z.object({
+        enabled: z.literal(true),
+        mode: z.enum(["expiration", "automated-deletion"]),
+        verifiedAt: timestampSchema,
+        evidenceUrl: evidenceReferenceSchema,
+      }),
+      z.object({
+        mode: z.literal("no-ci-branches"),
+        verifiedAt: timestampSchema,
+        evidenceUrl: evidenceReferenceSchema,
+      }),
+    ]),
   }),
   r2: z.object({
     bucketName: z.string().trim().min(1),

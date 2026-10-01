@@ -75,6 +75,9 @@ mide contra el Worker de staging tras desplegar (sección 3).
 - [ ] Revisadas las migraciones nuevas en `src/db/migrations/`: cada `.sql` tiene su
   `.down.sql` y es compatible con la versión del Worker actualmente desplegada
   (las migraciones se aplican antes del nuevo código).
+- [ ] Evento de prueba de Sentry enviado con la integración de la app
+  (`SENTRY_DSN=<dsn> pnpm sentry:test-event`); el script imprime `requestId`,
+  `testEventId` y `triggeredAt` para la evidencia.
 - [ ] Evidencia pre-deploy vigente (≤30 días) en un fichero fuera del repositorio y
   verificador en verde:
 

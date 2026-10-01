@@ -5,6 +5,10 @@ const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const NIF_PATTERN =
   /\b(?:[0-9]{8}[A-Z]|[XYZ][0-9]{7}[A-Z]|[ABCDEFGHJNPQRSUVW][0-9]{7}[0-9A-J])\b/gi;
 const TOKEN_PATTERN = /\b(?:bearer\s+)?[A-Za-z0-9_-]{24,}\b/gi;
+// request_id is a server-generated UUID with no user data; it must survive
+// redaction (TOKEN_PATTERN would match it) so logs and Sentry correlate.
+const REQUEST_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type SafeLogContext = Record<string, unknown>;
 
@@ -18,6 +22,14 @@ function redactString(value: string): string {
 export function redactForLogs(value: unknown, key?: string): unknown {
   if (key && SENSITIVE_KEY_PATTERN.test(key)) {
     return "[redacted]";
+  }
+
+  if (
+    key === "request_id" &&
+    typeof value === "string" &&
+    REQUEST_ID_PATTERN.test(value)
+  ) {
+    return value;
   }
 
   if (typeof value === "string") {

@@ -48,14 +48,18 @@ Campos correspondientes en la evidencia:
     "encryptionAtRestVerified": true,
     "encryptionEvidenceUrl": "https://<ticket-o-registro-privado>",
     "ciBranchCleanup": {
-      "enabled": true,
-      "mode": "expiration",
+      "mode": "no-ci-branches",
       "verifiedAt": "<ISO-8601 con zona>",
-      "evidenceUrl": "https://<ticket-o-ejecucion-de-CI>"
+      "evidenceUrl": "https://<registro-que-muestra-que-CI-no-usa-Neon>"
     }
   }
 }
 ```
+
+El CI actual no crea ramas en Neon (integración y rendimiento usan un Postgres
+local del runner), por eso el modo es `no-ci-branches`. Si un job vuelve a crear
+ramas, usa `"enabled": true` con `"mode": "expiration"` o
+`"automated-deletion"` y enlaza la ejecución que demuestra la limpieza.
 
 ## R2: bucket privado, HTTPS y cifrado
 
