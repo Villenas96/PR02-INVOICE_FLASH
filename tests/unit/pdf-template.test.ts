@@ -278,6 +278,25 @@ describe("proforma PDF notice", () => {
     expect(text).toContain("Documento sin validez fiscal.");
   });
 
+  it("renders a proforma for a client without tax id or address", async () => {
+    const input = createProformaInput();
+    const clientName = "Cliente sin datos fiscales";
+    const proforma = {
+      ...input,
+      client: { legalName: clientName, taxId: null, addressLines: [] },
+    };
+
+    const text = visibleText(
+      buildDocumentPdfLayout(proforma) as PdfLayout,
+    ).join("\n");
+    expect(text).toContain(clientName);
+    expect(text).not.toContain("NIF: null");
+    expect(text.split("\n").filter((line) => line.startsWith("NIF:"))).toEqual([
+      `NIF: ${input.issuer.taxId}`,
+    ]);
+    expect((await renderDocumentPdf(proforma)).byteLength).toBeGreaterThan(0);
+  });
+
   it("titles the pdf-lib document with the proforma prefix", async () => {
     const input = createProformaInput();
     const bytes = await renderDocumentPdf(input);

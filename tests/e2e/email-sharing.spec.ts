@@ -108,7 +108,12 @@ async function configureCompanyAndIssueInvoice(
   await page.request.get("/api/v1/series?doc_type=invoice");
 
   const clientResponse = await page.request.post("/api/v1/clients", {
-    data: { name: "Cliente Email" },
+    data: {
+      name: "Cliente Email",
+      // Issuing an invoice requires the client's tax id and address.
+      tax_id: "A87654321",
+      address: "Avenida del Cliente 2, 46001 Valencia",
+    },
   });
   const client = (await clientResponse.json()) as { id: string };
   const createResponse = await page.request.post("/api/v1/documents", {

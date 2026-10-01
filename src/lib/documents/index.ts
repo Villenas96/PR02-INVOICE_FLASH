@@ -80,9 +80,18 @@ export type DocumentLineValidation =
       fieldErrors: DocumentLineFieldErrors;
     };
 
+export interface ClientFiscalDetails {
+  taxId?: string | null;
+  address?: string | null;
+}
+
 export interface IssueValidationInput {
+  /** Invoices need the client's tax id and address; proformas do not. */
+  documentType?: "invoice" | "proforma";
   company: CompanyFiscalDetails;
   clientId?: string | null;
+  /** Fiscal data of the selected client, when one is selected. */
+  client?: ClientFiscalDetails | null;
   lines: readonly DocumentLineInput[];
 }
 
@@ -91,6 +100,8 @@ export type IssueValidationErrorCode =
   | "issuer_tax_id_required"
   | "issuer_address_required"
   | "client_required"
+  | "client_tax_id_required"
+  | "client_address_required"
   | "lines_required"
   | DocumentLineErrorCode;
 
@@ -197,6 +208,15 @@ export function validateIssue(input: IssueValidationInput): IssueValidation {
 
   if (!hasText(input.clientId)) {
     errors.push({ code: "client_required", field: "clientId" });
+  } else if (input.documentType === "invoice" && input.client) {
+    // A full Spanish invoice identifies the recipient by tax id and address
+    // (spec FR-005); proformas carry no fiscal validity and do not need them.
+    if (!hasText(input.client.taxId)) {
+      errors.push({ code: "client_tax_id_required", field: "client.taxId" });
+    }
+    if (!hasText(input.client.address)) {
+      errors.push({ code: "client_address_required", field: "client.address" });
+    }
   }
 
   if (input.lines.length === 0) {

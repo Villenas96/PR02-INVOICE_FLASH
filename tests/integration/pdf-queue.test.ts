@@ -303,6 +303,78 @@ describe("pdf queue re-delivery", () => {
     ).resolves.toHaveLength(1);
   });
 
+  it("marks a document whose snapshot can never render as failed, without retrying", async () => {
+    const { documentId } = await seedPendingDocument();
+    // An invoice issued before client fiscal data was required at issue.
+    await database
+      .update(documents)
+      .set({
+        clientSnapshot: { legalName: "Cliente PDF, S.L.", taxId: "B87654321" },
+      })
+      .where(eq(documents.id, documentId));
+    const delivery = createQueueDelivery(createPdfRenderMessage(documentId));
+    let renderCalls = 0;
+    const consumers: QueueConsumers = {
+      renderPdf: createPdfRenderHandler({
+        database,
+        bucket,
+        renderPdf: () => {
+          renderCalls += 1;
+          return Promise.resolve(renderedBytes);
+        },
+      }),
+      sendEmail: () => Promise.resolve(),
+    };
+
+    await processQueueBatch({ messages: [delivery.delivery] }, consumers);
+
+    expect(renderCalls).toBe(0);
+    expect(delivery.ackCount()).toBe(1);
+    expect(delivery.retryCount()).toBe(0);
+    expect(bucket.putCalls).toHaveLength(0);
+    await expect(
+      database
+        .select({ pdfStatus: documents.pdfStatus })
+        .from(documents)
+        .where(eq(documents.id, documentId)),
+    ).resolves.toEqual([{ pdfStatus: "failed" }]);
+    await expect(
+      database
+        .select({ event: documentEvents.event })
+        .from(documentEvents)
+        .where(eq(documentEvents.documentId, documentId)),
+    ).resolves.toEqual([{ event: "pdf_failed" }]);
+  });
+
+  it("renders a proforma whose client has no tax id or address", async () => {
+    const { documentId } = await seedPendingDocument();
+    await database
+      .update(documents)
+      .set({
+        documentType: "proforma",
+        clientSnapshot: { legalName: "Cliente sin datos fiscales" },
+      })
+      .where(eq(documents.id, documentId));
+    const delivery = createQueueDelivery(createPdfRenderMessage(documentId));
+
+    await processQueueBatch(
+      { messages: [delivery.delivery] },
+      {
+        renderPdf: createPdfRenderHandler({ database, bucket }),
+        sendEmail: () => Promise.resolve(),
+      },
+    );
+
+    expect(delivery.ackCount()).toBe(1);
+    expect(bucket.putCalls).toHaveLength(1);
+    await expect(
+      database
+        .select({ pdfStatus: documents.pdfStatus })
+        .from(documents)
+        .where(eq(documents.id, documentId)),
+    ).resolves.toEqual([{ pdfStatus: "ready" }]);
+  });
+
   it("persists one failed terminal state and does not rerender a later duplicate", async () => {
     const { documentId } = await seedPendingDocument();
     const message = createPdfRenderMessage(documentId);

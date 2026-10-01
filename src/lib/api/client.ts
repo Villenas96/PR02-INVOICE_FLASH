@@ -2,6 +2,7 @@ interface ErrorPayload {
   error?: {
     code?: string;
     message?: string;
+    fields?: Record<string, string>;
   };
 }
 
@@ -24,9 +25,17 @@ async function responseError(response: Response): Promise<ApiClientError> {
     payload = undefined;
   }
 
-  return new ApiClientError(
+  const message =
     payload?.error?.message ??
-      "No se ha podido completar la acción. Inténtalo de nuevo.",
+    "No se ha podido completar la acción. Inténtalo de nuevo.";
+  // Field messages say exactly what to fix (e.g. the client's address);
+  // without them the user only sees the generic summary.
+  const fieldMessages = [
+    ...new Set(Object.values(payload?.error?.fields ?? {})),
+  ];
+
+  return new ApiClientError(
+    [message, ...fieldMessages].join(" "),
     payload?.error?.code,
   );
 }

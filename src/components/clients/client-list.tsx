@@ -112,12 +112,19 @@ function CreateClientDialog({
                 <Label htmlFor="new-client-tax-id">NIF, NIE o CIF</Label>
                 <Input
                   id="new-client-tax-id"
+                  aria-describedby="new-client-tax-id-hint"
                   maxLength={9}
                   value={taxId}
                   onChange={(event) =>
                     setTaxId(event.target.value.toUpperCase())
                   }
                 />
+                <p
+                  id="new-client-tax-id-hint"
+                  className="text-xs text-muted-foreground"
+                >
+                  Necesario para emitir facturas.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-client-email">Correo</Label>
@@ -134,10 +141,17 @@ function CreateClientDialog({
               <Label htmlFor="new-client-address">Dirección fiscal</Label>
               <Input
                 id="new-client-address"
+                aria-describedby="new-client-address-hint"
                 maxLength={500}
                 value={address}
                 onChange={(event) => setAddress(event.target.value)}
               />
+              <p
+                id="new-client-address-hint"
+                className="text-xs text-muted-foreground"
+              >
+                Necesario para emitir facturas.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-client-phone">Teléfono</Label>

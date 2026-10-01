@@ -99,7 +99,7 @@ function failedPdfError(): ApiError {
   return new ApiError(
     "pdf_generation_failed",
     409,
-    "No se ha podido generar el PDF. Reintenta la generación desde el documento.",
+    "No se ha podido generar el PDF de este documento. Si faltan datos o son incorrectos, anúlalo y emite uno nuevo.",
   );
 }
 

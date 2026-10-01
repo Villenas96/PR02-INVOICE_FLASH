@@ -493,6 +493,46 @@ describe("documents HTTP contract", () => {
     ).toMatch(/entre|máximo|100/i);
   });
 
+  it("rejects issuing an invoice whose client lacks tax id or address, without side effects", async () => {
+    const clientId = await seedClient(owner, "Cliente sin dirección");
+    await database
+      .update(clients)
+      .set({ address: null })
+      .where(eq(clients.id, clientId));
+    const seriesId = await seedSeries(owner, "2026-", 1, true);
+    const documentId = await seedDocument({
+      tenant: owner,
+      clientId,
+      status: "draft",
+    });
+    await seedLine(documentId);
+
+    const response = await issueDocument(
+      authenticatedRequest(owner, `/api/v1/documents/${documentId}/issue`, {
+        method: "POST",
+      }),
+      routeContext(documentId),
+    );
+
+    expect(response.status).toBe(400);
+    const body = await jsonRecord(response);
+    const error = body.error as Record<string, unknown>;
+    expect(error.code).toBe("validation_error");
+    expect(JSON.stringify(error)).toContain("client.address");
+    expect(JSON.stringify(error)).not.toContain("client.taxId");
+
+    const [document] = await database
+      .select({ status: documents.status, number: documents.number })
+      .from(documents)
+      .where(eq(documents.id, documentId));
+    expect(document).toEqual({ status: "draft", number: null });
+    const [series] = await database
+      .select({ nextNumber: documentSeries.nextNumber })
+      .from(documentSeries)
+      .where(eq(documentSeries.id, seriesId));
+    expect(series?.nextNumber).toBe(1);
+  });
+
   it("issues a draft and then voids the immutable issued document", async () => {
     const clientId = await seedClient(owner, "Cliente emisión");
     await seedSeries(owner, "2026-", 1, true);

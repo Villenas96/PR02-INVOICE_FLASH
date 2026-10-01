@@ -5,6 +5,7 @@ import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
 import { payments } from "@/db/schema/payment";
 import { createUuidV7 } from "@/lib/ids";
+import { logSafe } from "@/lib/log";
 import { renderDocumentPdf } from "@/services/pdf/render";
 import type {
   DocumentPdfInput,
@@ -28,40 +29,58 @@ interface DocumentSnapshot extends Record<string, unknown> {
   email?: unknown;
 }
 
+/**
+ * The stored document can never produce a PDF (e.g. an incomplete snapshot).
+ * Retrying cannot fix it, so the document is marked failed instead of being
+ * left pending forever.
+ */
+export class PdfInputError extends Error {
+  override name = "PdfInputError";
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 function snapshotParty(
   value: unknown,
   role: "client" | "issuer",
+  documentType: DocumentPdfInput["documentType"],
 ): DocumentPdfParty {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`Falta el snapshot de ${role} para generar el PDF.`);
+    throw new PdfInputError(
+      `Falta el snapshot de ${role} para generar el PDF.`,
+    );
   }
 
   const snapshot = value as DocumentSnapshot;
+  const taxId = textOrNull(snapshot.taxId);
+  const address = textOrNull(snapshot.address);
   const legalName =
     typeof snapshot.legalName === "string"
       ? snapshot.legalName
       : typeof snapshot.name === "string"
         ? snapshot.name
         : null;
-  if (
-    !legalName ||
-    typeof snapshot.taxId !== "string" ||
-    typeof snapshot.address !== "string"
-  ) {
-    throw new Error(`El snapshot de ${role} está incompleto.`);
+  // The issuer always has full fiscal data (company readiness), and so does an
+  // invoice client (required at issue): never render a non-compliant invoice.
+  // Proforma (and receipt) clients may lack tax id or address.
+  const requiresFiscalData = role === "issuer" || documentType === "invoice";
+  if (!legalName || (requiresFiscalData && (!taxId || !address))) {
+    throw new PdfInputError(`El snapshot de ${role} está incompleto.`);
   }
 
   return {
     legalName,
-    taxId: snapshot.taxId,
-    addressLines: [snapshot.address],
+    taxId,
+    addressLines: address ? [address] : [],
     email: typeof snapshot.email === "string" ? snapshot.email : null,
   };
 }
 
 function taxBreakdown(value: unknown): DocumentPdfInput["taxBreakdown"] {
   if (!Array.isArray(value)) {
-    throw new Error("El desglose fiscal del documento no es válido.");
+    throw new PdfInputError("El desglose fiscal del documento no es válido.");
   }
 
   return value.map((entry) => {
@@ -76,7 +95,7 @@ function taxBreakdown(value: unknown): DocumentPdfInput["taxBreakdown"] {
       !Number.isSafeInteger(entry.baseCents) ||
       !Number.isSafeInteger(entry.taxCents)
     ) {
-      throw new Error("El desglose fiscal del documento no es válido.");
+      throw new PdfInputError("El desglose fiscal del documento no es válido.");
     }
     return {
       rate: entry.rate,
@@ -92,7 +111,7 @@ async function loadReceiptDetails(
   paymentId: string | null,
 ): Promise<DocumentPdfInput["receipt"]> {
   if (!invoiceId || !paymentId) {
-    throw new Error("Falta la factura o el pago de origen del recibo.");
+    throw new PdfInputError("Falta la factura o el pago de origen del recibo.");
   }
 
   const [sourceInvoice] = await database
@@ -107,7 +126,9 @@ async function loadReceiptDetails(
     .limit(1);
 
   if (!sourceInvoice?.fullNumber || !payment) {
-    throw new Error("No se han encontrado los datos de origen del recibo.");
+    throw new PdfInputError(
+      "No se han encontrado los datos de origen del recibo.",
+    );
   }
 
   return {
@@ -158,7 +179,7 @@ async function loadPdfInput(
     !document.fullNumber ||
     document.pdfStatus !== "pending"
   ) {
-    throw new Error("El documento no admite generación de PDF.");
+    throw new PdfInputError("El documento no admite generación de PDF.");
   }
 
   const lines =
@@ -193,8 +214,16 @@ async function loadPdfInput(
     issueDate: document.issueDate,
     dueDate: document.dueDate,
     currency: "EUR",
-    issuer: snapshotParty(document.issuerSnapshot, "issuer"),
-    client: snapshotParty(document.clientSnapshot, "client"),
+    issuer: snapshotParty(
+      document.issuerSnapshot,
+      "issuer",
+      document.documentType,
+    ),
+    client: snapshotParty(
+      document.clientSnapshot,
+      "client",
+      document.documentType,
+    ),
     lines,
     subtotalCents: document.subtotalCents,
     taxBreakdown: taxBreakdown(document.taxBreakdown),
@@ -257,7 +286,24 @@ async function processPdf(
   dependencies: PdfRenderHandlerDependencies,
 ): Promise<void> {
   const database = dependencies.database ?? createDatabase();
-  const input = await loadPdfInput(database, message.documentId);
+  let input: DocumentPdfInput | null;
+  try {
+    input = await loadPdfInput(database, message.documentId);
+  } catch (error) {
+    if (!(error instanceof PdfInputError)) {
+      throw error;
+    }
+    // Permanent: mark the document failed (the API then answers 409 and the
+    // UI stops polling) and acknowledge instead of retrying a lost cause.
+    await markPdfTerminal(
+      database,
+      message.documentId,
+      "failed",
+      dependencies.now?.() ?? new Date(),
+    );
+    logSafe("warn", "pdf.input_invalid", { error_type: error.name });
+    return;
+  }
   if (!input) {
     return;
   }

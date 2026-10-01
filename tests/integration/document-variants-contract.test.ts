@@ -161,6 +161,9 @@ async function seedClient(tenant: TenantFixture): Promise<string> {
     id,
     companyId: tenant.companyId,
     name: "Cliente Variantes",
+    // Converting to an invoice requires the client's tax id and address.
+    taxId: "A87654321",
+    address: "Calle del Cliente 2, Madrid",
   });
   return id;
 }
