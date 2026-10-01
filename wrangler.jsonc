@@ -8,7 +8,8 @@
     "binding": "ASSETS",
     "directory": ".open-next/assets"
   },
-  // Objetos privados: logotipos de empresa y PDFs cacheados (research.md R14)
+  // Objetos privados: logotipos de empresa y PDFs cacheados (research.md R14).
+  // Los buckets remotos usan la jurisdicción UE: los datos no salen de la UE.
   "r2_buckets": [
     {
       "binding": "STORAGE_BUCKET",
@@ -76,7 +77,8 @@
       "r2_buckets": [
         {
           "binding": "STORAGE_BUCKET",
-          "bucket_name": "invoice-flash-storage-staging"
+          "bucket_name": "invoice-flash-storage-staging",
+          "jurisdiction": "eu"
         }
       ],
       "queues": {
@@ -124,7 +126,8 @@
       "r2_buckets": [
         {
           "binding": "STORAGE_BUCKET",
-          "bucket_name": "invoice-flash-storage"
+          "bucket_name": "invoice-flash-storage",
+          "jurisdiction": "eu"
         }
       ],
       "queues": {
