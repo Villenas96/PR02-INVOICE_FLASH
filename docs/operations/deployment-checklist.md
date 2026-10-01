@@ -35,7 +35,8 @@ propios:
 
 - [ ] Bucket R2 del entorno creado, privado, sin dominio público ni `r2.dev` (ver
   storage-encryption.md):
-  `pnpm exec wrangler r2 bucket create <bucket>`.
+  `pnpm exec wrangler r2 bucket create <bucket> -J eu` (jurisdicción UE, obligatoria:
+  `wrangler.jsonc` declara `"jurisdiction": "eu"`).
 - [ ] Las cuatro colas del entorno creadas, DLQ incluidas:
   `pnpm exec wrangler queues create <cola>`.
 - [ ] Secretos cargados con `pnpm exec wrangler secret put <NOMBRE> --env $ENV`:
