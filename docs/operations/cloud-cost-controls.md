@@ -73,10 +73,9 @@ ser HTTPS y no contener secretos:
     "encryptionAtRestVerified": true,
     "encryptionEvidenceUrl": "https://<ticket-o-registro-privado>",
     "ciBranchCleanup": {
-      "enabled": true,
-      "mode": "expiration",
+      "mode": "no-ci-branches",
       "verifiedAt": "<ISO-8601 con zona>",
-      "evidenceUrl": "https://<ticket-o-ejecucion-de-CI>"
+      "evidenceUrl": "https://<registro-que-muestra-que-CI-no-usa-Neon>"
     }
   },
   "r2": {

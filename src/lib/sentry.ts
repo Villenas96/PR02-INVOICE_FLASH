@@ -38,11 +38,13 @@ function errorType(error: unknown): string {
 /**
  * Sends a minimal, already-redacted error event to Sentry without including an
  * exception message, request body, fiscal data or authentication credentials.
+ * Resolves to the event id when Sentry accepted the event, so operators can
+ * locate it (e.g. the pre-deploy test event); callers may ignore it.
  */
 export async function captureException(
   error: unknown,
   context: SafeLogContext = {},
-): Promise<void> {
+): Promise<string | undefined> {
   const dsn = parseSentryDsn(process.env.SENTRY_DSN);
   const safeContext = redactForLogs(context) as SafeLogContext;
 
@@ -51,7 +53,7 @@ export async function captureException(
       error_type: errorType(error),
       ...safeContext,
     });
-    return;
+    return undefined;
   }
 
   const endpoint = `${dsn.protocol}//${dsn.host}/api/${dsn.projectId}/store/?sentry_version=7&sentry_key=${dsn.publicKey}`;
@@ -77,11 +79,14 @@ export async function captureException(
         request_id: safeContext.request_id,
         status: response.status,
       });
+      return undefined;
     }
+    return payload.event_id;
   } catch {
     logSafe("warn", "sentry.delivery_failed", {
       request_id: safeContext.request_id,
       status: "network_error",
     });
+    return undefined;
   }
 }
