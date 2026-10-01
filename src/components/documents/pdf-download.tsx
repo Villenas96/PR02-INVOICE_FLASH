@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 
+import {
+  nextPdfPollDelayMs,
+  shouldKeepPollingPdf,
+} from "@/components/documents/pdf-polling";
 import { Button } from "@/components/ui/button";
 
 type PdfStatus = "failed" | "pending" | "ready";
-type DownloadState = "failed" | "processing" | "ready";
+type DownloadState = "failed" | "processing" | "ready" | "stalled";
 
 async function errorMessage(response: Response): Promise<string> {
   try {
@@ -48,6 +52,17 @@ export function PdfDownload({
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let currentObjectUrl: string | undefined;
+    let attempt = 0;
+    const startedAt = Date.now();
+
+    function scheduleNextPoll(retryAfterHeader: string | null) {
+      if (!shouldKeepPollingPdf(Date.now() - startedAt)) {
+        setState("stalled");
+        return;
+      }
+      timeout = setTimeout(poll, nextPdfPollDelayMs(attempt, retryAfterHeader));
+      attempt += 1;
+    }
 
     async function poll() {
       try {
@@ -58,13 +73,7 @@ export function PdfDownload({
           return;
         }
         if (response.status === 202) {
-          const retrySeconds = Number(response.headers.get("retry-after"));
-          timeout = setTimeout(
-            poll,
-            Number.isFinite(retrySeconds) && retrySeconds > 0
-              ? retrySeconds * 1000
-              : 2000,
-          );
+          scheduleNextPoll(response.headers.get("retry-after"));
           return;
         }
         if (response.ok) {
@@ -82,7 +91,7 @@ export function PdfDownload({
         setState("failed");
       } catch {
         if (!cancelled) {
-          timeout = setTimeout(poll, 2000);
+          scheduleNextPoll(null);
         }
       }
     }
@@ -106,11 +115,19 @@ export function PdfDownload({
       </output>
     );
   }
+  if (state === "stalled") {
+    return (
+      <output className="block max-w-md text-sm text-muted-foreground">
+        El PDF está tardando más de lo normal. Vuelve a cargar la página en unos
+        minutos para comprobarlo.
+      </output>
+    );
+  }
   if (state === "failed") {
     return (
       <p role="alert" className="max-w-md text-sm text-destructive">
         {error ??
-          "No se ha podido generar el PDF. Reintenta desde el documento."}
+          "No se ha podido generar el PDF de este documento. Si faltan datos o son incorrectos, anúlalo y emite uno nuevo."}
       </p>
     );
   }

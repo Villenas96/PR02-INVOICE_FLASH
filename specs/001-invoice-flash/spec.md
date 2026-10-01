@@ -121,6 +121,8 @@ Además de facturas, el usuario puede crear proformas (presupuestos/documentos p
 - **Cambio de año**: al comenzar un nuevo año, el usuario puede iniciar una nueva serie anual (p. ej. 2027-001) sin romper la correlatividad de la serie anterior.
 - **Cliente archivado o editado**: los documentos emitidos conservan una copia inmutable de los datos del cliente y del emisor tal como estaban en el momento de la emisión.
 - **Factura emitida por error**: una factura emitida no puede eliminarse; puede anularse, quedando registrada como anulada y excluida de los totales de cobro.
+- **Cliente sin datos fiscales**: al emitir una factura a un cliente sin NIF o sin dirección, el sistema indica qué dato falta y no la emite ni consume numeración ni cupo; una proforma a ese cliente sí puede emitirse y su PDF omite los datos ausentes. *(Aclarado el 2026-10-02 tras la prueba en staging.)*
+- **PDF que no puede generarse**: si los datos guardados de un documento emitido impiden generar su PDF, el documento queda con el PDF marcado como fallido y un mensaje accionable (anular y emitir uno nuevo), en lugar de quedar indefinidamente "generando".
 - **Importes y cantidades inválidos**: el sistema rechaza líneas con cantidad cero o negativa y precios negativos, explicando el motivo.
 - **Impuestos mixtos**: un documento con líneas a distintos tipos de impuesto muestra el desglose por cada tipo en pantalla y en el PDF.
 - **Pago superior al pendiente**: el sistema avisa si un pago registrado supera el importe pendiente de la factura y pide confirmación.
@@ -143,7 +145,7 @@ Además de facturas, el usuario puede crear proformas (presupuestos/documentos p
 
 **Clientes**
 
-- **FR-005**: El sistema MUST permitir crear, ver, editar, buscar y archivar clientes con: nombre o razón social, NIF, dirección, email opcional, teléfono opcional y notas opcionales.
+- **FR-005**: El sistema MUST permitir crear, ver, editar, buscar y archivar clientes con: nombre o razón social, NIF, dirección, email opcional, teléfono opcional y notas opcionales. NIF y dirección pueden guardarse vacíos, pero MUST estar informados para emitir una factura a ese cliente (no para una proforma); los formularios de cliente MUST indicarlo.
 - **FR-006**: El sistema MUST permitir buscar clientes por nombre y por NIF con resultados inmediatos.
 - **FR-007**: La ficha de cliente MUST mostrar su historial de documentos y el importe total pendiente de cobro de ese cliente.
 - **FR-008**: Archivar un cliente MUST ocultarlo de las listas de selección sin afectar a sus documentos históricos, y MUST poder revertirse.

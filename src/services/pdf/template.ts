@@ -39,7 +39,9 @@ export interface DocumentPdfLine {
 
 export interface DocumentPdfParty {
   legalName: string;
-  taxId: string;
+  /** Always present for the issuer and for invoice clients; a proforma
+   * client may lack it (proformas carry no fiscal validity). */
+  taxId: string | null;
   addressLines: string[];
   email?: string | null;
 }
@@ -139,7 +141,7 @@ function formatMoney(value: number): string {
 function partyDetails(party: DocumentPdfParty): string {
   return [
     party.legalName,
-    `NIF: ${party.taxId}`,
+    ...(party.taxId ? [`NIF: ${party.taxId}`] : []),
     ...party.addressLines,
     ...(party.email ? [party.email] : []),
   ].join("\n");

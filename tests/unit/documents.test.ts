@@ -84,6 +84,48 @@ describe("document issue readiness", () => {
     });
   });
 
+  it("requires the client tax id and address to issue an invoice", () => {
+    expect(
+      validateIssue({
+        documentType: "invoice",
+        company: readyCompany,
+        clientId: "client-1",
+        client: { taxId: " ", address: null },
+        lines: [validLine],
+      }),
+    ).toEqual({
+      valid: false,
+      errors: [
+        { code: "client_tax_id_required", field: "client.taxId" },
+        { code: "client_address_required", field: "client.address" },
+      ],
+    });
+  });
+
+  it("does not require client fiscal data to issue a proforma", () => {
+    expect(
+      validateIssue({
+        documentType: "proforma",
+        company: readyCompany,
+        clientId: "client-1",
+        client: { taxId: null, address: null },
+        lines: [validLine],
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  it("accepts an invoice whose client has tax id and address", () => {
+    expect(
+      validateIssue({
+        documentType: "invoice",
+        company: readyCompany,
+        clientId: "client-1",
+        client: { taxId: "B12345678", address: "Calle Mayor 1, Madrid" },
+        lines: [validLine],
+      }),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
   it("accepts an issue-ready invoice", () => {
     expect(
       validateIssue({

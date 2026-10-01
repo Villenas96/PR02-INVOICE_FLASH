@@ -265,10 +265,22 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 - [X] T125 Add a final API-invariants matrix proving every collection uses opaque cursor pagination default 25/max 100 and every private endpoint returns 404 for foreign resources in `tests/integration/api-invariants.test.ts`
 - [X] T126 Run the all-page axe, responsive and delayed-network <100 ms feedback sweep and fix violations in `tests/e2e/accessibility-feedback.spec.ts` and `src/components/`
 - [X] T127 Implement reproducible staging CRUD p95 <300 ms and documented dataset/load profiles in `tests/performance/api-crud.test.ts` and `tests/performance/fixtures/`
-- [ ] T128 Add the controlled staging performance job and threshold reports to `.github/workflows/performance.yml`
+- [X] T128 Add the controlled staging performance job and threshold reports to `.github/workflows/performance.yml`
 - [ ] T129 Reverify OpenNext deploy, migrations, queues, R2, pre-deploy evidence and post-deploy mobile/Sentry smoke flow for production in `scripts/verify-postdeploy.ts` and `docs/operations/deployment-checklist.md`
 - [ ] T130 Run the moderated V13 protocol with at least 10 first-time target users, anonymizing completion time, autonomous success and abandonment data in `specs/001-invoice-flash/usability-report.md`
 - [ ] T131 Run quickstart V1–V13 and all `lint`, `typecheck`, unit, integration, E2E, performance and audit gates, recording usability results, approved PR reference, required check names and non-sensitive result in `specs/001-invoice-flash/validation-report.md`
+
+---
+
+## Phase 10: Staging Fixes (post-deploy findings)
+
+**Purpose**: defectos encontrados al probar el primer despliegue de staging (2026-10-02); aclaración de FR-005 aprobada por el titular.
+
+- [X] T132 Require client tax id and address to issue invoices (not proformas) with actionable, side-effect-free validation in `src/lib/documents/index.ts`, `src/services/document-issuance.ts`, `tests/unit/documents.test.ts` and `tests/integration/documents-contract.test.ts`
+- [X] T133 Mark documents whose stored data can never render as `pdf_status=failed` without retries, require client fiscal data only for invoice PDFs and omit absent proforma client data in `src/workers/handlers/pdf-render.ts`, `src/services/pdf/template.ts`, `tests/integration/pdf-queue.test.ts` and `tests/unit/pdf-template.test.ts`
+- [X] T134 Bound PDF download polling with exponential backoff and a time budget, and replace the non-actionable failed-PDF message, in `src/components/documents/pdf-polling.ts`, `src/components/documents/pdf-download.tsx`, `src/app/api/v1/documents/[id]/pdf/route.ts` and `tests/unit/pdf-polling.test.ts`
+- [X] T135 Surface API field-level validation messages in the client and mark client NIF/address as required for invoicing in `src/lib/api/client.ts`, `src/components/clients/`, `src/components/documents/editor/client-picker.tsx` and `tests/unit/api-client.test.ts`
+- [ ] T136 Resolve Better Auth rate-limit client IP from `cf-connecting-ip`, keep queue Sentry reports alive with `waitUntil` and stop redacting the `message_type` log key, in `src/lib/auth.ts`, `src/worker-entry.ts`, `src/workers/queue-consumer.ts` and `src/lib/log.ts`
 
 ---
 

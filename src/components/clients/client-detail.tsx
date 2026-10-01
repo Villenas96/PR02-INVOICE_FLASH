@@ -139,12 +139,19 @@ function EditClientDialog({
                 <Label htmlFor="edit-client-tax-id">NIF, NIE o CIF</Label>
                 <Input
                   id="edit-client-tax-id"
+                  aria-describedby="edit-client-tax-id-hint"
                   maxLength={9}
                   value={taxId}
                   onChange={(event) =>
                     setTaxId(event.target.value.toUpperCase())
                   }
                 />
+                <p
+                  id="edit-client-tax-id-hint"
+                  className="text-xs text-muted-foreground"
+                >
+                  Necesario para emitir facturas.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-client-email">Correo</Label>
@@ -161,10 +168,17 @@ function EditClientDialog({
               <Label htmlFor="edit-client-address">Dirección fiscal</Label>
               <Input
                 id="edit-client-address"
+                aria-describedby="edit-client-address-hint"
                 maxLength={500}
                 value={address}
                 onChange={(event) => setAddress(event.target.value)}
               />
+              <p
+                id="edit-client-address-hint"
+                className="text-xs text-muted-foreground"
+              >
+                Necesario para emitir facturas.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-client-phone">Teléfono</Label>

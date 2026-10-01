@@ -342,8 +342,10 @@ function validatePreparation(preparation: IssuePreparation): void {
   }
 
   const validation = validateIssue({
+    documentType: preparation.document.documentType,
     company: preparation.company,
     clientId: preparation.document.clientId,
+    client: preparation.client,
     lines: preparation.lines.map((line) => ({
       description: line.description,
       quantity: Number(line.quantity),
@@ -355,6 +357,10 @@ function validatePreparation(preparation: IssuePreparation): void {
   if (!validation.valid) {
     const messageByCode = {
       client_required: "Selecciona un cliente activo de tu empresa.",
+      client_tax_id_required:
+        "Añade el NIF del cliente para poder emitir la factura.",
+      client_address_required:
+        "Añade la dirección del cliente para poder emitir la factura.",
       description_required: "La descripción no puede estar vacía.",
       discount_pct_out_of_range: "El descuento debe estar entre 0 y 100.",
       issuer_address_required: "Indica la dirección fiscal de la empresa.",
@@ -368,7 +374,7 @@ function validatePreparation(preparation: IssuePreparation): void {
         "El precio debe ser un entero no negativo en céntimos.",
     } as const;
     throw issueValidationError(
-      "Revisa el cliente y las líneas antes de emitir.",
+      "Revisa los datos del cliente y las líneas antes de emitir.",
       Object.fromEntries(
         validation.errors.map((error) => [
           error.field,

@@ -86,10 +86,17 @@ function InlineClientForm({
             <Label htmlFor="inline-client-tax-id">NIF, NIE o CIF</Label>
             <Input
               id="inline-client-tax-id"
+              aria-describedby="inline-client-tax-id-hint"
               maxLength={9}
               value={taxId}
               onChange={(event) => setTaxId(event.target.value.toUpperCase())}
             />
+            <p
+              id="inline-client-tax-id-hint"
+              className="text-xs text-muted-foreground"
+            >
+              Necesario para emitir facturas.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="inline-client-email">Correo</Label>
@@ -106,10 +113,17 @@ function InlineClientForm({
           <Label htmlFor="inline-client-address">Dirección fiscal</Label>
           <Input
             id="inline-client-address"
+            aria-describedby="inline-client-address-hint"
             maxLength={500}
             value={address}
             onChange={(event) => setAddress(event.target.value)}
           />
+          <p
+            id="inline-client-address-hint"
+            className="text-xs text-muted-foreground"
+          >
+            Necesario para emitir facturas.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="inline-client-phone">Teléfono</Label>
