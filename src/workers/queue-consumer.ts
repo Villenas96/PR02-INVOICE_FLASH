@@ -47,6 +47,11 @@ export async function processQueueBatch(
   consumers: QueueConsumers,
   now = new Date(),
 ): Promise<void> {
+  // Sentry reports are awaited before the batch resolves: the queue handler
+  // returns when this promise settles, and Workers may cancel any fetch
+  // still in flight after that.
+  const reports: Promise<unknown>[] = [];
+
   await Promise.all(
     batch.messages.map(async (delivery) => {
       let message: QueueMessage;
@@ -96,10 +101,12 @@ export async function processQueueBatch(
           // Only report once retries are exhausted (DLQ) or the message can
           // no longer recover (expired auth email); transient attempts still
           // within backoff are expected and would otherwise be noisy.
-          void captureException(error, {
-            message_type: message.type,
-            attempts: delivery.attempts,
-          });
+          reports.push(
+            captureException(error, {
+              message_type: message.type,
+              attempts: delivery.attempts,
+            }),
+          );
         }
 
         if (emailRetryWindowElapsed) {
@@ -115,4 +122,6 @@ export async function processQueueBatch(
       }
     }),
   );
+
+  await Promise.allSettled(reports);
 }

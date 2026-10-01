@@ -1,5 +1,7 @@
+// `message` covers free-text bodies; `message_type` is only the queue
+// message kind (e.g. "pdf.render") and is safe to log.
 const SENSITIVE_KEY_PATTERN =
-  /(?:address|amount|email|iban|message|nif|notes|recipient|tax|token|url)/i;
+  /(?:address|amount|email|iban|message(?!_type)|nif|notes|recipient|tax|token|url)/i;
 
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const NIF_PATTERN =

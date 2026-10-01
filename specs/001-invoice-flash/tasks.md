@@ -280,7 +280,8 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 - [X] T133 Mark documents whose stored data can never render as `pdf_status=failed` without retries, require client fiscal data only for invoice PDFs and omit absent proforma client data in `src/workers/handlers/pdf-render.ts`, `src/services/pdf/template.ts`, `tests/integration/pdf-queue.test.ts` and `tests/unit/pdf-template.test.ts`
 - [X] T134 Bound PDF download polling with exponential backoff and a time budget, and replace the non-actionable failed-PDF message, in `src/components/documents/pdf-polling.ts`, `src/components/documents/pdf-download.tsx`, `src/app/api/v1/documents/[id]/pdf/route.ts` and `tests/unit/pdf-polling.test.ts`
 - [X] T135 Surface API field-level validation messages in the client and mark client NIF/address as required for invoicing in `src/lib/api/client.ts`, `src/components/clients/`, `src/components/documents/editor/client-picker.tsx` and `tests/unit/api-client.test.ts`
-- [ ] T136 Resolve Better Auth rate-limit client IP from `cf-connecting-ip`, keep queue Sentry reports alive with `waitUntil` and stop redacting the `message_type` log key, in `src/lib/auth.ts`, `src/worker-entry.ts`, `src/workers/queue-consumer.ts` and `src/lib/log.ts`
+- [X] T136 Resolve Better Auth rate-limit client IP from `cf-connecting-ip`, keep Sentry reports alive (queue batches await them; HTTP paths use `ctx.waitUntil`) and stop redacting the `message_type` log key, in `src/lib/auth.ts`, `src/lib/background.ts`, `src/lib/api/errors.ts`, `src/proxies/middleware.ts`, `src/workers/queue-consumer.ts` and `src/lib/log.ts`
+- [ ] T137 Move Better Auth rate-limit counters from per-isolate memory to shared storage (`rateLimit.storage: "database"` with its migration) so limits hold across Worker isolates, in `src/lib/auth.ts`, `src/db/schema/auth.ts` and `src/db/migrations/`
 
 ---
 

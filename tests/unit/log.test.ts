@@ -34,6 +34,12 @@ describe("redactForLogs", () => {
     });
   });
 
+  it("keeps message_type (a queue message kind) while redacting message bodies", () => {
+    expect(
+      redactForLogs({ message_type: "pdf.render", message: "Hola Ana" }),
+    ).toEqual({ message_type: "pdf.render", message: "[redacted]" });
+  });
+
   it("redacts every value under a sensitive key", () => {
     expect(
       redactForLogs({ amount_cents: 1250, recipient: "x", tax_id: "y" }),
