@@ -50,7 +50,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@biomejs/biome": "2.2.0",
-    "@opennextjs/cloudflare": "^1.20.6",
+    "@opennextjs/cloudflare": "^1.20.7",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20.19.43",
@@ -65,7 +65,7 @@
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
-    "wrangler": "^4.142.0"
+    "wrangler": "^4.146.0"
   },
   "pnpm": {
     "overrides": {
