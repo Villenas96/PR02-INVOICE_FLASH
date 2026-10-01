@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { type NextRequest, NextResponse } from "next/server";
-
+import { runInBackground } from "@/lib/background";
 import { logSafe } from "@/lib/log";
 import { captureException } from "@/lib/sentry";
 
@@ -153,10 +153,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       request_id: requestId,
       error_type: error instanceof Error ? error.name : "UnknownError",
     });
-    void captureException(error, {
-      request_id: requestId,
-      source: "middleware",
-    });
+    runInBackground(
+      captureException(error, {
+        request_id: requestId,
+        source: "middleware",
+      }),
+    );
     return withRequestId(
       NextResponse.json(
         {

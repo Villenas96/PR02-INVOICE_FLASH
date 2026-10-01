@@ -1,3 +1,4 @@
+import { runInBackground } from "@/lib/background";
 import { captureException } from "@/lib/sentry";
 
 export type ApiErrorCode =
@@ -65,10 +66,12 @@ export function apiErrorResponse(error: unknown, requestId?: string): Response {
   const apiError = toApiError(error);
 
   if (apiError.status >= 500) {
-    void captureException(apiError, {
-      request_id: requestId,
-      error_code: apiError.code,
-    });
+    runInBackground(
+      captureException(apiError, {
+        request_id: requestId,
+        error_code: apiError.code,
+      }),
+    );
   }
 
   return Response.json(

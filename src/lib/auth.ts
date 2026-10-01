@@ -85,6 +85,14 @@ export const auth = betterAuth({
     database: {
       generateId: () => createUuidV7(),
     },
+    // On Cloudflare Workers the client IP comes from `cf-connecting-ip`, set
+    // by Cloudflare's edge (clients cannot forge it). Without it Better Auth
+    // falls back to one shared rate-limit bucket per path, so a single
+    // client could exhaust sign-in/sign-up limits for everyone. Locally
+    // (dev/test) Better Auth falls back to 127.0.0.1.
+    ipAddress: {
+      ipAddressHeaders: ["cf-connecting-ip"],
+    },
   },
   emailAndPassword: {
     enabled: true,
