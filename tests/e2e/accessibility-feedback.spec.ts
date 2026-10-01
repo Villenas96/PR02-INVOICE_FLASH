@@ -155,7 +155,12 @@ test("login, documents, settings and client detail pages are accessible, respons
   await expectResponsive(page);
 
   const clientResponse = await page.request.post("/api/v1/clients", {
-    data: { name: "Cliente Accesibilidad, S.L." },
+    data: {
+      name: "Cliente Accesibilidad, S.L.",
+      // Issuing an invoice requires the client's tax id and address.
+      tax_id: "A87654321",
+      address: "Avenida del Cliente 2, 46001 Valencia",
+    },
   });
   expect(clientResponse.status(), await clientResponse.text()).toBe(201);
   const client = (await clientResponse.json()) as { id: string };
