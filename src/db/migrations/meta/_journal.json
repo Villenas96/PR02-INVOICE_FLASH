@@ -22,6 +22,13 @@
       "when": 1785440850165,
       "tag": "0002_hard_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791307420691,
+      "tag": "0003_chief_revanche",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,7 @@
 import {
+  bigint,
   boolean,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -68,4 +70,14 @@ export const verifications = pgTable("verification", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }),
+});
+
+// Shared Better Auth rate-limit counters (`rateLimit.storage: "database"`), so
+// limits hold across Worker isolates. `key` is unique: Better Auth relies on
+// that to resolve the insert race between concurrent first requests.
+export const rateLimits = pgTable("rate_limit", {
+  id: uuid("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
