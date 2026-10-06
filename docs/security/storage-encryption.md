@@ -25,8 +25,13 @@ incluyen en el JSON, en capturas compartidas ni en logs del verificador.
    WHERE pid = pg_backend_pid();
    ```
 
-   `ssl` debe ser `true`. Conserva en el sistema de cambios una salida redactada que
-   no incluya host, usuario, base de datos ni credenciales.
+   Neon termina el TLS en su proxy y el cómputo Postgres ve la conexión interna, así
+   que esta consulta devuelve `ssl = false` (también con el host directo, sin
+   `-pooler`). No es una conexión sin cifrar. La prueba válida es la del cliente:
+   `psql "$DATABASE_URL" -c '\conninfo'` debe mostrar `SSL Connection | true`
+   (con `sslmode=require` la conexión falla si el TLS no se negocia). Conserva en el
+   sistema de cambios una salida redactada que no incluya host, usuario, base de
+   datos ni credenciales.
 4. Registra la revisión de la política vigente de cifrado en reposo de Neon. Neon
    documenta TLS obligatorio y AES-256 en reposo en su
    [resumen de seguridad](https://neon.com/docs/security/security-overview).
