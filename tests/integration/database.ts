@@ -19,6 +19,7 @@ const BUSINESS_TABLES = [
   "session",
   "account",
   "verification",
+  "rate_limit",
   "user",
 ] as const;
 

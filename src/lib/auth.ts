@@ -17,6 +17,7 @@ const authSchema = {
   session: schema.sessions,
   account: schema.accounts,
   verification: schema.verifications,
+  rateLimit: schema.rateLimits,
 };
 
 export type AuthEmailPurpose = "reset_password" | "verify_email";
@@ -77,7 +78,10 @@ export const auth = betterAuth({
   // Better Auth activa por defecto su límite de 3 registros/10s en cualquier
   // build de producción (incluida la vista previa de Playwright, que ejecuta
   // el build real). El flag solo lo desactiva en esa vista previa E2E.
+  // Los contadores van a Postgres: la memoria por isolate no limita entre
+  // instancias de Worker.
   rateLimit: {
+    storage: "database",
     enabled:
       process.env.E2E_DISABLE_AUTH_RATE_LIMIT === "true" ? false : undefined,
   },
