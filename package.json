@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.6",
-    "@neondatabase/serverless": "^1.1.0",
+    "@neondatabase/serverless": "^1.2.0",
     "better-auth": "^1.7.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
