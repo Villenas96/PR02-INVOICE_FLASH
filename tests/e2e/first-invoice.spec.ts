@@ -17,6 +17,12 @@ function e2eDatabaseUrl(): string {
 }
 
 async function expectAccessible(page: Page): Promise<void> {
+  // Buttons animate their colors (`transition-all`); without this axe can
+  // judge contrast on a mid-transition frame and report a false violation.
+  await page.addStyleTag({
+    content:
+      "*, *::before, *::after { transition: none !important; animation: none !important; }",
+  });
   const result = await new AxeBuilder({ page }).analyze();
   expect(result.violations).toEqual([]);
 }
