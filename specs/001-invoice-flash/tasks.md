@@ -259,8 +259,8 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 
 - [X] T120 [P] Create deterministic demo data for `free=5|pro=100` plan usage boundaries across invoices, proformas and receipts, clients, catalog, document/payment states and queues in `src/db/seed.ts`
 - [X] T121 [P] Run the final Sentry/request-id and `logSafe` sweep across every implemented handler in `src/proxies/middleware.ts`, `src/lib/sentry.ts` and `src/lib/log.ts`
-- [ ] T122 [P] Reverify Neon TLS/encryption, R2 private encryption/HTTPS and CI branch expiry before production release in `docs/security/storage-encryption.md`
-- [ ] T123 [P] Reverify the real Cloudflare budget alert plus Neon Free monitoring/paid Spending Limit gate and recipients before production release in `docs/operations/cloud-cost-controls.md`
+- [X] T122 [P] Reverify Neon TLS/encryption, R2 private encryption/HTTPS and CI branch expiry before production release in `docs/security/storage-encryption.md`
+- [X] T123 [P] Reverify the real Cloudflare budget alert plus Neon Free monitoring/paid Spending Limit gate and recipients before production release in `docs/operations/cloud-cost-controls.md`
 - [X] T124 Add a non-decreasing business-module coverage gate to `.github/workflows/ci.yml` and `vitest.config.ts`
 - [X] T125 Add a final API-invariants matrix proving every collection uses opaque cursor pagination default 25/max 100 and every private endpoint returns 404 for foreign resources in `tests/integration/api-invariants.test.ts`
 - [X] T126 Run the all-page axe, responsive and delayed-network <100 ms feedback sweep and fix violations in `tests/e2e/accessibility-feedback.spec.ts` and `src/components/`
