@@ -123,6 +123,9 @@
     },
     "production": {
       "name": "invoice-flash",
+      "routes": [
+        { "pattern": "factum.sinergia-hub.com", "custom_domain": true }
+      ],
       "r2_buckets": [
         {
           "binding": "STORAGE_BUCKET",

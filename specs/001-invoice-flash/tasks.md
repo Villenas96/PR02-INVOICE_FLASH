@@ -266,7 +266,7 @@ Proyecto único Next.js full-stack en la raíz: `src/app/` (App Router + API), `
 - [X] T126 Run the all-page axe, responsive and delayed-network <100 ms feedback sweep and fix violations in `tests/e2e/accessibility-feedback.spec.ts` and `src/components/`
 - [X] T127 Implement reproducible staging CRUD p95 <300 ms and documented dataset/load profiles in `tests/performance/api-crud.test.ts` and `tests/performance/fixtures/`
 - [X] T128 Add the controlled staging performance job and threshold reports to `.github/workflows/performance.yml`
-- [ ] T129 Reverify OpenNext deploy, migrations, queues, R2, pre-deploy evidence and post-deploy mobile/Sentry smoke flow for production in `scripts/verify-postdeploy.ts` and `docs/operations/deployment-checklist.md`
+- [X] T129 Reverify OpenNext deploy, migrations, queues, R2, pre-deploy evidence and post-deploy mobile/Sentry smoke flow for production in `scripts/verify-postdeploy.ts` and `docs/operations/deployment-checklist.md`
 - [ ] T130 Run the moderated V13 protocol with at least 10 first-time target users, anonymizing completion time, autonomous success and abandonment data in `specs/001-invoice-flash/usability-report.md`
 - [ ] T131 Run quickstart V1–V13 and all `lint`, `typecheck`, unit, integration, E2E, performance and audit gates, recording usability results, approved PR reference, required check names and non-sensitive result in `specs/001-invoice-flash/validation-report.md`
 
