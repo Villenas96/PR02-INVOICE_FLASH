@@ -46,7 +46,7 @@ ejecución manual. No se ha registrado ningún resultado manual.
 | V10 Reentrega de colas | integración | … |
 | V11 Seguridad y costes | `verify:predeploy` | ver §3 |
 | V12 Capacidades y plan | integración | … |
-| V13 Prueba de usabilidad | — | **Pendiente (T130)**: `usability-report.md` |
+| V13 Prueba de usabilidad | — | Cumple: 10 sesiones, mediana 05:37,5 y 10 de 10 autónomas (ver `usability-report.md`) |
 
 ## 3. Despliegue y controles de infraestructura
 
@@ -72,7 +72,7 @@ ejecución manual. No se ha registrado ningún resultado manual.
 
 ## 5. Pendiente para cerrar T131
 
-- [ ] T130: prueba de usabilidad con ≥ 10 participantes y `usability-report.md`.
+- [X] T130: prueba de usabilidad (`usability-report.md`).
 - [ ] Escenarios manuales V2–V6, V9, V10 y V12 con resultado registrado.
 - [ ] Corregir o aceptar por escrito la carrera «Generando PDF…» de la prueba E2E.
 - [ ] Referencia del PR final.
