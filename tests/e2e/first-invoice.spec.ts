@@ -241,8 +241,10 @@ async function saveIssueAndDownload(page: Page): Promise<void> {
   await expect(page.getByText("Emitida", { exact: true })).toBeVisible();
   await page.unroute("**/api/v1/documents/*/issue");
 
-  await expect(page.getByText("Generando PDF…")).toBeVisible();
   const downloadLink = page.getByRole("link", { name: "Descargar PDF" });
+  // The PDF job can finish before this check runs; the UI must show either
+  // the progress state or the final download link, never an empty state.
+  await expect(page.getByText("Generando PDF…").or(downloadLink)).toBeVisible();
   await expect(downloadLink).toBeVisible({ timeout: 15_000 });
   const downloadPromise = page.waitForEvent("download");
   await downloadLink.click();
