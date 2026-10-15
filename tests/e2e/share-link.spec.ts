@@ -153,7 +153,12 @@ test("un enlace público se ve al primer intento sin cuenta, se puede desactivar
   const documentId = await configureCompanyAndIssueInvoice(page, email);
 
   await page.goto(`/documents/${documentId}`);
-  await expect(page.getByText("Generando PDF…")).toBeVisible();
+  // The PDF job can finish before this check runs; accept progress or link.
+  await expect(
+    page
+      .getByText("Generando PDF…")
+      .or(page.getByRole("link", { name: "Descargar PDF" })),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Generar enlace público" }).click();
   const shareUrlInput = page.locator("input[readonly]");
