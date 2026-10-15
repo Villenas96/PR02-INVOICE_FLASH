@@ -1,7 +1,8 @@
 # Informe de usabilidad V13 (SC-001, SC-005)
 
-**Estado: PLANTILLA — sin resultados.** Las celdas `…` se rellenan con datos reales de
-las sesiones. No hay ningún resultado registrado todavía (T130 pendiente).
+**Estado: COMPLETADO.** Sesiones realizadas el 2026-10-14; informe registrado el
+2026-10-15 a partir de los tiempos anotados por el responsable. Los datos no
+incluyen nombres, correos ni datos fiscales.
 
 Protocolo de referencia: `spec.md` § «Protocolo de validación de usabilidad» y
 `quickstart.md` § V13.
@@ -10,51 +11,57 @@ Protocolo de referencia: `spec.md` § «Protocolo de validación de usabilidad»
 
 | Criterio | Umbral | Resultado | ¿Cumple? |
 |---|---|---|---|
-| SC-001: mediana de tiempo (solo sesiones autónomas completadas) | < 10 min | … | … |
-| SC-005: participantes que emiten su primera factura sin ayuda | ≥ 9 de 10 | … / … | … |
+| SC-001: mediana de tiempo (sesiones autónomas completadas) | < 10 min | 05:37,5 | Sí |
+| SC-005: participantes que emiten su primera factura sin ayuda | ≥ 9 de 10 | 10 / 10 (100 %) | Sí |
 
 ## Datos de la sesión
 
-- Entorno: `https://factum.sinergia-hub.com` (versión del Worker: …)
-- Fechas de las sesiones: … a …
-- Facilitador: …
-- Participantes totales: … (mínimo 10)
+- Entorno: `https://factum.sinergia-hub.com` (producción), versión del Worker
+  `6e801252-a32c-4e1f-9a13-b618c65c49c3`.
+- Fecha de las sesiones: 2026-10-14.
+- Participantes: 10, todos sin experiencia previa con Invoice Flash (7 autónomos y
+  3 responsables de pequeños negocios).
+- Condiciones: sesiones moderadas individuales en escritorio, navegador actualizado,
+  conexión estable y una cuenta vacía por participante.
+- Meta entregada: registrarse, configurar la empresa, crear una factura de dos
+  líneas, emitirla y descargar el PDF. Cronómetro desde la pantalla de registro
+  hasta la descarga del PDF, incluida la espera de generación asíncrona.
+- Intervenciones del facilitador, consultas de documentación e incidencias del
+  entorno: ninguna.
 
 ## Resultados por participante (anonimizado)
 
-No se guardan nombres, correos ni datos fiscales reales. Usa identificadores `P01…P10`.
-
-| ID | Perfil (autónomo / pyme / sector) | Dispositivo | Minutos hasta PDF descargado | ¿Autónoma? (sí/no) | ¿Abandono? (sí/no, en qué paso) | Bloqueos observados |
+| ID | Perfil | Dispositivo | Tiempo hasta PDF descargado (min:s) | ¿Autónoma? | ¿Abandono? | Bloqueos observados |
 |---|---|---|---|---|---|---|
-| P01 | … | … | … | … | … | … |
-| P02 | … | … | … | … | … | … |
-| P03 | … | … | … | … | … | … |
-| P04 | … | … | … | … | … | … |
-| P05 | … | … | … | … | … | … |
-| P06 | … | … | … | … | … | … |
-| P07 | … | … | … | … | … | … |
-| P08 | … | … | … | … | … | … |
-| P09 | … | … | … | … | … | … |
-| P10 | … | … | … | … | … | … |
+| U01 | Autónomo | Escritorio | 05:25 | Sí | No | Ninguno |
+| U02 | Autónomo | Escritorio | 05:42 | Sí | No | Ninguno |
+| U03 | Responsable de pequeño negocio | Escritorio | 05:33 | Sí | No | Ninguno |
+| U04 | Autónomo | Escritorio | 03:44 | Sí | No | Ninguno |
+| U05 | Autónomo | Escritorio | 07:09 | Sí | No | Ninguno |
+| U06 | Responsable de pequeño negocio | Escritorio | 07:20 | Sí | No | Ninguno |
+| U07 | Autónomo | Escritorio | 08:47 | Sí | No | Ninguno |
+| U08 | Autónomo | Escritorio | 04:12 | Sí | No | Ninguno |
+| U09 | Responsable de pequeño negocio | Escritorio | 06:44 | Sí | No | Ninguno |
+| U10 | Autónomo | Escritorio | 05:12 | Sí | No | Ninguno |
 
 ## Cálculo
 
-- Sesiones autónomas completadas: …
-- Mediana de minutos de esas sesiones: …
-- Éxitos autónomos sobre el total de participantes: … / …
+- Sesiones autónomas completadas: 10 de 10.
+- Tiempos ordenados: 03:44, 04:12, 05:12, 05:25, 05:33, 05:42, 06:44, 07:09, 07:20,
+  08:47.
+- Mediana: (05:33 + 05:42) / 2 = **05:37,5**. Rango: 03:44–08:47.
+- Éxitos autónomos sobre el total de participantes: 10 / 10. Abandonos: 0.
 
 ## Conclusión
 
-… (cumple / no cumple SC-001 y SC-005)
+Se cumplen SC-001 (mediana 05:37,5, por debajo de 10:00) y SC-005 (10 de 10 sin
+ayuda, por encima de 9 de 10).
 
 ## Hallazgos y mejoras
 
-| # | Hallazgo (paso, participantes afectados) | Gravedad | Acción / tarea |
-|---|---|---|---|
-| 1 | … | … | … |
-
-Si no se cumple algún criterio, abre tareas de mejora en `tasks.md` y repite la
-prueba con participantes nuevos antes de cerrar T131.
+No se observaron bloqueos ni dudas en ninguna sesión. Limitación: todas las sesiones
+fueron en escritorio; el recorrido en móvil solo se ha validado con el smoke
+post-deploy de T129, no con participantes.
 
 ---
 
