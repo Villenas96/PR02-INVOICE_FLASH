@@ -72,7 +72,7 @@ Los resultados manuales los ejecutó y declaró el responsable en producción
   El workflow Performance se ejecuta aparte.
 - Aprobaciones requeridas: 0 (excepción temporal documentada en
   `docs/operations/repository-governance.md`, titular único del repositorio).
-- PR de referencia: PR_REF (cierre de T131), fusionado con los checks anteriores en verde.
+- PR de referencia: #49 (cierre de T131), fusionado con los checks anteriores en verde.
 
 ## 5. Cierre
 
