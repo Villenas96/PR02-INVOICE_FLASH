@@ -671,9 +671,11 @@ async function executeAtomicIssue(
       FROM locked_company
       CROSS JOIN monthly_usage
       WHERE NOT EXISTS (SELECT 1 FROM idempotent_result)
-        AND monthly_usage.issued_count < CASE locked_company.plan
-          WHEN 'free'::plan THEN ${freeLimit}::integer
-          WHEN 'pro'::plan THEN ${proLimit}::integer
+        AND monthly_usage.issued_count < CASE
+          WHEN locked_company.plan IN ('free'::plan, 'basic'::plan)
+            THEN ${freeLimit}::integer
+          WHEN locked_company.plan IN ('pro'::plan, 'essential'::plan)
+            THEN ${proLimit}::integer
         END
     ),
     target_document AS MATERIALIZED (

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 export interface PlanIndicatorProps {
-  plan?: "free" | "pro";
+  plan?: "free" | "pro" | "basic" | "essential";
   issuedDocuments?: number;
   documentLimit?: number;
   className?: string;
@@ -10,11 +10,12 @@ export interface PlanIndicatorProps {
 export function PlanIndicator({
   plan = "free",
   issuedDocuments = 0,
-  documentLimit = plan === "free" ? 5 : 100,
+  documentLimit = plan === "free" || plan === "basic" ? 5 : 100,
   className,
 }: PlanIndicatorProps) {
   const percentage = Math.min((issuedDocuments / documentLimit) * 100, 100);
-  const planLabel = plan === "free" ? "Plan gratuito" : "Plan Pro";
+  const planLabel =
+    plan === "free" || plan === "basic" ? "Plan gratuito" : "Plan Pro";
   const limitReached = issuedDocuments >= documentLimit;
   const warning = !limitReached && issuedDocuments / documentLimit >= 0.8;
   const barColor = limitReached

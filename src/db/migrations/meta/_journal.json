@@ -29,6 +29,13 @@
       "when": 1791307420691,
       "tag": "0003_chief_revanche",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792456778577,
+      "tag": "0004_plan_tiers_expand",
+      "breakpoints": true
     }
   ]
 }

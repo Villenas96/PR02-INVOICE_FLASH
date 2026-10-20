@@ -1,4 +1,9 @@
-export type Plan = "free" | "pro";
+/**
+ * Compat release (specs/002 T011): the `plan` enum is the superset
+ * `free, pro, basic, essential`. Until `0005_billing` maps the data, `basic`
+ * behaves like the v1 free plan and `essential` like the v1 paid plan.
+ */
+export type Plan = "free" | "pro" | "basic" | "essential";
 export type IssuedDocumentType = "invoice" | "proforma" | "receipt";
 export type DocumentStatus = "draft" | "issued" | "voided";
 
@@ -10,7 +15,7 @@ export interface PlanCapabilities {
   warningThreshold: number;
 }
 
-const PLAN_CAPABILITIES: Record<Plan, PlanCapabilities> = {
+const PLAN_CAPABILITIES: Record<"free" | "pro", PlanCapabilities> = {
   free: {
     canGeneratePdf: true,
     canSendEmail: false,
@@ -76,7 +81,9 @@ function madridMidnightAsUtc(year: number, month: number, day: number): Date {
 }
 
 export function getPlanCapabilities(plan: Plan): PlanCapabilities {
-  return PLAN_CAPABILITIES[plan];
+  return PLAN_CAPABILITIES[
+    plan === "free" || plan === "basic" ? "free" : "pro"
+  ];
 }
 
 export function usageWarning(plan: Plan, issuedDocumentCount: number): boolean {
