@@ -41,6 +41,10 @@ export interface DocumentPdfLine {
   lineSubtotalCents: number;
   lineTaxCents: number;
   lineTotalCents: number;
+  /** Groups lines per delivery note when invoicing several (US9-AC4). */
+  sectionLabel?: string | null;
+  /** Layout-only row announcing a section; never part of the totals. */
+  heading?: boolean;
 }
 
 export interface DocumentPdfParty {
@@ -78,6 +82,8 @@ export interface DocumentPdfInput {
   fullNumber: string;
   issueDate: string;
   dueDate?: string | null;
+  /** Quotes print their validity instead of a due date (FR-035). */
+  validUntil?: string | null;
   currency: "EUR";
   issuer: DocumentPdfParty;
   client: DocumentPdfParty;
@@ -201,6 +207,33 @@ function clientDetails(party: DocumentPdfParty): string {
   return partyDetails(party, { includeEmail: false });
 }
 
+/** Inserts a heading row whenever the section label changes. */
+export function withSectionHeadings(
+  lines: readonly DocumentPdfLine[],
+): DocumentPdfLine[] {
+  const rows: DocumentPdfLine[] = [];
+  let current: string | null = null;
+  for (const line of lines) {
+    const label = line.sectionLabel ?? null;
+    if (label && label !== current) {
+      rows.push({
+        position: line.position,
+        description: label,
+        quantity: "0",
+        unitPriceCents: 0,
+        taxRate: "0",
+        lineSubtotalCents: 0,
+        lineTaxCents: 0,
+        lineTotalCents: 0,
+        heading: true,
+      });
+    }
+    current = label;
+    rows.push(line);
+  }
+  return rows;
+}
+
 function paginateLines(lines: DocumentPdfLine[]): DocumentPdfLine[][] {
   if (lines.length === 0) {
     throw new RangeError("El PDF debe contener al menos una línea.");
@@ -313,15 +346,17 @@ function lineTable(lines: DocumentPdfLine[], y: number): PdfTableElement {
     headers: ["Concepto", "Cantidad", "Precio unitario", "Impuesto", "Total"],
     rows: lines.map((line) => ({
       position: line.position,
-      cells: [
-        line.description,
-        line.unit
-          ? `${formatQuantity(line.quantity)} ${line.unit}`
-          : formatQuantity(line.quantity),
-        formatMoney(line.unitPriceCents),
-        `${line.taxName ?? "IVA"} ${formatPercentage(line.taxRate)} %`,
-        formatMoney(line.lineTotalCents),
-      ],
+      cells: line.heading
+        ? [line.description, "", "", "", ""]
+        : [
+            line.description,
+            line.unit
+              ? `${formatQuantity(line.quantity)} ${line.unit}`
+              : formatQuantity(line.quantity),
+            formatMoney(line.unitPriceCents),
+            `${line.taxName ?? "IVA"} ${formatPercentage(line.taxRate)} %`,
+            formatMoney(line.lineTotalCents),
+          ],
     })),
     x: PDF_MARGINS.left,
     y,
@@ -462,7 +497,7 @@ export function buildDocumentPdfLayout(
     return buildReceiptPdfLayout(input);
   }
 
-  const linePages = paginateLines(input.lines);
+  const linePages = paginateLines(withSectionHeadings(input.lines));
   const pageCount = linePages.length;
   const title = documentTitle(input.documentType);
   const pages = linePages.map((pageLines, pageIndex) => {
@@ -503,11 +538,15 @@ export function buildDocumentPdfLayout(
         );
       }
 
-      if (input.documentType === "proforma") {
+      if (
+        input.documentType === "proforma" ||
+        input.documentType === "quote" ||
+        input.documentType === "delivery_note"
+      ) {
         elements.push({
           kind: "text",
           role: "fiscal_notice",
-          text: "Documento sin validez fiscal.",
+          text: "Documento sin validez fiscal de factura.",
           x: PDF_MARGINS.left,
           y: 724,
         });
@@ -562,7 +601,10 @@ export function buildDocumentPdfLayout(
         {
           kind: "text",
           role: "due_date",
-          text: `Fecha de vencimiento\n${input.dueDate ? formatDate(input.dueDate) : "-"}`,
+          text:
+            input.documentType === "quote"
+              ? `Válido hasta\n${input.validUntil ? formatDate(input.validUntil) : "-"}`
+              : `Fecha de vencimiento\n${input.dueDate ? formatDate(input.dueDate) : "-"}`,
           x: 310,
           y: 558,
         },

@@ -339,20 +339,20 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 9
 
-- [ ] T130 [P] [US9] Rewrite conversion unit tests for the transition table (quote → proforma|delivery_note|invoice, delivery_note → invoice, proforma → invoice), forbidden cycles, voided sources, repeat-confirmation rule, delivery-note line grouping with `section_label`, and derived quote/delivery-note states, in `tests/unit/document-conversion.test.ts`
-- [ ] T131 [P] [US9] Write integration tests: quote/delivery note numbering in own series, conversion with `issue: true` consuming the destination type quota (402 when exhausted), idempotent repeat, `confirm_repeat`, invoicing two delivery notes atomically, `delivery_note_already_invoiced` with invoice number under concurrency, voiding the invoice releases links, in `tests/integration/quotes-delivery-notes.test.ts`
-- [ ] T132 [P] [US9] Update `tests/integration/proforma-conversion.test.ts` to the `document_link` model and the new repeat rule
+- [X] T130 [P] [US9] Rewrite conversion unit tests for the transition table (quote → proforma|delivery_note|invoice, delivery_note → invoice, proforma → invoice), forbidden cycles, voided sources, repeat-confirmation rule, delivery-note line grouping with `section_label`, and derived quote/delivery-note states, in `tests/unit/document-conversion.test.ts`
+- [X] T131 [P] [US9] Write integration tests: quote/delivery note numbering in own series, conversion with `issue: true` consuming the destination type quota (402 when exhausted), idempotent repeat, `confirm_repeat`, invoicing two delivery notes atomically, `delivery_note_already_invoiced` with invoice number under concurrency, voiding the invoice releases links, in `tests/integration/quotes-delivery-notes.test.ts`
+- [X] T132 [P] [US9] Update `tests/integration/proforma-conversion.test.ts` to the `document_link` model and the new repeat rule
 
 ### Implementation for User Story 9
 
-- [ ] T133 [P] [US9] Rewrite `src/lib/documents/conversion.ts` with the transition table, `validateConversion`, `groupDeliveryNoteLines` and `deriveQuoteState`/`deriveDeliveryNoteState`
-- [ ] T134 [US9] Create `src/services/document-links.ts` (create link, list `from`/`to`, release on void) and switch the `converted_from` idempotency strategy in `src/services/document-issuance.ts` to `document_link`
-- [ ] T135 [US9] Rewrite `src/services/document-conversion.ts` and `POST /api/v1/documents/:id/convert` for `{target_type, issue?, confirm_repeat?}` in `src/app/api/v1/documents/[id]/convert/route.ts`
-- [ ] T136 [US9] Implement `POST /api/v1/documents/invoice-delivery-notes` (same client, issued, not invoiced; lock source rows; Idempotency-Key; optional issue through the common guard) in `src/services/delivery-note-invoicing.ts` and `src/app/api/v1/documents/invoice-delivery-notes/route.ts`
-- [ ] T137 [US9] Implement `POST /api/v1/documents/:id/quote-decision` with `quote_accepted`/`quote_rejected` events in `src/app/api/v1/documents/[id]/quote-decision/route.ts`, and release `invoiced` links when voiding in `src/services/document-void.ts`
-- [ ] T138 [US9] Accept `quote` and `delivery_note` in draft creation (`valid_until` for quotes) and add filters `quote_state`, `invoiced=false` to the list, in `src/app/api/v1/documents/route.ts` and `src/services/documents.ts`
-- [ ] T139 [US9] Render quotes and delivery notes in the PDF and public view with their title and the "Sin validez fiscal de factura" mention, and `section_label` groups, in `src/services/pdf/template.ts` and `src/app/d/[token]/page.tsx`
-- [ ] T140 [US9] Add quote and delivery note types to "Nuevo ▾" and `buildNavigation`, the editor type selector (`src/components/documents/editor/document-type-selector.tsx`), the list filters, "Convertir en…" and accept/reject actions in `src/components/documents/document-actions.tsx`, multi-select "Facturar" for delivery notes in `src/components/documents/document-list.tsx`, and the linked documents panel in `src/components/documents/document-detail.tsx`
+- [X] T133 [P] [US9] Rewrite `src/lib/documents/conversion.ts` with the transition table, `validateConversion`, `groupDeliveryNoteLines` and `deriveQuoteState`/`deriveDeliveryNoteState`
+- [X] T134 [US9] Create `src/services/document-links.ts` (create link, list `from`/`to`, release on void) and switch the `converted_from` idempotency strategy in `src/services/document-issuance.ts` to `document_link`
+- [X] T135 [US9] Rewrite `src/services/document-conversion.ts` and `POST /api/v1/documents/:id/convert` for `{target_type, issue?, confirm_repeat?}` in `src/app/api/v1/documents/[id]/convert/route.ts`
+- [X] T136 [US9] Implement `POST /api/v1/documents/invoice-delivery-notes` (same client, issued, not invoiced; lock source rows; Idempotency-Key; optional issue through the common guard) in `src/services/delivery-note-invoicing.ts` and `src/app/api/v1/documents/invoice-delivery-notes/route.ts`
+- [X] T137 [US9] Implement `POST /api/v1/documents/:id/quote-decision` with `quote_accepted`/`quote_rejected` events in `src/app/api/v1/documents/[id]/quote-decision/route.ts`, and release `invoiced` links when voiding in `src/services/document-void.ts`
+- [X] T138 [US9] Accept `quote` and `delivery_note` in draft creation (`valid_until` for quotes) and add filters `quote_state`, `invoiced=false` to the list, in `src/app/api/v1/documents/route.ts` and `src/services/documents.ts`
+- [X] T139 [US9] Render quotes and delivery notes in the PDF and public view with their title and the "Sin validez fiscal de factura" mention, and `section_label` groups, in `src/services/pdf/template.ts` and `src/app/d/[token]/page.tsx`
+- [X] T140 [US9] Add quote and delivery note types to "Nuevo ▾" and `buildNavigation`, the editor type selector (`src/components/documents/editor/document-type-selector.tsx`), the list filters, "Convertir en…" and accept/reject actions in `src/components/documents/document-actions.tsx`, multi-select "Facturar" for delivery notes in `src/components/documents/document-list.tsx`, and the linked documents panel in `src/components/documents/document-detail.tsx`
 
 **Checkpoint**: V9 completa.
 

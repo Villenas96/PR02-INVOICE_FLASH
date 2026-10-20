@@ -520,7 +520,7 @@ function calculateIssueBilling(preparation: IssuePreparation): {
   }
 }
 
-async function loadIssuedDocument(
+export async function loadIssuedDocument(
   database: Database,
   companyId: string,
   documentId: string,
@@ -593,7 +593,9 @@ async function resolveExistingIdempotentDocument(
         sql`${documents.status} IN ('issued'::document_status, 'voided'::document_status)`,
         idempotency.kind === "converted_from"
           ? and(
-              eq(documents.documentType, "invoice"),
+              // The converted document itself: confirmed repeats of the
+              // same source are distinct documents, each issued once.
+              eq(documents.id, input.documentId),
               sql`EXISTS (
                 SELECT 1 FROM ${documentLinks}
                 WHERE ${documentLinks.targetDocumentId} = ${documents.id}
@@ -703,7 +705,7 @@ async function executeAtomicIssue(
         AND (
           (
             ${idempotencyKind}::text = 'converted_from'
-            AND existing_document.document_type = 'invoice'::document_type
+            AND existing_document.id = ${input.documentId}::uuid
             AND EXISTS (
               SELECT 1 FROM ${documentLinks} existing_link
               WHERE existing_link.target_document_id = existing_document.id

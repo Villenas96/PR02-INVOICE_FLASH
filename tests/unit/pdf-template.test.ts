@@ -332,7 +332,7 @@ describe("proforma PDF notice", () => {
     const text = visibleText(layout).join("\n");
 
     expect(text).toContain("Proforma");
-    expect(text).toContain("Documento sin validez fiscal.");
+    expect(text).toContain("Documento sin validez fiscal de factura.");
   });
 
   it("renders a proforma for a client without tax id or address", async () => {

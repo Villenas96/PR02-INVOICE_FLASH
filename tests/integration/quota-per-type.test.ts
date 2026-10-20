@@ -233,12 +233,13 @@ describe("per-document-type quota in the issuance guard", () => {
       kind: "converted",
     });
 
-    const repeatDraft = await createDraft(database, owner);
+    // A redelivered issue of the converted document resolves it even with
+    // the invoice quota exhausted.
     const queue = recordingQueue();
     const result = await issueDocument(
       {
         companyId: owner.companyId,
-        documentId: repeatDraft,
+        documentId: existingInvoice.id,
         actor: owner.userId,
         idempotency: { kind: "converted_from", sourceDocumentId: source.id },
       },

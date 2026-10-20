@@ -101,6 +101,10 @@ function seriesLabel(series: EditorSeries): string {
  * Creates a new draft or, with `documentId`, edits an existing one. Saving a
  * new draft POSTs it; an existing draft is PATCHed in place.
  */
+function hasDueDate(type: EditableDocumentType): boolean {
+  return type === "invoice" || type === "proforma";
+}
+
 export function InvoiceEditor({
   documentId,
   initialType = "invoice",
@@ -123,6 +127,7 @@ export function InvoiceEditor({
   );
   const [issueDate, setIssueDate] = useState(() => madridToday());
   const [dueDate, setDueDate] = useState("");
+  const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<EditorLine[]>(() => [
     createInitialEditorLine(),
@@ -159,9 +164,10 @@ export function InvoiceEditor({
             setCompany(undefined);
             return;
           }
-          if (draft.doc_type === "invoice" || draft.doc_type === "proforma") {
+          if (draft.doc_type !== "receipt") {
             setDocumentType(draft.doc_type);
           }
+          setValidUntil(draft.valid_until ?? "");
           setClient(
             draft.client_id && draft.client_display
               ? {
@@ -254,7 +260,9 @@ export function InvoiceEditor({
           series_id: seriesId,
           ...(methodId === undefined ? {} : { collection_method_id: methodId }),
           issue_date: issueDate,
-          due_date: dueDate || null,
+          // Quotes have a validity date; delivery notes are not due.
+          due_date: hasDueDate(documentType) ? dueDate || null : null,
+          valid_until: documentType === "quote" ? validUntil || null : null,
           notes: notes.trim() || null,
           lines: lines.map((line) => ({
             description: line.description.trim(),
@@ -388,16 +396,29 @@ export function InvoiceEditor({
                 }}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="invoice-due-date">Fecha de vencimiento</Label>
-              <Input
-                id="invoice-due-date"
-                type="date"
-                min={issueDate}
-                value={dueDate}
-                onChange={(event) => setDueDate(event.target.value)}
-              />
-            </div>
+            {documentType === "quote" ? (
+              <div className="space-y-2">
+                <Label htmlFor="quote-valid-until">Válido hasta</Label>
+                <Input
+                  id="quote-valid-until"
+                  type="date"
+                  min={issueDate}
+                  value={validUntil}
+                  onChange={(event) => setValidUntil(event.target.value)}
+                />
+              </div>
+            ) : hasDueDate(documentType) ? (
+              <div className="space-y-2">
+                <Label htmlFor="invoice-due-date">Fecha de vencimiento</Label>
+                <Input
+                  id="invoice-due-date"
+                  type="date"
+                  min={issueDate}
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useReadOnly } from "@/components/access/read-only";
+import type { LinkedDocument } from "@/components/documents/document-actions";
 import { DocumentActions } from "@/components/documents/document-actions";
 import { DeleteDraftButton } from "@/components/documents/draft-actions";
 import { IssueAction } from "@/components/documents/editor/issue-action";
@@ -39,7 +40,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiRequest } from "@/lib/api/client";
+import { documentTypeLabel } from "@/lib/documents/labels";
 import { createCents, formatEur } from "@/lib/money";
+import type { DocumentType } from "@/lib/plan";
 
 type DocumentStatus = "draft" | "issued" | "voided";
 type PdfStatus = "failed" | "pending" | "ready";
@@ -91,7 +94,11 @@ interface ClientSnapshot {
 
 interface DocumentDetailData {
   id: string;
-  doc_type: "invoice" | "proforma" | "receipt";
+  doc_type: DocumentType;
+  valid_until: string | null;
+  quote_decision: "accepted" | "rejected" | null;
+  derived_state: string | null;
+  document_links?: { from: LinkedDocument[]; to: LinkedDocument[] };
   status: DocumentStatus;
   full_number: string | null;
   client_id: string | null;
@@ -124,6 +131,15 @@ interface CompanyCapabilityData
   is_ready_to_issue: boolean;
 }
 
+const DERIVED_STATE_LABELS: Record<string, string> = {
+  pending: "Pendiente",
+  accepted: "Aceptado",
+  rejected: "Rechazado",
+  converted: "Convertido",
+  expired: "Caducado",
+  invoiced: "Facturado",
+};
+
 const eventLabels: Record<string, string> = {
   created: "Borrador creado",
   updated: "Borrador actualizado",
@@ -134,6 +150,10 @@ const eventLabels: Record<string, string> = {
   payment_added: "Pago registrado",
   payment_updated: "Pago actualizado",
   payment_deleted: "Pago eliminado",
+  quote_accepted: "Presupuesto aceptado",
+  quote_rejected: "Presupuesto rechazado",
+  linked: "Vinculado a otro documento",
+  link_released: "Vínculo liberado al anular la factura",
 };
 
 function formattedDate(date: string): string {
@@ -292,12 +312,14 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             {statusBadge(document.status)}
             <span className="text-sm text-muted-foreground">
-              {document.doc_type === "invoice"
-                ? "Factura"
-                : document.doc_type === "proforma"
-                  ? "Proforma"
-                  : "Recibo"}
+              {documentTypeLabel(document.doc_type)}
             </span>
+            {document.derived_state ? (
+              <Badge variant="outline">
+                {DERIVED_STATE_LABELS[document.derived_state] ??
+                  document.derived_state}
+              </Badge>
+            ) : null}
           </div>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">
             {document.full_number ?? "Borrador sin número"}
@@ -306,6 +328,9 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
             Emisión {formattedDate(document.issue_date)}
             {document.due_date
               ? ` · vencimiento ${formattedDate(document.due_date)}`
+              : ""}
+            {document.valid_until
+              ? ` · válido hasta ${formattedDate(document.valid_until)}`
               : ""}
           </p>
         </div>
@@ -328,7 +353,7 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
             <IssueAction
               documentId={document.id}
               documentType={
-                document.doc_type === "proforma" ? "proforma" : "invoice"
+                document.doc_type === "receipt" ? "invoice" : document.doc_type
               }
               isCompanyReady={company.is_ready_to_issue}
               issuedDocuments={usageForType(company, document.doc_type).used}
@@ -528,7 +553,10 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
         <DocumentActions
           documentId={document.id}
           documentType={document.doc_type}
-          convertedToId={document.converted_to_id}
+          status={document.status}
+          derivedState={document.derived_state}
+          linkedTargets={document.document_links?.to ?? []}
+          onChanged={loadDocument}
           issuedDocuments={usageForType(company, "invoice").used}
           documentLimit={usageForType(company, "invoice").limit}
           payments={document.payments}
@@ -547,6 +575,31 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           documentId={document.id}
           canSendEmail={companyHasFeature(company, "email")}
         />
+      ) : null}
+
+      {(document.document_links?.from.length ?? 0) > 0 ? (
+        <section
+          aria-labelledby="document-origin-title"
+          className="rounded-xl border bg-card p-5 shadow-sm"
+        >
+          <h2 id="document-origin-title" className="font-semibold">
+            Documentos de origen
+          </h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {document.document_links?.from.map((link) => (
+              <li key={link.id}>
+                <Link
+                  className="underline underline-offset-4"
+                  href={`/documents/${link.id}`}
+                >
+                  {documentTypeLabel(link.doc_type)}{" "}
+                  {link.full_number ?? "borrador"}
+                </Link>
+                {link.kind === "invoiced" ? " · facturado aquí" : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {document.notes ? (

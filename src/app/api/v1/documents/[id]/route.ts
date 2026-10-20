@@ -8,7 +8,12 @@ import { payments } from "@/db/schema/payment";
 import { shareLinks } from "@/db/schema/share-link";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseJson, validate } from "@/lib/api/validate";
+import {
+  deriveDeliveryNoteState,
+  deriveQuoteState,
+} from "@/lib/documents/conversion";
 import { logSafe } from "@/lib/log";
+import { madridDate } from "@/lib/plan";
 import { resolveCompanyContext } from "@/services/context";
 import {
   clientDisplayFor,
@@ -44,7 +49,10 @@ const draftLineSchema = z
   .strict();
 const updateDraftSchema = z
   .object({
-    doc_type: z.enum(["invoice", "proforma"]).optional(),
+    doc_type: z
+      .enum(["invoice", "proforma", "quote", "delivery_note"])
+      .optional(),
+    valid_until: z.iso.date().nullable().optional(),
     client_id: z.string().uuid().nullable().optional(),
     series_id: z.string().uuid().nullable().optional(),
     collection_method_id: z.string().uuid().nullable().optional(),
@@ -113,6 +121,28 @@ function linksResponse(links: NonNullable<DocumentDetail["links"]>) {
   return { from: links.from.map(ref), to: links.to.map(ref) };
 }
 
+function derivedStateOf(document: DocumentRow): string | null {
+  const targets = document.links?.to ?? [];
+  if (document.documentType === "quote") {
+    return deriveQuoteState({
+      status: document.status,
+      decision: document.quoteDecision,
+      validUntil: document.validUntil,
+      converted: targets.some(
+        (link) => link.kind === "converted" && link.status !== "voided",
+      ),
+      today: madridDate(new Date()),
+    });
+  }
+  if (document.documentType === "delivery_note") {
+    return deriveDeliveryNoteState({
+      status: document.status,
+      invoiced: targets.some((link) => link.kind === "invoiced"),
+    });
+  }
+  return null;
+}
+
 function documentResponse(document: DocumentRow) {
   return {
     id: document.id,
@@ -124,6 +154,10 @@ function documentResponse(document: DocumentRow) {
     client_id: document.clientId,
     issue_date: document.issueDate,
     due_date: document.dueDate,
+    valid_until: document.validUntil,
+    quote_decision: document.quoteDecision,
+    quote_decided_at: document.quoteDecidedAt,
+    derived_state: derivedStateOf(document),
     notes: document.notes,
     subtotal_cents: document.subtotalCents,
     tax_breakdown: document.taxBreakdown,
@@ -134,7 +168,7 @@ function documentResponse(document: DocumentRow) {
     client_snapshot: document.clientSnapshot,
     converted_from_id: document.convertedFromId ?? null,
     converted_to_id: document.convertedToId ?? null,
-    links: document.links ? linksResponse(document.links) : undefined,
+    document_links: document.links ? linksResponse(document.links) : undefined,
     invoice_id: document.invoiceId,
     payment_id: document.paymentId,
     pdf_status: document.pdfStatus,
@@ -364,6 +398,9 @@ export async function PATCH(
       documentId: params.id,
       actor: context.userId,
       ...(input.doc_type === undefined ? {} : { documentType: input.doc_type }),
+      ...(input.valid_until === undefined
+        ? {}
+        : { validUntil: input.valid_until }),
       ...(input.client_id === undefined ? {} : { clientId: input.client_id }),
       ...(input.series_id === undefined ? {} : { seriesId: input.series_id }),
       ...(input.collection_method_id === undefined

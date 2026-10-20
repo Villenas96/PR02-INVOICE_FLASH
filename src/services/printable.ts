@@ -32,6 +32,7 @@ export function printableFromDocument(
     status: document.status,
     issueDate: document.issueDate,
     dueDate: document.dueDate,
+    validUntil: document.validUntil,
     issuer: issuer?.legalName
       ? {
           name: issuer.legalName,
@@ -58,6 +59,7 @@ export function printableFromDocument(
       taxName: line.taxName,
       taxRate: line.taxRate,
       lineTotalCents: line.lineTotalCents,
+      sectionLabel: line.sectionLabel,
     })),
     subtotalCents: document.subtotalCents,
     taxBreakdown:

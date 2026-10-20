@@ -211,6 +211,7 @@ async function loadPdfInput(
       fullNumber: documents.fullNumber,
       issueDate: documents.issueDate,
       dueDate: documents.dueDate,
+      validUntil: documents.validUntil,
       notes: documents.notes,
       subtotalCents: documents.subtotalCents,
       taxBreakdown: documents.taxBreakdown,
@@ -261,6 +262,7 @@ async function loadPdfInput(
             lineSubtotalCents: documentLines.lineSubtotalCents,
             lineTaxCents: documentLines.lineTaxCents,
             lineTotalCents: documentLines.lineTotalCents,
+            sectionLabel: documentLines.sectionLabel,
           })
           .from(documentLines)
           .where(eq(documentLines.documentId, documentId))
@@ -279,6 +281,7 @@ async function loadPdfInput(
     fullNumber: document.fullNumber,
     issueDate: document.issueDate,
     dueDate: document.dueDate,
+    validUntil: document.validUntil,
     currency: "EUR",
     issuer: snapshotParty(
       document.issuerSnapshot,

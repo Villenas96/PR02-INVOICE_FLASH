@@ -15,11 +15,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { apiRequest, type Upsell, upsellFromError } from "@/lib/api/client";
-import { documentTypePlural } from "@/lib/documents/labels";
+import { documentTypeLabel, documentTypePlural } from "@/lib/documents/labels";
 
 interface IssueActionProps {
   documentId: string;
-  documentType?: "invoice" | "proforma";
+  documentType?: "invoice" | "proforma" | "quote" | "delivery_note";
   isCompanyReady: boolean;
   issuedDocuments: number;
   documentLimit: number;
@@ -42,7 +42,7 @@ export function IssueAction({
   const action = useMutation<unknown>();
   const [upsell, setUpsell] = useState<Upsell | null>(null);
   const limitReached = issuedDocuments >= documentLimit;
-  const label = documentType === "proforma" ? "proforma" : "factura";
+  const label = documentTypeLabel(documentType).toLowerCase();
   const plural = documentTypePlural(documentType);
   const upgradeUrl = `/billing?resume=${documentId}`;
 

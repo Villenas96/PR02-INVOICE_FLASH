@@ -12,6 +12,11 @@ import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
 import { resolveCompanyContext } from "@/services/context";
 import {
+  deliveryNoteInvoicedExpression,
+  derivedStateExpression,
+  quoteStateExpression,
+} from "@/services/document-states";
+import {
   clientDisplayFor,
   createDraftDocument,
   type DocumentDetail,
@@ -28,6 +33,11 @@ const collectionQuerySchema = z
     status: z.enum(documentStatusEnum.enumValues).optional(),
     payment_status: z.enum(PAYMENT_STATUSES).optional(),
     client_id: z.string().uuid().optional(),
+    quote_state: z
+      .enum(["pending", "accepted", "rejected", "converted", "expired"])
+      .optional(),
+    // `false`: issued delivery notes not invoiced yet (FR-037).
+    invoiced: z.enum(["true", "false"]).optional(),
     from: z.iso.date().optional(),
     to: z.iso.date().optional(),
     cursor: z.string().optional(),
@@ -64,7 +74,8 @@ const draftLineSchema = z
   .strict();
 const createDraftSchema = z
   .object({
-    doc_type: z.enum(["invoice", "proforma"]),
+    doc_type: z.enum(["invoice", "proforma", "quote", "delivery_note"]),
+    valid_until: z.iso.date().nullable().optional(),
     client_id: z.string().uuid().nullable().optional(),
     collection_method_id: z.string().uuid().nullable().optional(),
     series_id: z.string().uuid().nullable().optional(),
@@ -202,7 +213,7 @@ function documentResponse(document: DocumentRow) {
     client_snapshot: document.clientSnapshot,
     converted_from_id: document.convertedFromId ?? null,
     converted_to_id: document.convertedToId ?? null,
-    links: document.links ? linksResponse(document.links) : undefined,
+    document_links: document.links ? linksResponse(document.links) : undefined,
     invoice_id: document.invoiceId,
     payment_id: document.paymentId,
     pdf_status: document.pdfStatus,
@@ -285,6 +296,7 @@ export async function GET(request: Request): Promise<Response> {
     const database = createDatabase();
     const paidCents = paidCentsExpression(context.companyId);
     const paymentStatus = paymentStatusExpression(context.companyId);
+    const derivedState = derivedStateExpression(madridDate(new Date()));
     const conditions = [
       eq(documents.companyId, context.companyId),
       isNull(documents.deletedAt),
@@ -295,6 +307,21 @@ export async function GET(request: Request): Promise<Response> {
       query.to ? lte(documents.issueDate, query.to) : undefined,
       query.payment_status
         ? sql`${paymentStatus} = ${query.payment_status}`
+        : undefined,
+      query.quote_state
+        ? and(
+            eq(documents.documentType, "quote"),
+            sql`${quoteStateExpression(madridDate(new Date()))} = ${query.quote_state}`,
+          )
+        : undefined,
+      query.invoiced
+        ? and(
+            eq(documents.documentType, "delivery_note"),
+            eq(documents.status, "issued"),
+            query.invoiced === "true"
+              ? deliveryNoteInvoicedExpression()
+              : sql`NOT ${deliveryNoteInvoicedExpression()}`,
+          )
         : undefined,
       cursorId ? gt(documents.id, cursorId) : undefined,
     ].filter((condition) => condition !== undefined);
@@ -316,6 +343,8 @@ export async function GET(request: Request): Promise<Response> {
         updatedAt: documents.updatedAt,
         paidCents,
         paymentStatus,
+        derivedState,
+        validUntil: documents.validUntil,
         clientSnapshot: documents.clientSnapshot,
         clientName: clients.name,
         clientTaxId: clients.taxId,
@@ -360,6 +389,8 @@ export async function GET(request: Request): Promise<Response> {
           paid_cents: row.paidCents,
           outstanding_cents: Math.max(row.totalCents - row.paidCents, 0),
           payment_status: row.paymentStatus,
+          derived_state: row.derivedState,
+          valid_until: row.validUntil,
         })),
         next_cursor: hasNextPage && lastItem ? encodeCursor(lastItem.id) : null,
       }),
@@ -381,6 +412,7 @@ export async function POST(request: Request): Promise<Response> {
       companyId: context.companyId,
       actor: context.userId,
       documentType: input.doc_type,
+      validUntil: input.valid_until ?? null,
       clientId: input.client_id ?? null,
       collectionMethodId: input.collection_method_id,
       seriesId: input.series_id,

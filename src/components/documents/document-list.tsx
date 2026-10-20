@@ -9,6 +9,7 @@ import {
   DeleteDraftDialog,
   useDuplicateDocument,
 } from "@/components/documents/draft-actions";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,10 +26,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiRequest } from "@/lib/api/client";
+import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { createCents, formatEur } from "@/lib/money";
 
-type DocumentType = "invoice" | "proforma" | "receipt";
+type DocumentType =
+  | "invoice"
+  | "proforma"
+  | "receipt"
+  | "quote"
+  | "delivery_note";
 type DocumentStatus = "draft" | "issued" | "voided";
 type PaymentStatus = "overdue" | "paid" | "partial" | "pending";
 
@@ -50,6 +56,8 @@ interface DocumentListItem {
   paid_cents: number;
   outstanding_cents: number;
   payment_status: PaymentStatus | null;
+  /** Quote/delivery note state derived by the API. */
+  derived_state: string | null;
 }
 
 interface DocumentPage {
@@ -61,6 +69,17 @@ const typeLabels: Record<DocumentType, string> = {
   invoice: "Factura",
   proforma: "Proforma",
   receipt: "Recibo",
+  quote: "Presupuesto",
+  delivery_note: "Albarán",
+};
+
+const derivedLabels: Record<string, string> = {
+  pending: "Pendiente",
+  accepted: "Aceptado",
+  rejected: "Rechazado",
+  converted: "Convertido",
+  expired: "Caducado",
+  invoiced: "Facturado",
 };
 
 const statusLabels: Record<DocumentStatus, string> = {
@@ -168,6 +187,28 @@ export function DocumentList({
   showFilters?: boolean;
 } = {}) {
   const readOnly = useReadOnly();
+  const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const invoiceAction = useMutation<{ id: string }>();
+  const selectable = (document: DocumentListItem) =>
+    !readOnly &&
+    document.doc_type === "delivery_note" &&
+    document.derived_state === "pending";
+
+  async function invoiceSelected() {
+    const created = await invoiceAction.run(() =>
+      apiRequest<{ id: string }>("/api/v1/documents/invoice-delivery-notes", {
+        ...jsonRequest("POST", { delivery_note_ids: [...selected] }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
+      }),
+    );
+    if (created) {
+      router.push(`/documents/${created.id}`);
+    }
+  }
   const [documentType, setDocumentType] = useState(initialType);
   const [documentStatus, setDocumentStatus] = useState("");
   const [items, setItems] = useState<DocumentListItem[]>([]);
@@ -270,6 +311,8 @@ export function DocumentList({
               <option value="invoice">Facturas</option>
               <option value="proforma">Proformas</option>
               <option value="receipt">Recibos</option>
+              <option value="quote">Presupuestos</option>
+              <option value="delivery_note">Albaranes</option>
             </select>
           </div>
           <div className="space-y-2">
@@ -330,6 +373,27 @@ export function DocumentList({
         </div>
       ) : (
         <div className="rounded-xl border bg-card">
+          {selected.size > 0 ? (
+            <div className="flex flex-wrap items-center gap-3 border-b p-3">
+              <span className="text-sm">
+                {selected.size} albarán{selected.size === 1 ? "" : "es"}{" "}
+                seleccionado{selected.size === 1 ? "" : "s"}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                disabled={invoiceAction.isLoading}
+                onClick={invoiceSelected}
+              >
+                {invoiceAction.isLoading ? "Facturando…" : "Facturar"}
+              </Button>
+              {invoiceAction.error ? (
+                <span role="alert" className="text-sm text-destructive">
+                  {invoiceAction.error}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <Table>
             <TableHeader>
               <TableRow>
@@ -349,6 +413,25 @@ export function DocumentList({
               {items.map((document) => (
                 <TableRow key={document.id}>
                   <TableCell>
+                    {selectable(document) ? (
+                      <input
+                        type="checkbox"
+                        className="mr-2 align-middle"
+                        aria-label={`Seleccionar ${document.full_number ?? "albarán"} para facturar`}
+                        checked={selected.has(document.id)}
+                        onChange={(event) =>
+                          setSelected((current) => {
+                            const next = new Set(current);
+                            if (event.target.checked) {
+                              next.add(document.id);
+                            } else {
+                              next.delete(document.id);
+                            }
+                            return next;
+                          })
+                        }
+                      />
+                    ) : null}
                     <Link
                       className="font-medium underline-offset-4 hover:underline"
                       href={`/documents/${document.id}`}
@@ -381,6 +464,12 @@ export function DocumentList({
                     <Badge variant={statusVariant(document.status)}>
                       {statusLabels[document.status]}
                     </Badge>
+                    {document.derived_state ? (
+                      <Badge variant="outline" className="ml-1">
+                        {derivedLabels[document.derived_state] ??
+                          document.derived_state}
+                      </Badge>
+                    ) : null}
                   </TableCell>
                   <TableCell>{formattedDate(document.issue_date)}</TableCell>
                   <TableCell>

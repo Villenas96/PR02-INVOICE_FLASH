@@ -1,5 +1,4 @@
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
@@ -10,7 +9,6 @@ import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
-import { documentLinks } from "@/db/schema/document-link";
 import { taxRates } from "@/db/schema/tax-rate";
 import { ApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
@@ -20,6 +18,10 @@ import { createCents } from "@/lib/money";
 import type { DocumentType } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
 import { seriesArchivedError } from "@/services/document-errors";
+import {
+  type DocumentLinkRef,
+  loadDocumentLinks,
+} from "@/services/document-links";
 import { ensureDefaultSeries, findSelectableSeries } from "@/services/series";
 
 const MAX_DRAFT_LINES = 500;
@@ -43,8 +45,17 @@ const draftLineSchema = z
     catalogItemId: z.string().uuid().nullable().default(null),
   })
   .strict();
+const EDITABLE_DOCUMENT_TYPES = [
+  "invoice",
+  "proforma",
+  "quote",
+  "delivery_note",
+] as const;
+
 const draftFieldsSchema = z.object({
-  documentType: z.enum(["invoice", "proforma"]),
+  documentType: z.enum(EDITABLE_DOCUMENT_TYPES),
+  /** Quotes only (FR-035): `>= issueDate`. */
+  validUntil: z.iso.date().nullable().default(null),
   clientId: nullableUuidSchema.default(null),
   /** Omitted → the company's default collection method (FR-022). */
   collectionMethodId: nullableUuidSchema.optional(),
@@ -60,13 +71,30 @@ const createDraftSchema = draftFieldsSchema
     companyId: z.string().uuid(),
     actor: z.string().uuid(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.validUntil !== null && value.documentType !== "quote") {
+      context.addIssue({
+        code: "custom",
+        path: ["validUntil"],
+        message: "La validez solo se indica en los presupuestos.",
+      });
+    }
+    if (value.validUntil !== null && value.validUntil < value.issueDate) {
+      context.addIssue({
+        code: "custom",
+        path: ["validUntil"],
+        message: "La validez no puede ser anterior a la fecha de emisión.",
+      });
+    }
+  });
 const updateDraftSchema = z
   .object({
     companyId: z.string().uuid(),
     documentId: z.string().uuid(),
     actor: z.string().uuid(),
-    documentType: z.enum(["invoice", "proforma"]).optional(),
+    documentType: z.enum(EDITABLE_DOCUMENT_TYPES).optional(),
+    validUntil: z.iso.date().nullable().optional(),
     clientId: nullableUuidSchema.optional(),
     /** `null` returns to the type's default series (FR-016). */
     seriesId: nullableUuidSchema.optional(),
@@ -80,6 +108,7 @@ const updateDraftSchema = z
   .refine(
     (value) =>
       value.documentType !== undefined ||
+      value.validUntil !== undefined ||
       value.clientId !== undefined ||
       value.seriesId !== undefined ||
       value.collectionMethodId !== undefined ||
@@ -181,13 +210,7 @@ export async function loadDocumentClient(
   return row ?? null;
 }
 
-export interface DocumentLinkRef {
-  id: string;
-  kind: "converted" | "invoiced";
-  documentType: DocumentType;
-  fullNumber: string | null;
-  status: "draft" | "issued" | "voided";
-}
+export type { DocumentLinkRef };
 
 export type DocumentDetail = typeof documents.$inferSelect & {
   lines: Array<typeof documentLines.$inferSelect>;
@@ -462,63 +485,6 @@ async function throwCreateFailure(
   );
 }
 
-/**
- * Live links of a document: `from` are its sources (e.g. the proforma it was
- * converted from), `to` its targets, oldest first.
- */
-export async function loadDocumentLinks(
-  database: Database,
-  companyId: string,
-  documentId: string,
-): Promise<{ from: DocumentLinkRef[]; to: DocumentLinkRef[] }> {
-  const other = alias(documents, "linked_document");
-  const rows = await database
-    .select({
-      sourceId: documentLinks.sourceDocumentId,
-      targetId: documentLinks.targetDocumentId,
-      kind: documentLinks.kind,
-      id: other.id,
-      documentType: other.documentType,
-      fullNumber: other.fullNumber,
-      status: other.status,
-    })
-    .from(documentLinks)
-    .innerJoin(
-      other,
-      and(
-        isNull(other.deletedAt),
-        or(
-          and(
-            eq(documentLinks.sourceDocumentId, documentId),
-            eq(other.id, documentLinks.targetDocumentId),
-          ),
-          and(
-            eq(documentLinks.targetDocumentId, documentId),
-            eq(other.id, documentLinks.sourceDocumentId),
-          ),
-        ),
-      ),
-    )
-    .where(
-      and(
-        eq(documentLinks.companyId, companyId),
-        isNull(documentLinks.releasedAt),
-      ),
-    )
-    .orderBy(asc(documentLinks.createdAt));
-  const ref = (row: (typeof rows)[number]): DocumentLinkRef => ({
-    id: row.id,
-    kind: row.kind,
-    documentType: row.documentType,
-    fullNumber: row.fullNumber,
-    status: row.status,
-  });
-  return {
-    from: rows.filter((row) => row.targetId === documentId).map(ref),
-    to: rows.filter((row) => row.sourceId === documentId).map(ref),
-  };
-}
-
 export async function getDocumentDetail<
   TDetail extends DocumentDetailProjection,
 >({
@@ -632,6 +598,7 @@ export async function createDraftDocument(
         ${sql.identifier(documents.clientId.name)},
         ${sql.identifier(documents.issueDate.name)},
         ${sql.identifier(documents.dueDate.name)},
+        ${sql.identifier(documents.validUntil.name)},
         ${sql.identifier(documents.notes.name)},
         ${sql.identifier(documents.collectionMethodId.name)},
         ${sql.identifier(documents.seriesId.name)},
@@ -651,6 +618,7 @@ export async function createDraftDocument(
         ${input.clientId},
         ${input.issueDate},
         ${input.dueDate},
+        ${input.validUntil}::date,
         ${input.notes},
         ${collectionMethodId}::uuid,
         ${input.seriesId ?? null}::uuid,
@@ -910,6 +878,13 @@ export async function updateDraftDocument(
         due_date = CASE
           WHEN ${input.dueDate !== undefined} THEN ${input.dueDate ?? null}
           ELSE target_document.due_date
+        END,
+        -- Only quotes keep a validity date.
+        valid_until = CASE
+          WHEN ${input.documentType !== undefined && input.documentType !== "quote"}
+            THEN NULL
+          WHEN ${input.validUntil !== undefined} THEN ${input.validUntil ?? null}::date
+          ELSE target_document.valid_until
         END,
         notes = CASE
           WHEN ${input.notes !== undefined} THEN ${input.notes ?? null}

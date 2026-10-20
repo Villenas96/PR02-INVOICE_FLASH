@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 import { DOCUMENT_TYPE_LABELS } from "@/lib/documents/labels";
 import { createCents, formatEur } from "@/lib/money";
 import type { DocumentType } from "@/lib/plan";
@@ -20,6 +22,8 @@ export interface PrintableLine {
   taxName: string;
   taxRate: string;
   lineTotalCents: number;
+  /** Delivery note group when an invoice bills several (US9-AC4). */
+  sectionLabel?: string | null;
 }
 
 export interface PrintablePayment {
@@ -39,6 +43,7 @@ export interface PrintableDocumentData {
   status: "draft" | "issued" | "voided";
   issueDate: string;
   dueDate: string | null;
+  validUntil?: string | null;
   issuer: PrintableParty | null;
   client: PrintableParty | null;
   lines: PrintableLine[];
@@ -130,7 +135,12 @@ export function PrintableDocument({ data }: { data: PrintableDocumentData }) {
         <dl className="text-right text-sm">
           <dt className="text-muted-foreground">Fecha de emisión</dt>
           <dd>{formattedDate(data.issueDate)}</dd>
-          {data.dueDate ? (
+          {data.documentType === "quote" && data.validUntil ? (
+            <>
+              <dt className="mt-1 text-muted-foreground">Válido hasta</dt>
+              <dd>{formattedDate(data.validUntil)}</dd>
+            </>
+          ) : data.dueDate ? (
             <>
               <dt className="mt-1 text-muted-foreground">Vencimiento</dt>
               <dd>{formattedDate(data.dueDate)}</dd>
@@ -159,23 +169,38 @@ export function PrintableDocument({ data }: { data: PrintableDocumentData }) {
           </tr>
         </thead>
         <tbody>
-          {data.lines.map((line) => (
-            <tr key={line.id} className="border-b last:border-0">
-              <td className="py-2 pr-2">{line.description}</td>
-              <td className="py-2 text-right">
-                {formatQuantity(line.quantity)}
-                {line.unit ? ` ${line.unit}` : ""}
-              </td>
-              <td className="py-2 text-right">
-                {formatEur(createCents(line.unitPriceCents))}
-              </td>
-              <td className="py-2 text-right">
-                {line.taxName} {Number(line.taxRate).toLocaleString("es-ES")} %
-              </td>
-              <td className="py-2 text-right font-medium">
-                {formatEur(createCents(line.lineTotalCents))}
-              </td>
-            </tr>
+          {data.lines.map((line, index) => (
+            <Fragment key={line.id}>
+              {line.sectionLabel &&
+              line.sectionLabel !== data.lines[index - 1]?.sectionLabel ? (
+                <tr className="border-b bg-muted/50">
+                  <th
+                    scope="rowgroup"
+                    colSpan={5}
+                    className="py-2 pl-1 text-left font-semibold"
+                  >
+                    {line.sectionLabel}
+                  </th>
+                </tr>
+              ) : null}
+              <tr className="border-b last:border-0">
+                <td className="py-2 pr-2">{line.description}</td>
+                <td className="py-2 text-right">
+                  {formatQuantity(line.quantity)}
+                  {line.unit ? ` ${line.unit}` : ""}
+                </td>
+                <td className="py-2 text-right">
+                  {formatEur(createCents(line.unitPriceCents))}
+                </td>
+                <td className="py-2 text-right">
+                  {line.taxName} {Number(line.taxRate).toLocaleString("es-ES")}{" "}
+                  %
+                </td>
+                <td className="py-2 text-right font-medium">
+                  {formatEur(createCents(line.lineTotalCents))}
+                </td>
+              </tr>
+            </Fragment>
           ))}
         </tbody>
       </table>

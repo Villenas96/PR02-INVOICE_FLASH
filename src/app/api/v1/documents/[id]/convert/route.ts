@@ -3,12 +3,13 @@ import { z } from "zod";
 
 import { createDatabase } from "@/db";
 import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
+import { parseIdempotencyKey } from "@/lib/api/idempotency";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
 import { resolveCompanyContext } from "@/services/context";
 import {
-  convertProformaAndIssue,
-  convertProformaToDraft,
+  convertAndIssue,
+  convertDocument,
 } from "@/services/document-conversion";
 import type { PdfRenderQueue } from "@/services/document-issuance";
 import { type DocumentDetail, getDocumentDetail } from "@/services/documents";
@@ -21,7 +22,13 @@ const routeParamsSchema = z
   .strict();
 const convertBodySchema = z
   .object({
+    // v1 clients send no type: a proforma converts into an invoice.
+    target_type: z
+      .enum(["invoice", "proforma", "delivery_note"])
+      .optional()
+      .default("invoice"),
     issue: z.boolean().optional().default(false),
+    confirm_repeat: z.boolean().optional().default(false),
   })
   .strict();
 
@@ -102,17 +109,18 @@ export async function POST(
       inputPromise,
     ]);
 
+    const conversion = {
+      companyId: context.companyId,
+      documentId: params.id,
+      actor: context.userId,
+      targetType: input.target_type,
+      confirmRepeat: input.confirm_repeat,
+      idempotencyKey: parseIdempotencyKey(request),
+    };
     if (input.issue) {
       const queue = await pdfRenderQueue();
       const database = createDatabase();
-      const issued = await convertProformaAndIssue(
-        {
-          companyId: context.companyId,
-          documentId: params.id,
-          actor: context.userId,
-        },
-        { database, queue },
-      );
+      const issued = await convertAndIssue(conversion, { database, queue });
       return withRequestId(
         Response.json({
           id: issued.id,
@@ -130,11 +138,7 @@ export async function POST(
       );
     }
 
-    const draft = await convertProformaToDraft({
-      companyId: context.companyId,
-      documentId: params.id,
-      actor: context.userId,
-    });
+    const draft = await convertDocument(conversion);
     const detail = await getDocumentDetail<DocumentDetail>({
       companyId: context.companyId,
       documentId: draft.id,

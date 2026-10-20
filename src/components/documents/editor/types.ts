@@ -73,7 +73,7 @@ export interface CreatedDraft {
 /** `GET /api/v1/documents/:id` fields the editor needs to reopen a draft. */
 export interface EditableDraft {
   id: string;
-  doc_type: "invoice" | "proforma" | "receipt";
+  doc_type: "invoice" | "proforma" | "receipt" | "quote" | "delivery_note";
   status: "draft" | "issued" | "voided";
   client_id: string | null;
   client_display: { name: string; tax_id: string | null } | null;
@@ -81,6 +81,7 @@ export interface EditableDraft {
   collection_method_id: string | null;
   issue_date: string;
   due_date: string | null;
+  valid_until: string | null;
   notes: string | null;
   lines: Array<{
     id: string;

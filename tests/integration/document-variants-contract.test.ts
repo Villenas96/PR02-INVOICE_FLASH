@@ -282,13 +282,14 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     expect(response.status).toBe(400);
   });
 
-  it("converts a proforma to a draft invoice, then to the same draft again idempotently", async () => {
+  it("converts a proforma to a draft invoice and resolves the same draft for the same key", async () => {
     const clientId = await seedClient(owner);
     const proformaId = await createIssuedProforma(owner, clientId);
 
     const first = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-draft-key-000001" },
         body: JSON.stringify({}),
       }),
       routeContext(proformaId),
@@ -301,11 +302,25 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     const second = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-draft-key-000001" },
         body: JSON.stringify({}),
       }),
       routeContext(proformaId),
     );
     expect((await jsonRecord(second)).id).toBe(firstBody.id);
+
+    // A new request without the key is a repeat: it needs confirmation.
+    const repeat = await convertDocument(
+      authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+      routeContext(proformaId),
+    );
+    expect(repeat.status).toBe(409);
+    expect(await jsonRecord(repeat)).toMatchObject({
+      error: { code: "conversion_repeat_confirmation_required" },
+    });
   });
 
   it("issues the converted invoice directly and resolves the same one afterwards", async () => {
@@ -315,6 +330,7 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     const first = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-issue-key-000001" },
         body: JSON.stringify({ issue: true }),
       }),
       routeContext(proformaId),
@@ -327,6 +343,7 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     const second = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-issue-key-000001" },
         body: JSON.stringify({ issue: true }),
       }),
       routeContext(proformaId),
