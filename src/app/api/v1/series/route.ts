@@ -176,11 +176,12 @@ export async function GET(request: Request): Promise<Response> {
     const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
 
-    await ensureDefaultSeries(
-      database,
-      context.companyId,
-      documentType ?? "invoice",
-    );
+    // Only the invoice series is bootstrapped when listing; any other type
+    // gets its series when its first draft is saved (FR-019), so the user is
+    // told about it (and about a renamed prefix) at that moment.
+    if (documentType === undefined || documentType === "invoice") {
+      await ensureDefaultSeries(database, context.companyId, "invoice");
+    }
 
     const conditions = [
       eq(documentSeries.companyId, context.companyId),

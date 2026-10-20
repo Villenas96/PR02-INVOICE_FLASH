@@ -45,6 +45,8 @@ const draftFieldsSchema = z.object({
   clientId: nullableUuidSchema.default(null),
   /** Omitted → the company's default collection method (FR-022). */
   collectionMethodId: nullableUuidSchema.optional(),
+  /** Omitted/null → the type's default series at issue time. */
+  seriesId: nullableUuidSchema.optional(),
   issueDate: z.iso.date(),
   dueDate: z.iso.date().nullable().default(null),
   notes: z.string().trim().max(5_000).nullable().default(null),
@@ -506,6 +508,14 @@ export async function createDraftDocument(
     input.companyId,
     input.collectionMethodId,
   );
+  if (input.seriesId) {
+    await assertSeriesSelectable(
+      database,
+      input.companyId,
+      input.seriesId,
+      input.documentType,
+    );
+  }
 
   const billing = calculateDraftBilling(input.lines, company.retentionRate);
   const documentId = createUuidV7(now.getTime());
@@ -542,6 +552,7 @@ export async function createDraftDocument(
         ${sql.identifier(documents.dueDate.name)},
         ${sql.identifier(documents.notes.name)},
         ${sql.identifier(documents.collectionMethodId.name)},
+        ${sql.identifier(documents.seriesId.name)},
         ${sql.identifier(documents.subtotalCents.name)},
         ${sql.identifier(documents.taxBreakdown.name)},
         ${sql.identifier(documents.retentionRate.name)},
@@ -560,6 +571,7 @@ export async function createDraftDocument(
         ${input.dueDate},
         ${input.notes},
         ${collectionMethodId}::uuid,
+        ${input.seriesId ?? null}::uuid,
         ${billing.subtotalCents},
         ${JSON.stringify(billing.taxBreakdown)}::jsonb,
         scoped_company.retention_rate,

@@ -29,12 +29,45 @@ export interface EditorLine {
   quantity: string;
   unitPrice: string;
   taxRate: string;
+  /** Frozen tax name (IVA, IGIC, IGI…). */
+  taxName: string;
+  taxRateId: string | null;
+  unit: string;
+  catalogItemId: string | null;
   discountPercentage: string;
+}
+
+export interface EditorTaxRate {
+  id: string;
+  name: string;
+  rate: string;
+  is_default: boolean;
+}
+
+export interface EditorSeries {
+  id: string;
+  doc_type: string;
+  prefix: string;
+  is_default: boolean;
+  archived_at: string | null;
+}
+
+export interface EditorCollectionMethod {
+  id: string;
+  kind: "bank_account" | "bizum" | "paypal" | "cash" | "other";
+  label: string;
+  is_default: boolean;
+}
+
+export interface UnitsData {
+  predefined: string[];
+  custom: Array<{ id: string; name: string }>;
 }
 
 export interface CreatedDraft {
   id: string;
   status: "draft";
+  series_created?: { prefix: string; renamed: boolean } | null;
 }
 
 /** `GET /api/v1/documents/:id` fields the editor needs to reopen a draft. */
@@ -44,6 +77,8 @@ export interface EditableDraft {
   status: "draft" | "issued" | "voided";
   client_id: string | null;
   client_display: { name: string; tax_id: string | null } | null;
+  series_id: string | null;
+  collection_method_id: string | null;
   issue_date: string;
   due_date: string | null;
   notes: string | null;
@@ -53,6 +88,10 @@ export interface EditableDraft {
     quantity: string;
     unit_price_cents: number;
     tax_rate: string;
+    tax_name: string;
+    tax_rate_id: string | null;
+    unit: string | null;
+    catalog_item_id: string | null;
     discount_pct: string;
   }>;
 }

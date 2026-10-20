@@ -7,6 +7,7 @@ import { companyHasFeature } from "@/components/plan/types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api/client";
+import { CollectionMethodSettings } from "./collection-method-settings";
 import {
   CompanyProfileForm,
   InvoicingPreferencesForm,
@@ -15,6 +16,7 @@ import { InterfaceSettings } from "./interface-settings";
 import { LogoSettings } from "./logo-settings";
 import { SeriesSettings } from "./series-settings";
 import { SubscriptionSettings } from "./subscription-settings";
+import { TaxRateSettings } from "./tax-rate-settings";
 import type { CompanySettings, DocumentSeries, SeriesPage } from "./types";
 
 export function SettingsPanel() {
@@ -174,6 +176,16 @@ export function SettingsPanel() {
             />
             <InvoicingPreferencesForm company={company} onChange={setCompany} />
           </div>
+        </div>
+      ),
+    },
+    {
+      id: "payments",
+      label: "Cobros e impuestos",
+      content: (
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <CollectionMethodSettings />
+          <TaxRateSettings />
         </div>
       ),
     },

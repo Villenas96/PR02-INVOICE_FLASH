@@ -180,21 +180,21 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 4
 
-- [ ] T061 [P] [US4] Write unit tests for automatic series prefixes (`PRO-`, `REC-`, `PRE-`, `ALB-` + invoice prefix, empty invoice prefix, collision → `PRE2-…`) in `tests/unit/numbering.test.ts`
-- [ ] T062 [P] [US4] Write integration tests for `ensureDefaultSeries` idempotency under concurrency, draft series change (same type, active only), `409 series_archived` on issue, and duplicate of every state/type with archived-data warnings, in `tests/integration/editor-improvements.test.ts`
-- [ ] T063 [P] [US4] Write E2E tests for the full editor flow of the independent test plus SC-003 timing (< 90 s) in `tests/e2e/editor-agile.spec.ts`
+- [X] T061 [P] [US4] Write unit tests for automatic series prefixes (`PRO-`, `REC-`, `PRE-`, `ALB-` + invoice prefix, empty invoice prefix, collision → `PRE2-…`) in `tests/unit/numbering.test.ts`
+- [X] T062 [P] [US4] Write integration tests for `ensureDefaultSeries` idempotency under concurrency, draft series change (same type, active only), `409 series_archived` on issue, and duplicate of every state/type with archived-data warnings, in `tests/integration/editor-improvements.test.ts`
+- [X] T063 [P] [US4] Write E2E tests for the full editor flow of the independent test plus SC-003 timing (< 90 s) in `tests/e2e/editor-agile.spec.ts`
 
 ### Implementation for User Story 4
 
-- [ ] T064 [P] [US4] Add `autoSeriesPrefix(type, invoicePrefix, existingPrefixes)` to `src/lib/numbering/index.ts`
-- [ ] T065 [US4] Implement `ensureDefaultSeries(companyId, type)` with `INSERT … ON CONFLICT DO NOTHING` in `src/services/series.ts`, call it from draft creation in `src/services/documents.ts` and return `series_created {prefix, renamed}` from `POST /api/v1/documents` in `src/app/api/v1/documents/route.ts`
-- [ ] T066 [US4] Extend the product `Combobox` from T055 to link `catalog_item_id` on selection and creation, and add "Guardar en catálogo" for manual lines (creates the product with description, price, tax, unit and links `catalog_item_id`) in `src/components/documents/editor/invoice-lines.tsx`
-- [ ] T067 [US4] Add a series `Combobox` (active series of the document type) to the editor and accept `series_id` in `PATCH /api/v1/documents/:id` (draft only, same type, not archived) in `src/components/documents/editor/invoice-editor.tsx`, `src/app/api/v1/documents/[id]/route.ts` and `src/services/documents.ts`
-- [ ] T068 [US4] Reject issuing with an archived series with `409 series_archived` and an actionable message in `src/services/document-issuance.ts`; add `archived` to `PATCH /api/v1/series/:id` and the `archived` filter to `GET /api/v1/series` in `src/app/api/v1/series/[id]/route.ts`, `src/app/api/v1/series/route.ts` and `src/components/settings/series-settings.tsx`
-- [ ] T069 [US4] Extend duplicate to invoices, proformas, quotes and delivery notes in any state with dates recalculated to today and `warnings[]` for archived client/product/tax, in `src/app/api/v1/documents/[id]/duplicate/route.ts` and `src/services/documents.ts`
-- [ ] T070 [US4] Add row actions "Editar", "Duplicar" and "Eliminar" (drafts only, confirmation dialog) to `src/components/documents/document-list.tsx`, and the same actions plus "Imprimir" to `src/components/documents/document-actions.tsx`
-- [ ] T071 [US4] Create the printable document view that renders the same data as the public view with print CSS and calls `window.print()` on load, in `src/app/(app)/documents/[id]/print/page.tsx` and `src/components/documents/printable-document.tsx`
-- [ ] T072 [P] [US4] Use local-mode `Combobox` for tax rates and units on each editor line in `src/components/documents/editor/invoice-lines.tsx` (data from US5 endpoints; until then, fixed IVA list from the seeded `tax_rate`)
+- [X] T064 [P] [US4] Add `autoSeriesPrefix(type, invoicePrefix, existingPrefixes)` to `src/lib/numbering/index.ts`
+- [X] T065 [US4] Implement `ensureDefaultSeries(companyId, type)` with `INSERT … ON CONFLICT DO NOTHING` in `src/services/series.ts`, call it from draft creation in `src/services/documents.ts` and return `series_created {prefix, renamed}` from `POST /api/v1/documents` in `src/app/api/v1/documents/route.ts`
+- [X] T066 [US4] Extend the product `Combobox` from T055 to link `catalog_item_id` on selection and creation, and add "Guardar en catálogo" for manual lines (creates the product with description, price, tax, unit and links `catalog_item_id`) in `src/components/documents/editor/invoice-lines.tsx`
+- [X] T067 [US4] Add a series `Combobox` (active series of the document type) to the editor and accept `series_id` in `PATCH /api/v1/documents/:id` (draft only, same type, not archived) in `src/components/documents/editor/invoice-editor.tsx`, `src/app/api/v1/documents/[id]/route.ts` and `src/services/documents.ts`
+- [X] T068 [US4] Reject issuing with an archived series with `409 series_archived` and an actionable message in `src/services/document-issuance.ts`; add `archived` to `PATCH /api/v1/series/:id` and the `archived` filter to `GET /api/v1/series` in `src/app/api/v1/series/[id]/route.ts`, `src/app/api/v1/series/route.ts` and `src/components/settings/series-settings.tsx`
+- [X] T069 [US4] Extend duplicate to invoices, proformas, quotes and delivery notes in any state with dates recalculated to today and `warnings[]` for archived client/product/tax, in `src/app/api/v1/documents/[id]/duplicate/route.ts` and `src/services/documents.ts`
+- [X] T070 [US4] Add row actions "Editar", "Duplicar" and "Eliminar" (drafts only, confirmation dialog) to `src/components/documents/document-list.tsx`, and the same actions plus "Imprimir" to `src/components/documents/document-actions.tsx`
+- [X] T071 [US4] Create the printable document view that renders the same data as the public view with print CSS and calls `window.print()` on load, in `src/app/(app)/documents/[id]/print/page.tsx` and `src/components/documents/printable-document.tsx`
+- [X] T072 [P] [US4] Use local-mode `Combobox` for tax rates and units on each editor line in `src/components/documents/editor/invoice-lines.tsx` (data from US5 endpoints; until then, fixed IVA list from the seeded `tax_rate`)
 
 **Checkpoint**: V4 completa; SC-003 medido.
 
@@ -208,21 +208,21 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 5
 
-- [ ] T073 [P] [US5] Write unit tests for IBAN normalization, per-country length and mod-97, BIC pattern, and error messages that never echo the value, in `tests/unit/iban.test.ts`
-- [ ] T074 [P] [US5] Write contract tests for `/api/v1/collection-methods`, `/tax-rates` and `/units` (CRUD, single default, archive, `iban_invalid`, isolation 404) in `tests/integration/payment-tax-config-contract.test.ts`
-- [ ] T075 [P] [US5] Write integration tests: issued invoice freezes `collection_method_snapshot`, `tax_name` and `tax_rate`; editing or archiving the tax or method later leaves the document unchanged; IBAN never appears in logs (extend `tests/integration/log-redaction.test.ts`), in `tests/integration/payment-tax-snapshot.test.ts`
+- [X] T073 [P] [US5] Write unit tests for IBAN normalization, per-country length and mod-97, BIC pattern, and error messages that never echo the value, in `tests/unit/iban.test.ts`
+- [X] T074 [P] [US5] Write contract tests for `/api/v1/collection-methods`, `/tax-rates` and `/units` (CRUD, single default, archive, `iban_invalid`, isolation 404) in `tests/integration/payment-tax-config-contract.test.ts`
+- [X] T075 [P] [US5] Write integration tests: issued invoice freezes `collection_method_snapshot`, `tax_name` and `tax_rate`; editing or archiving the tax or method later leaves the document unchanged; IBAN never appears in logs (extend `tests/integration/log-redaction.test.ts`), in `tests/integration/payment-tax-snapshot.test.ts`
 
 ### Implementation for User Story 5
 
-- [ ] T076 [P] [US5] Create `src/lib/iban.ts` (normalize, validate IBAN ISO 13616 mod-97, validate BIC ISO 9362, format with spaces for display)
-- [ ] T077 [P] [US5] Add an IBAN pattern redaction rule to `src/lib/log.ts`
-- [ ] T078 [US5] Implement collection methods service and routes (kind-specific Zod, single default via partial unique index, archive/restore) in `src/services/collection-methods.ts`, `src/app/api/v1/collection-methods/route.ts` and `src/app/api/v1/collection-methods/[id]/route.ts`
-- [ ] T079 [P] [US5] Implement tax rates service and routes (name ≤ 30, rate ≤ 2 decimals in [0,100), default, archive) in `src/services/tax-rates.ts`, `src/app/api/v1/tax-rates/route.ts` and `src/app/api/v1/tax-rates/[id]/route.ts`
-- [ ] T080 [P] [US5] Implement units service and routes (predefined + custom, unique per company case-insensitive) in `src/services/units.ts`, `src/app/api/v1/units/route.ts`
-- [ ] T081 [US5] Preselect the default collection method on draft creation, accept `collection_method_id` (or null) in draft PATCH, and freeze `collection_method_snapshot` plus per-line `tax_name`/`tax_rate` at issue, in `src/services/documents.ts` and `src/services/document-issuance.ts`
-- [ ] T082 [US5] Build settings sections "Métodos de cobro" and "Impuestos" (forms, default marker, archive) in `src/components/settings/collection-method-settings.tsx`, `src/components/settings/tax-rate-settings.tsx` and `src/components/settings/settings-panel.tsx`
-- [ ] T083 [US5] Add the collection method selector (local `Combobox`, "Ninguno" option) to the editor in `src/components/documents/editor/invoice-editor.tsx`, and switch line tax selection to `tax_rate_id` from `/api/v1/tax-rates` in `src/components/documents/editor/invoice-lines.tsx`
-- [ ] T084 [US5] Add `unit` and `tax_rate_id` to catalog items (form, Zod, API) in `src/components/catalog/catalog-list.tsx`, `src/app/api/v1/catalog-items/route.ts` and `src/app/api/v1/catalog-items/[id]/route.ts`, proposing them when the product is added to a line
+- [X] T076 [P] [US5] Create `src/lib/iban.ts` (normalize, validate IBAN ISO 13616 mod-97, validate BIC ISO 9362, format with spaces for display)
+- [X] T077 [P] [US5] Add an IBAN pattern redaction rule to `src/lib/log.ts`
+- [X] T078 [US5] Implement collection methods service and routes (kind-specific Zod, single default via partial unique index, archive/restore) in `src/services/collection-methods.ts`, `src/app/api/v1/collection-methods/route.ts` and `src/app/api/v1/collection-methods/[id]/route.ts`
+- [X] T079 [P] [US5] Implement tax rates service and routes (name ≤ 30, rate ≤ 2 decimals in [0,100), default, archive) in `src/services/tax-rates.ts`, `src/app/api/v1/tax-rates/route.ts` and `src/app/api/v1/tax-rates/[id]/route.ts`
+- [X] T080 [P] [US5] Implement units service and routes (predefined + custom, unique per company case-insensitive) in `src/services/units.ts`, `src/app/api/v1/units/route.ts`
+- [X] T081 [US5] Preselect the default collection method on draft creation, accept `collection_method_id` (or null) in draft PATCH, and freeze `collection_method_snapshot` plus per-line `tax_name`/`tax_rate` at issue, in `src/services/documents.ts` and `src/services/document-issuance.ts`
+- [X] T082 [US5] Build settings sections "Métodos de cobro" and "Impuestos" (forms, default marker, archive) in `src/components/settings/collection-method-settings.tsx`, `src/components/settings/tax-rate-settings.tsx` and `src/components/settings/settings-panel.tsx`
+- [X] T083 [US5] Add the collection method selector (local `Combobox`, "Ninguno" option) to the editor in `src/components/documents/editor/invoice-editor.tsx`, and switch line tax selection to `tax_rate_id` from `/api/v1/tax-rates` in `src/components/documents/editor/invoice-lines.tsx`
+- [X] T084 [US5] Add `unit` and `tax_rate_id` to catalog items (form, Zod, API) in `src/components/catalog/catalog-list.tsx`, `src/app/api/v1/catalog-items/route.ts` and `src/app/api/v1/catalog-items/[id]/route.ts`, proposing them when the product is added to a line
 
 **Checkpoint**: V5 completa; importes exactos al céntimo con IGI 4,5 %.
 

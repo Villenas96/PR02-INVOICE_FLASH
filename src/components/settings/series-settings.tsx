@@ -18,10 +18,12 @@ import {
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 import type { DocumentSeries, DocumentType } from "./types";
 
-const typeLabels: Record<DocumentType, string> = {
+const typeLabels: Record<string, string> = {
   invoice: "Factura",
   proforma: "Proforma",
   receipt: "Recibo",
+  quote: "Presupuesto",
+  delivery_note: "Albarán",
 };
 
 interface SeriesSettingsProps {
@@ -92,16 +94,40 @@ function SeriesRowEditor({
       <TableCell>
         {series.is_default ? (
           <Badge variant="secondary">Predeterminada</Badge>
+        ) : series.archived_at ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">Archivada</Badge>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={action.isLoading}
+              onClick={() => update({ archived: false })}
+            >
+              Restaurar
+            </Button>
+          </div>
         ) : (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={action.isLoading}
-            onClick={() => update({ is_default: true })}
-          >
-            Usar por defecto
-          </Button>
+          <div className="flex flex-wrap gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={action.isLoading}
+              onClick={() => update({ is_default: true })}
+            >
+              Usar por defecto
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={action.isLoading}
+              onClick={() => update({ archived: true })}
+            >
+              Archivar
+            </Button>
+          </div>
         )}
       </TableCell>
       <TableCell className="text-right">

@@ -19,26 +19,34 @@ import { Label } from "@/components/ui/label";
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { createCents, formatEur, parseEuroInput } from "@/lib/money";
 
+import type { EditorTaxRate } from "./types";
+
 export interface CatalogItemSelection {
   id: string;
   description: string;
   unitPriceCents: number;
   taxRate: string;
+  taxRateId: string | null;
+  unit: string | null;
 }
 
-interface CatalogItemResponse {
+export interface CatalogItemResponse {
   id: string;
   description: string;
   unit_price_cents: number;
   tax_rate: string;
+  tax_rate_id: string | null;
+  unit: string | null;
 }
 
-function selectionFrom(item: CatalogItemResponse): CatalogItemSelection {
+export function selectionFrom(item: CatalogItemResponse): CatalogItemSelection {
   return {
     id: item.id,
     description: item.description,
     unitPriceCents: item.unit_price_cents,
     taxRate: item.tax_rate,
+    taxRateId: item.tax_rate_id,
+    unit: item.unit,
   };
 }
 
@@ -63,16 +71,18 @@ async function loadCatalogItems(
 
 function InlineProductForm({
   initialDescription,
-  defaultTaxRate,
+  taxRates,
   onCreated,
 }: {
   initialDescription: string;
-  defaultTaxRate: string;
+  taxRates: EditorTaxRate[];
   onCreated: (item: CatalogItemSelection) => void;
 }) {
   const [description, setDescription] = useState(initialDescription);
   const [price, setPrice] = useState("0,00");
-  const [taxRate, setTaxRate] = useState(defaultTaxRate || "21.00");
+  const [taxRateId, setTaxRateId] = useState(
+    (taxRates.find((rate) => rate.is_default) ?? taxRates[0])?.id ?? "",
+  );
   const action = useMutation<CatalogItemResponse>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -83,7 +93,7 @@ function InlineProductForm({
         jsonRequest("POST", {
           description: description.trim(),
           unit_price_cents: parseEuroInput(price),
-          tax_rate: taxRate,
+          ...(taxRateId ? { tax_rate_id: taxRateId } : {}),
         }),
       ),
     );
@@ -123,17 +133,18 @@ function InlineProductForm({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="inline-product-tax">IVA</Label>
+            <Label htmlFor="inline-product-tax">Impuesto</Label>
             <select
               id="inline-product-tax"
               className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              value={taxRate}
-              onChange={(event) => setTaxRate(event.target.value)}
+              value={taxRateId}
+              onChange={(event) => setTaxRateId(event.target.value)}
             >
-              <option value="0.00">0 %</option>
-              <option value="4.00">4 %</option>
-              <option value="10.00">10 %</option>
-              <option value="21.00">21 %</option>
+              {taxRates.map((rate) => (
+                <option key={rate.id} value={rate.id}>
+                  {rate.name} {Number(rate.rate).toLocaleString("es-ES")} %
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -163,10 +174,10 @@ function InlineProductForm({
  * Values are copied into the line: later catalog edits never change it.
  */
 export function CatalogPicker({
-  defaultTaxRate,
+  taxRates,
   onSelect,
 }: {
-  defaultTaxRate: string;
+  taxRates: EditorTaxRate[];
   onSelect: (item: CatalogItemSelection) => void;
 }) {
   const [createDescription, setCreateDescription] = useState<string | null>(
@@ -208,7 +219,7 @@ export function CatalogPicker({
             <InlineProductForm
               key={createDescription}
               initialDescription={createDescription}
-              defaultTaxRate={defaultTaxRate}
+              taxRates={taxRates}
               onCreated={(item) => {
                 onSelect(item);
                 setCreateDescription(null);

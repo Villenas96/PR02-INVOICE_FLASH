@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { chooseLineTax } from "./helpers";
 
 function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
@@ -157,7 +158,7 @@ test("crea, busca, factura, edita y archiva un cliente sin alterar el documento 
   await firstLine.getByLabel("Descripción").fill("Servicio de prueba");
   await firstLine.getByLabel("Cantidad").fill("1");
   await firstLine.getByLabel("Precio unitario").fill("200,00");
-  await firstLine.getByLabel("IVA").selectOption("21.00");
+  await chooseLineTax(page, firstLine, "IVA 21 %");
 
   await page.route("**/api/v1/documents", async (route) => {
     if (route.request().method() === "POST") {

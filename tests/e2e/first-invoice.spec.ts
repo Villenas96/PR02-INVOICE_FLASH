@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { chooseLineTax } from "./helpers";
 
 const TEN_MINUTES_MS = 10 * 60 * 1_000;
 const TWO_MINUTES_MS = 2 * 60 * 1_000;
@@ -202,13 +203,13 @@ async function fillTwoInvoiceLines(page: Page): Promise<void> {
   await lines.nth(0).getByLabel("Descripción").fill("Consultoría técnica");
   await lines.nth(0).getByLabel("Cantidad").fill("2");
   await lines.nth(0).getByLabel("Precio unitario").fill("100,00");
-  await lines.nth(0).getByLabel("IVA").selectOption("21.00");
+  await chooseLineTax(page, lines.nth(0), "IVA 21 %");
 
   await page.getByRole("button", { name: "Añadir línea" }).click();
   await lines.nth(1).getByLabel("Descripción").fill("Materiales");
   await lines.nth(1).getByLabel("Cantidad").fill("1");
   await lines.nth(1).getByLabel("Precio unitario").fill("50,00");
-  await lines.nth(1).getByLabel("IVA").selectOption("10.00");
+  await chooseLineTax(page, lines.nth(1), "IVA 10 %");
   await expect(page.getByText("297,00 €")).toBeVisible();
 }
 

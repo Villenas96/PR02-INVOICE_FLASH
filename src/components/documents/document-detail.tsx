@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { DocumentActions } from "@/components/documents/document-actions";
+import { DeleteDraftButton } from "@/components/documents/draft-actions";
 import { IssueAction } from "@/components/documents/editor/issue-action";
 import {
   type DocumentPayment,
@@ -309,10 +310,19 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
         </div>
         <div className="flex flex-wrap items-start gap-2">
           {document.status === "draft" ? (
+            <>
+              <Button asChild variant="outline">
+                <Link href={`/documents/${document.id}/edit`}>Editar</Link>
+              </Button>
+              <DeleteDraftButton documentId={document.id} />
+            </>
+          ) : (
             <Button asChild variant="outline">
-              <Link href={`/documents/${document.id}/edit`}>Editar</Link>
+              <Link href={`/documents/${document.id}/print`} target="_blank">
+                Imprimir
+              </Link>
             </Button>
-          ) : null}
+          )}
           {document.status === "draft" && company ? (
             <IssueAction
               documentId={document.id}

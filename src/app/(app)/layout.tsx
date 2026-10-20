@@ -42,7 +42,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="border-b bg-background">
+      <header className="border-b bg-background print:hidden">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Link href="/dashboard" className="font-semibold tracking-tight">
             Invoice Flash

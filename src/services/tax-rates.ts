@@ -25,7 +25,7 @@ export async function ensureTaxRates(
   const values = sql.join(
     SEEDED_IVA_RATES.map(
       (rate) =>
-        sql`(${createUuidV7(now.getTime())}::uuid, ${rate}::numeric(5, 2), ${rate === "21.00"})`,
+        sql`(${createUuidV7(now.getTime())}::uuid, ${rate}::numeric(5, 2), ${rate === "21.00"}::boolean)`,
     ),
     sql`, `,
   );

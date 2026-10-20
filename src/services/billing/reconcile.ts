@@ -213,7 +213,7 @@ export async function reconcileSubscription(
         ${subscription.interval}::billing_interval,
         ${subscription.status}::subscription_status,
         ${subscription.currentPeriodEnd?.toISOString() ?? null}::timestamptz,
-        ${subscription.cancelAtPeriodEnd},
+        ${subscription.cancelAtPeriodEnd}::boolean,
         ${graceUntil?.toISOString() ?? null}::timestamptz,
         ${nowIso}, ${nowIso}, ${nowIso}
       FROM locked_company

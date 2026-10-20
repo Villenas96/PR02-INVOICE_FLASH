@@ -190,7 +190,23 @@ export async function selectClientInEditor(
   await page.getByRole("combobox", { name: "Cliente" }).click();
   await page.keyboard.type(query);
   await page.getByRole("option", { name: optionName }).click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Cliente" })).toContainText(
-    query,
+    optionName,
+  );
+}
+
+/** Picks a tax type on an editor line (e.g. "IVA 10 %"). */
+export async function chooseLineTax(
+  page: Page,
+  line: ReturnType<Page["getByRole"]>,
+  label: string,
+): Promise<void> {
+  await line.getByRole("combobox", { name: "Impuesto" }).click();
+  await page.getByRole("option", { name: label, exact: true }).click();
+  // A closing popover keeps its options in the DOM for a moment.
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(line.getByRole("combobox", { name: "Impuesto" })).toContainText(
+    label,
   );
 }

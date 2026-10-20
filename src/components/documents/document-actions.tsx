@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { useDuplicateDocument } from "@/components/documents/draft-actions";
 import type { DocumentPayment } from "@/components/documents/payments-panel";
 import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
@@ -87,33 +88,21 @@ function ConvertAction({
 }
 
 function DuplicateAction({ documentId }: { documentId: string }) {
-  const router = useRouter();
-  const action = useMutation<{ id: string }>();
-
-  async function handleDuplicate() {
-    const result = await action.run(() =>
-      apiRequest<{ id: string }>(`/api/v1/documents/${documentId}/duplicate`, {
-        method: "POST",
-      }),
-    );
-    if (result) {
-      router.push(`/documents/${result.id}`);
-    }
-  }
+  const { duplicate, isLoading, error } = useDuplicateDocument();
 
   return (
     <div>
       <Button
         type="button"
         variant="outline"
-        disabled={action.isLoading}
-        onClick={handleDuplicate}
+        disabled={isLoading}
+        onClick={() => duplicate(documentId)}
       >
-        {action.isLoading ? "Duplicando…" : "Duplicar como nuevo borrador"}
+        {isLoading ? "Duplicando…" : "Duplicar como nuevo borrador"}
       </Button>
-      {action.error ? (
+      {error ? (
         <p role="alert" className="mt-2 max-w-md text-sm text-destructive">
-          {action.error}
+          {error}
         </p>
       ) : null}
     </div>

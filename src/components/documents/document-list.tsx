@@ -1,10 +1,22 @@
 "use client";
 
+import { MoreHorizontalIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  DeleteDraftDialog,
+  useDuplicateDocument,
+} from "@/components/documents/draft-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -81,6 +93,70 @@ function paymentVariant(status: PaymentStatus) {
     return "destructive" as const;
   }
   return status === "paid" ? ("default" as const) : ("outline" as const);
+}
+
+function DocumentRowActions({
+  document,
+  onDeleted,
+}: {
+  document: DocumentListItem;
+  onDeleted: () => void;
+}) {
+  const router = useRouter();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const { duplicate, isLoading, error } = useDuplicateDocument();
+  const label = document.full_number ?? "borrador";
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={isLoading}
+            aria-label={`Acciones de ${label}`}
+          >
+            <MoreHorizontalIcon aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {document.status === "draft" ? (
+            <DropdownMenuItem
+              onSelect={() => router.push(`/documents/${document.id}/edit`)}
+            >
+              Editar
+            </DropdownMenuItem>
+          ) : null}
+          {document.doc_type !== "receipt" ? (
+            <DropdownMenuItem onSelect={() => duplicate(document.id)}>
+              Duplicar
+            </DropdownMenuItem>
+          ) : null}
+          {document.status === "draft" ? (
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => setDeleteOpen(true)}
+            >
+              Eliminar
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <DeleteDraftDialog
+        documentId={document.id}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onDeleted={onDeleted}
+      />
+    </>
+  );
 }
 
 export function DocumentList({
@@ -263,6 +339,9 @@ export function DocumentList({
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Cobro</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead>
+                  <span className="sr-only">Acciones</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -317,6 +396,16 @@ export function DocumentList({
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     {formatEur(createCents(document.total_cents))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DocumentRowActions
+                      document={document}
+                      onDeleted={() =>
+                        setItems((current) =>
+                          current.filter((item) => item.id !== document.id),
+                        )
+                      }
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -28,7 +28,7 @@ export function OnboardingGuard({
     <>
       {missingFields.length > 0 ? (
         <aside
-          className="mb-6 flex flex-col gap-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+          className="mb-6 flex flex-col gap-4 rounded-xl border border-amber-300 print:hidden bg-amber-50 p-4 text-amber-950 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
           aria-labelledby="onboarding-title"
         >
           <div className="space-y-1">

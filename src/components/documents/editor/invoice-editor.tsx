@@ -14,24 +14,39 @@ import {
 } from "@/components/documents/editor/document-type-selector";
 import {
   createInitialEditorLine,
+  emptyLine,
   InvoiceLines,
 } from "@/components/documents/editor/invoice-lines";
 import { usageForType } from "@/components/plan/types";
 import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { calculateBilling } from "@/lib/billing";
 import { documentTypePlural } from "@/lib/documents/labels";
 import { createCents, formatEur, parseEuroInput } from "@/lib/money";
+import { mergeUnits } from "@/lib/units";
 
 import type {
   CreatedDraft,
   EditableDraft,
+  EditorCollectionMethod,
   EditorCompany,
   EditorLine,
+  EditorSeries,
+  EditorTaxRate,
+  UnitsData,
 } from "./types";
+
+const METHOD_KIND_LABELS: Record<EditorCollectionMethod["kind"], string> = {
+  bank_account: "Cuenta bancaria",
+  bizum: "Bizum",
+  paypal: "PayPal",
+  cash: "Efectivo",
+  other: "Otro",
+};
 
 function madridToday(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en", {
@@ -70,8 +85,16 @@ function editorLinesFromDraft(draft: EditableDraft): EditorLine[] {
     quantity: decimalToInput(line.quantity),
     unitPrice: centsToEuroInput(line.unit_price_cents),
     taxRate: line.tax_rate,
+    taxName: line.tax_name,
+    taxRateId: line.tax_rate_id,
+    unit: line.unit ?? "",
+    catalogItemId: line.catalog_item_id,
     discountPercentage: decimalToInput(line.discount_pct),
   }));
+}
+
+function seriesLabel(series: EditorSeries): string {
+  return `${series.prefix}…${series.is_default ? " (predeterminada)" : ""}`;
 }
 
 /**
@@ -87,9 +110,17 @@ export function InvoiceEditor({
 } = {}) {
   const router = useRouter();
   const [company, setCompany] = useState<EditorCompany>();
+  const [taxRates, setTaxRates] = useState<EditorTaxRate[]>([]);
+  const [units, setUnits] = useState<string[]>(() => mergeUnits([]));
+  const [methods, setMethods] = useState<EditorCollectionMethod[]>([]);
+  const [seriesOptions, setSeriesOptions] = useState<EditorSeries[]>([]);
   const [documentType, setDocumentType] =
     useState<EditableDocumentType>(initialType);
   const [client, setClient] = useState<SelectedClient | null>(null);
+  const [seriesId, setSeriesId] = useState<string | null>(null);
+  const [methodId, setMethodId] = useState<string | null | undefined>(
+    undefined,
+  );
   const [issueDate, setIssueDate] = useState(() => madridToday());
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -102,17 +133,24 @@ export function InvoiceEditor({
 
   useEffect(() => {
     const controller = new AbortController();
-    const companyRequest = apiRequest<EditorCompany>("/api/v1/company", {
-      signal: controller.signal,
-    });
-    const draftRequest = documentId
-      ? apiRequest<EditableDraft>(`/api/v1/documents/${documentId}`, {
-          signal: controller.signal,
-        })
-      : Promise.resolve(undefined);
-    Promise.all([companyRequest, draftRequest])
-      .then(([companyResult, draft]) => {
+    const options = { signal: controller.signal };
+    Promise.all([
+      apiRequest<EditorCompany>("/api/v1/company", options),
+      apiRequest<{ items: EditorTaxRate[] }>("/api/v1/tax-rates", options),
+      apiRequest<UnitsData>("/api/v1/units", options),
+      apiRequest<{ items: EditorCollectionMethod[] }>(
+        "/api/v1/collection-methods?archived=false",
+        options,
+      ),
+      documentId
+        ? apiRequest<EditableDraft>(`/api/v1/documents/${documentId}`, options)
+        : Promise.resolve(undefined),
+    ])
+      .then(([companyResult, taxResult, unitResult, methodResult, draft]) => {
         setCompany(companyResult);
+        setTaxRates(taxResult.items);
+        setUnits(mergeUnits(unitResult.custom.map((unit) => unit.name)));
+        setMethods(methodResult.items);
         if (draft) {
           if (draft.status !== "draft") {
             setLoadError(
@@ -133,12 +171,17 @@ export function InvoiceEditor({
                 }
               : null,
           );
+          setSeriesId(draft.series_id);
+          setMethodId(draft.collection_method_id);
           setIssueDate(draft.issue_date);
           setDueDate(draft.due_date ?? "");
           setNotes(draft.notes ?? "");
           setLines(editorLinesFromDraft(draft));
           return;
         }
+        setMethodId(
+          methodResult.items.find((method) => method.is_default)?.id ?? null,
+        );
         setDueDate(
           (current) =>
             current ||
@@ -146,9 +189,7 @@ export function InvoiceEditor({
         );
         setLines((current) =>
           current.map((line) =>
-            line.taxRate
-              ? line
-              : { ...line, taxRate: companyResult.default_tax_rate },
+            line.taxRate ? line : emptyLine(taxResult.items),
           ),
         );
       })
@@ -171,6 +212,17 @@ export function InvoiceEditor({
     return () => controller.abort();
   }, [documentId]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    apiRequest<{ items: EditorSeries[] }>(
+      `/api/v1/series?doc_type=${documentType}&archived=false&limit=100`,
+      { signal: controller.signal },
+    )
+      .then((page) => setSeriesOptions(page.items))
+      .catch(() => setSeriesOptions([]));
+    return () => controller.abort();
+  }, [documentType]);
+
   const calculation = useMemo(() => {
     if (!company) {
       return undefined;
@@ -182,6 +234,7 @@ export function InvoiceEditor({
           quantity: line.quantity,
           unitPriceCents: parseEuroInput(line.unitPrice),
           taxRate: line.taxRate,
+          taxName: line.taxName,
           discountPercentage: line.discountPercentage || "0",
         })),
       });
@@ -198,6 +251,8 @@ export function InvoiceEditor({
         jsonRequest(documentId ? "PATCH" : "POST", {
           doc_type: documentType,
           client_id: client?.id ?? null,
+          series_id: seriesId,
+          ...(methodId === undefined ? {} : { collection_method_id: methodId }),
           issue_date: issueDate,
           due_date: dueDate || null,
           notes: notes.trim() || null,
@@ -206,13 +261,22 @@ export function InvoiceEditor({
             quantity: line.quantity,
             unit_price_cents: parseEuroInput(line.unitPrice),
             tax_rate: line.taxRate,
+            tax_name: line.taxName,
+            tax_rate_id: line.taxRateId,
+            unit: line.unit.trim() || null,
+            catalog_item_id: line.catalogItemId,
             discount_pct: line.discountPercentage || "0",
           })),
         }),
       ),
     );
     if (saved) {
-      router.push(`/documents/${saved.id}`);
+      const created = saved.series_created;
+      router.push(
+        created
+          ? `/documents/${saved.id}?series_created=${encodeURIComponent(created.prefix)}${created.renamed ? "&renamed=1" : ""}`
+          : `/documents/${saved.id}`,
+      );
     }
   }
 
@@ -238,6 +302,13 @@ export function InvoiceEditor({
   }
 
   const typeUsage = usageForType(company, documentType);
+  const selectedSeries =
+    seriesOptions.find((series) => series.id === seriesId) ??
+    (seriesId === null
+      ? (seriesOptions.find((series) => series.is_default) ?? null)
+      : null);
+  const selectedMethod =
+    methods.find((method) => method.id === methodId) ?? null;
 
   return (
     <form className="space-y-6" onSubmit={handleSave}>
@@ -260,10 +331,45 @@ export function InvoiceEditor({
         <div className="grid gap-5 lg:grid-cols-2">
           <DocumentTypeSelector
             value={documentType}
-            onChange={setDocumentType}
+            onChange={(next) => {
+              setDocumentType(next);
+              setSeriesId(null);
+            }}
           />
           <ClientPicker value={client} onChange={setClient} />
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label id="invoice-series-label">Serie</Label>
+            <Combobox<EditorSeries>
+              aria-labelledby="invoice-series-label"
+              value={selectedSeries}
+              onChange={(series) =>
+                setSeriesId(series && !series.is_default ? series.id : null)
+              }
+              getKey={(series) => series.id}
+              getLabel={seriesLabel}
+              options={seriesOptions}
+              placeholder="Se creará al guardar"
+              searchPlaceholder="Buscar serie"
+              emptyMessage="No hay series activas de este tipo."
+            />
+          </div>
+          <div className="space-y-2">
+            <Label id="invoice-method-label">Método de cobro</Label>
+            <Combobox<EditorCollectionMethod>
+              aria-labelledby="invoice-method-label"
+              value={selectedMethod}
+              onChange={(method) => setMethodId(method?.id ?? null)}
+              getKey={(method) => method.id}
+              getLabel={(method) => method.label}
+              getDescription={(method) => METHOD_KIND_LABELS[method.kind]}
+              options={methods}
+              clearLabel="Ninguno"
+              placeholder="Ninguno"
+              searchPlaceholder="Buscar método"
+              emptyMessage="Añade métodos de cobro en Ajustes."
+            />
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:col-span-2">
             <div className="space-y-2">
               <Label htmlFor="invoice-issue-date">Fecha de emisión</Label>
               <Input
@@ -299,13 +405,17 @@ export function InvoiceEditor({
       <InvoiceLines
         lines={lines}
         calculation={calculation}
-        defaultTaxRate={company.default_tax_rate}
+        taxRates={taxRates}
+        units={units}
+        onUnitCreated={(unit) =>
+          setUnits((current) => mergeUnits([...current, unit]))
+        }
         onChange={setLines}
       />
 
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_22rem]">
         <section className="rounded-xl border bg-card p-5 shadow-sm">
-          <Label htmlFor="invoice-notes">Notas (opcional)</Label>
+          <Label htmlFor="invoice-notes">Observaciones (opcional)</Label>
           <textarea
             id="invoice-notes"
             className="mt-2 min-h-32 w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -330,9 +440,12 @@ export function InvoiceEditor({
                 <dd>{formatEur(createCents(calculation.subtotalCents))}</dd>
               </div>
               {calculation.taxBreakdown.map((tax) => (
-                <div key={tax.rate} className="flex justify-between gap-4">
+                <div
+                  key={`${tax.name}-${tax.rate}`}
+                  className="flex justify-between gap-4"
+                >
                   <dt className="text-muted-foreground">
-                    IVA {Number(tax.rate).toLocaleString("es-ES")} %
+                    {tax.name} {Number(tax.rate).toLocaleString("es-ES")} %
                   </dt>
                   <dd>{formatEur(createCents(tax.taxCents))}</dd>
                 </div>
@@ -353,7 +466,7 @@ export function InvoiceEditor({
             </dl>
           ) : (
             <p className="mt-3 text-sm text-muted-foreground">
-              Completa cantidad, precio e IVA para ver los totales.
+              Completa cantidad, precio e impuesto para ver los totales.
             </p>
           )}
         </aside>

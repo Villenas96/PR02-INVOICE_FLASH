@@ -25,6 +25,7 @@ export interface DocumentSeries {
   prefix: string;
   next_number: number;
   is_default: boolean;
+  archived_at: string | null;
 }
 
 export interface SeriesPage {
