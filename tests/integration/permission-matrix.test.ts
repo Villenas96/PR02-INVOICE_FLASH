@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  bankStatements,
+  bankTransactions,
   catalogItems,
   collectionMethods,
   companies,
@@ -10,6 +12,7 @@ import {
   exportJobs,
   importJobs,
   payments,
+  reconciliations,
   recurringTemplates,
   taxRates,
   userNotifications,
@@ -435,6 +438,40 @@ async function foreignResources(): Promise<{
       idempotencyKey: `matrix:${crypto.randomUUID()}`,
     })
     .returning({ id: userNotifications.id });
+  const [statement] = await database
+    .insert(bankStatements)
+    .values({
+      id: crypto.randomUUID(),
+      companyId,
+      collectionMethodId: method?.id as string,
+      format: "csv",
+      fileKey: "x",
+    })
+    .returning({ id: bankStatements.id });
+  const [bankTransaction] = await database
+    .insert(bankTransactions)
+    .values({
+      id: crypto.randomUUID(),
+      companyId,
+      collectionMethodId: method?.id as string,
+      statementId: statement?.id as string,
+      operationOn: "2026-03-01",
+      amountCents: 100,
+      concept: "x",
+      fingerprint: "matrix",
+    })
+    .returning({ id: bankTransactions.id });
+  const [reconciliation] = await database
+    .insert(reconciliations)
+    .values({
+      id: crypto.randomUUID(),
+      companyId,
+      bankTransactionId: bankTransaction?.id as string,
+      documentId,
+      paymentId: payment?.id as string,
+      amountCents: 100,
+    })
+    .returning({ id: reconciliations.id });
   const [template] = await database
     .insert(recurringTemplates)
     .values({
@@ -466,6 +503,8 @@ async function foreignResources(): Promise<{
       notifications: notification?.id as string,
       payments: payment?.id as string,
       "recurring-templates": template?.id as string,
+      "bank-transactions": bankTransaction?.id as string,
+      reconciliations: reconciliation?.id as string,
       series: series?.id as string,
       "tax-rates": tax?.id as string,
     },

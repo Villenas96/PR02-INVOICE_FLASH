@@ -7,12 +7,7 @@ import { catalogItems } from "@/db/schema/catalog-item";
 import { importJobs } from "@/db/schema/import-job";
 import { ApiError } from "@/lib/api/errors";
 import { decodeCsvBytes } from "@/lib/csv/decode";
-import {
-  CsvTooLargeError,
-  MAX_IMPORT_BYTES,
-  MAX_IMPORT_ROWS,
-  parseCsv,
-} from "@/lib/csv/detect";
+import { CsvTooLargeError, MAX_IMPORT_BYTES, parseCsv } from "@/lib/csv/detect";
 import {
   CATALOG_IMPORT_FIELDS,
   type CatalogMapping,
@@ -31,6 +26,19 @@ import { ResourceNotFoundError } from "@/services/context";
 import { requireFeature } from "@/services/entitlements";
 import { createNotification } from "@/services/notifications";
 import type { PrivateBucket } from "@/services/storage";
+import { analyzeBankStatement, applyBankStatement } from "../bank/import";
+import {
+  finishWith,
+  type ImportJobDependencies,
+  importObjectKey,
+  importTooLargeError,
+  type JobsQueue,
+  readImportFile,
+} from "./shared";
+
+export type { ImportJobDependencies, JobsQueue };
+export { importObjectKey, importTooLargeError };
+
 import { listActiveTaxRates } from "@/services/tax-rates";
 import {
   createImportAnalyzeMessage,
@@ -40,10 +48,6 @@ import {
 export const APPLY_BATCH_SIZE = 500;
 const PREVIEW_SAMPLE_ROWS = 50;
 const MAX_REPORTED_ERRORS = 500;
-
-export interface JobsQueue {
-  send(message: unknown): Promise<void>;
-}
 
 export interface ImportPreview {
   headers: string[];
@@ -64,18 +68,6 @@ export interface ImportResult {
   skipped: number;
   errored: number;
   errors: CatalogRowError[];
-}
-
-export function importTooLargeError(): ApiError {
-  return new ApiError(
-    "import_too_large",
-    400,
-    `El archivo supera el límite de 5 MB o ${MAX_IMPORT_ROWS.toLocaleString("es-ES")} filas. Divídelo en varios archivos.`,
-  );
-}
-
-export function importObjectKey(companyId: string, importId: string): string {
-  return `imports/${companyId}/${importId}.csv`;
 }
 
 // ---------------------------------------------------------------- upload ---
@@ -232,17 +224,6 @@ export async function confirmImport(input: {
 
 // ------------------------------------------------------------ job helpers ---
 
-async function readImportFile(
-  bucket: PrivateBucket,
-  key: string,
-): Promise<Uint8Array | null> {
-  const object = await bucket.get(key);
-  if (!object) {
-    return null;
-  }
-  return new Uint8Array(await new Response(object.body).arrayBuffer());
-}
-
 async function activeCatalogKeys(
   database: Database,
   companyId: string,
@@ -261,25 +242,7 @@ async function activeCatalogKeys(
   );
 }
 
-async function finishWith(
-  database: Database,
-  importId: string,
-  values: Partial<typeof importJobs.$inferInsert>,
-  now: Date,
-): Promise<void> {
-  await database
-    .update(importJobs)
-    .set({ ...values, updatedAt: now })
-    .where(eq(importJobs.id, importId));
-}
-
 // --------------------------------------------------------------- analyze ---
-
-export interface ImportJobDependencies {
-  database?: Database;
-  bucket: PrivateBucket;
-  now?: Date;
-}
 
 /**
  * `import.analyze`: validates the whole file with the suggested mapping and
@@ -303,6 +266,9 @@ export async function analyzeImport(
     .returning();
   if (!job) {
     return;
+  }
+  if (job.kind === "bank_statement") {
+    return analyzeBankStatement(job, dependencies, now);
   }
 
   const bytes = await readImportFile(dependencies.bucket, job.fileKey);
@@ -513,6 +479,9 @@ export async function applyImport(
     .limit(1);
   if (!job) {
     return;
+  }
+  if (job.kind === "bank_statement") {
+    return applyBankStatement(job, dependencies, now);
   }
   const mapping = job.mapping as CatalogMapping;
   const policy = job.duplicatePolicy ?? "skip";

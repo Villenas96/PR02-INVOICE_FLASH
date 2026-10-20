@@ -33,9 +33,10 @@ export const reconciliations = pgTable(
     documentId: uuid("document_id")
       .notNull()
       .references(() => documents.id, { onDelete: "restrict" }),
+    // Deleting the payment (here or from the invoice) undoes the allocation.
     paymentId: uuid("payment_id")
       .notNull()
-      .references(() => payments.id, { onDelete: "restrict" }),
+      .references(() => payments.id, { onDelete: "cascade" }),
     amountCents: bigint("amount_cents", { mode: "number" }).notNull(),
     createdBy: uuid("created_by").references(() => users.id, {
       onDelete: "set null",

@@ -420,16 +420,16 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 12
 
-- [ ] T157 [P] [US12] Write unit tests for the Norma 43 parser (records 11/22/23/33/88, Latin-1, debit/credit sign, record 33 totals cross-check, malformed lines) using `tests/fixtures/bank/sample.n43`, in `tests/unit/norma43.test.ts`
-- [ ] T158 [P] [US12] Write unit tests for fingerprint + occurrence and for match scoring (invoice number in concept, exact pending amount, client NIF/name, unique amount, due proximity; credits only) in `tests/unit/bank-matching.test.ts`
-- [ ] T159 [P] [US12] Write integration tests: import with preview then confirm, re-import and overlapping statements add 0 movements, suggestions ranking, confirm creates payment, 1-N and N-1 allocations, over-allocation rejected under concurrency, undo deletes the payment, ignore/unignore, Pro-only, ≥ 80 % correct suggestions on the fixture (SC-009), in `tests/integration/bank-reconciliation.test.ts`
+- [X] T157 [P] [US12] Write unit tests for the Norma 43 parser (records 11/22/23/33/88, Latin-1, debit/credit sign, record 33 totals cross-check, malformed lines) using `tests/fixtures/bank/sample.n43`, in `tests/unit/norma43.test.ts`
+- [X] T158 [P] [US12] Write unit tests for fingerprint + occurrence and for match scoring (invoice number in concept, exact pending amount, client NIF/name, unique amount, due proximity; credits only) in `tests/unit/bank-matching.test.ts`
+- [X] T159 [P] [US12] Write integration tests: import with preview then confirm, re-import and overlapping statements add 0 movements, suggestions ranking, confirm creates payment, 1-N and N-1 allocations, over-allocation rejected under concurrency, undo deletes the payment, ignore/unignore, Pro-only, ≥ 80 % correct suggestions on the fixture (SC-009), in `tests/integration/bank-reconciliation.test.ts`
 
 ### Implementation for User Story 12
 
-- [ ] T160 [P] [US12] Create `src/lib/bank/norma43.ts`, `src/lib/bank/fingerprint.ts` and `src/lib/bank/matching.ts`
-- [ ] T161 [US12] Extend imports for `kind=bank_statement` (requires a `bank_account` collection method, `requireFeature('bank_reconciliation')`; Norma 43 or CSV/XLSX with column mapping from `src/lib/csv/`) in the analyze/apply handlers `src/workers/handlers/import-analyze.ts` and `src/workers/handlers/import-apply.ts`, persisting `bank_statement` (with closing balance) and `bank_transaction` with `ON CONFLICT DO NOTHING`
-- [ ] T162 [US12] Implement `GET /api/v1/bank-transactions`, `GET /api/v1/reconciliation/suggestions`, `POST /api/v1/reconciliations` (lock transaction row `FOR UPDATE`, sum ≤ amount, v1 overpayment rule, create payments, Idempotency-Key), `DELETE /api/v1/reconciliations/:id` and ignore/unignore, in `src/services/bank/reconciliation.ts` and the corresponding `src/app/api/v1/**/route.ts` files
-- [ ] T163 [US12] Build the reconciliation page (pending invoices vs unmatched credits, suggestions with confidence, confirm, manual allocation dialog, undo, ignore, statement import entry) behind `ProRoute` in `src/app/(app)/reconciliation/page.tsx` and `src/components/reconciliation/*.tsx`
+- [X] T160 [P] [US12] Create `src/lib/bank/norma43.ts`, `src/lib/bank/fingerprint.ts` and `src/lib/bank/matching.ts`
+- [X] T161 [US12] Extend imports for `kind=bank_statement` (requires a `bank_account` collection method, `requireFeature('bank_reconciliation')`; Norma 43 or CSV/XLSX with column mapping from `src/lib/csv/`) in the analyze/apply handlers `src/workers/handlers/import-analyze.ts` and `src/workers/handlers/import-apply.ts`, persisting `bank_statement` (with closing balance) and `bank_transaction` with `ON CONFLICT DO NOTHING`
+- [X] T162 [US12] Implement `GET /api/v1/bank-transactions`, `GET /api/v1/reconciliation/suggestions`, `POST /api/v1/reconciliations` (lock transaction row `FOR UPDATE`, sum ≤ amount, v1 overpayment rule, create payments, Idempotency-Key), `DELETE /api/v1/reconciliations/:id` and ignore/unignore, in `src/services/bank/reconciliation.ts` and the corresponding `src/app/api/v1/**/route.ts` files
+- [X] T163 [US12] Build the reconciliation page (pending invoices vs unmatched credits, suggestions with confidence, confirm, manual allocation dialog, undo, ignore, statement import entry) behind `ProRoute` in `src/app/(app)/reconciliation/page.tsx` and `src/components/reconciliation/*.tsx`
 
 **Checkpoint**: V12 completa; SC-009 ≥ 80 %.
 
