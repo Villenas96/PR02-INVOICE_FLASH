@@ -229,6 +229,8 @@ export function Combobox<T>({
       <PopoverContent
         className="w-(--radix-popover-trigger-width) min-w-64 p-0"
         align="start"
+        // The panel is a dialog: it needs a name (axe aria-dialog-name).
+        aria-label={searchPlaceholder ?? placeholder ?? "Opciones"}
       >
         <Command shouldFilter={!remote}>
           <CommandInput

@@ -10,6 +10,7 @@ import {
   exportJobs,
   importJobs,
   payments,
+  recurringTemplates,
   taxRates,
   userNotifications,
 } from "@/db/schema";
@@ -434,6 +435,17 @@ async function foreignResources(): Promise<{
       idempotencyKey: `matrix:${crypto.randomUUID()}`,
     })
     .returning({ id: userNotifications.id });
+  const [template] = await database
+    .insert(recurringTemplates)
+    .values({
+      id: crypto.randomUUID(),
+      companyId,
+      clientId: foreign.clientId,
+      lines: [],
+      frequency: "monthly",
+      startOn: "2026-12-01",
+    })
+    .returning({ id: recurringTemplates.id });
   const invite = await inviteAdvisor(
     authenticatedRequest(foreign, "/api/v1/advisor-access", {
       method: "POST",
@@ -453,6 +465,7 @@ async function foreignResources(): Promise<{
       imports: importJob?.id as string,
       notifications: notification?.id as string,
       payments: payment?.id as string,
+      "recurring-templates": template?.id as string,
       series: series?.id as string,
       "tax-rates": tax?.id as string,
     },

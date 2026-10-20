@@ -13,7 +13,7 @@ import { taxRates } from "@/db/schema/tax-rate";
 import { ApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { type BillingResult, calculateBilling } from "@/lib/billing";
-import { createUuidV7 } from "@/lib/ids";
+import { createUuidV7, deterministicUuid } from "@/lib/ids";
 import { createCents } from "@/lib/money";
 import type { DocumentType } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
@@ -56,6 +56,8 @@ const draftFieldsSchema = z.object({
   documentType: z.enum(EDITABLE_DOCUMENT_TYPES),
   /** Quotes only (FR-035): `>= issueDate`. */
   validUntil: z.iso.date().nullable().default(null),
+  /** Recurring cycles: the cycle id is the document's idempotency anchor. */
+  recurringCycleId: nullableUuidSchema.default(null),
   clientId: nullableUuidSchema.default(null),
   /** Omitted → the company's default collection method (FR-022). */
   collectionMethodId: nullableUuidSchema.optional(),
@@ -566,7 +568,13 @@ export async function createDraftDocument(
   }
 
   const billing = calculateDraftBilling(input.lines, company.retentionRate);
-  const documentId = createUuidV7(now.getTime());
+  const documentId = input.recurringCycleId
+    ? await deterministicUuid(
+        input.companyId,
+        "recurring",
+        input.recurringCycleId,
+      )
+    : createUuidV7(now.getTime());
   const eventId = createUuidV7(now.getTime());
   const preparedLines = prepareLines(input.lines, billing, now);
   const result = await database.execute<{ id: string }>(sql`
@@ -599,6 +607,7 @@ export async function createDraftDocument(
         ${sql.identifier(documents.issueDate.name)},
         ${sql.identifier(documents.dueDate.name)},
         ${sql.identifier(documents.validUntil.name)},
+        ${sql.identifier(documents.recurringCycleId.name)},
         ${sql.identifier(documents.notes.name)},
         ${sql.identifier(documents.collectionMethodId.name)},
         ${sql.identifier(documents.seriesId.name)},
@@ -619,6 +628,7 @@ export async function createDraftDocument(
         ${input.issueDate},
         ${input.dueDate},
         ${input.validUntil}::date,
+        ${input.recurringCycleId}::uuid,
         ${input.notes},
         ${collectionMethodId}::uuid,
         ${input.seriesId ?? null}::uuid,

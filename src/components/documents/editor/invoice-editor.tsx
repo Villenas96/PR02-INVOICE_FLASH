@@ -25,10 +25,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { calculateBilling } from "@/lib/billing";
+import { addCalendarDays } from "@/lib/dates";
 import { documentTypePlural } from "@/lib/documents/labels";
 import { createCents, formatEur, parseEuroInput } from "@/lib/money";
 import { mergeUnits } from "@/lib/units";
-
 import type {
   CreatedDraft,
   EditableDraft,
@@ -59,12 +59,6 @@ function madridToday(now = new Date()): string {
     parts.map((part) => [part.type, part.value]),
   );
   return `${values.year}-${values.month}-${values.day}`;
-}
-
-function addCalendarDays(date: string, days: number): string {
-  const value = new Date(`${date}T12:00:00.000Z`);
-  value.setUTCDate(value.getUTCDate() + days);
-  return value.toISOString().slice(0, 10);
 }
 
 function centsToEuroInput(cents: number): string {

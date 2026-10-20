@@ -54,6 +54,11 @@ export type IssuanceIdempotencyStrategy =
   | {
       kind: "receipt_for_payment";
       paymentId: string;
+    }
+  | {
+      /** The document generated for a recurring cycle (SC-008). */
+      kind: "recurring_cycle";
+      cycleId: string;
     };
 
 export interface IssueDocumentInput {
@@ -604,10 +609,12 @@ async function resolveExistingIdempotentDocument(
                   AND ${documentLinks.releasedAt} IS NULL
               )`,
             )
-          : and(
-              eq(documents.documentType, "receipt"),
-              eq(documents.paymentId, idempotency.paymentId),
-            ),
+          : idempotency.kind === "recurring_cycle"
+            ? eq(documents.recurringCycleId, idempotency.cycleId)
+            : and(
+                eq(documents.documentType, "receipt"),
+                eq(documents.paymentId, idempotency.paymentId),
+              ),
       ),
     )
     .limit(1);
@@ -666,7 +673,9 @@ async function executeAtomicIssue(
       ? input.idempotency.sourceDocumentId
       : input.idempotency?.kind === "receipt_for_payment"
         ? input.idempotency.paymentId
-        : null;
+        : input.idempotency?.kind === "recurring_cycle"
+          ? input.idempotency.cycleId
+          : null;
 
   const lockStatement = sql`
     SELECT issuer.id
@@ -714,6 +723,11 @@ async function executeAtomicIssue(
                 AND existing_link.kind = 'converted'::document_link_kind
                 AND existing_link.released_at IS NULL
             )
+          )
+          OR (
+            ${idempotencyKind}::text = 'recurring_cycle'
+            AND existing_document.recurring_cycle_id =
+              ${idempotencyReference}::uuid
           )
           OR (
             ${idempotencyKind}::text = 'receipt_for_payment'

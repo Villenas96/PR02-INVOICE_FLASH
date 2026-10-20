@@ -7,6 +7,7 @@ import { emailDeliveries } from "@/db/schema/email-delivery";
 import { subscriptions } from "@/db/schema/subscription";
 import { logSafe } from "@/lib/log";
 import { planAdvisorExports } from "@/services/advisor-schedule";
+import { planRecurringCycles } from "@/services/recurring/planner";
 import {
   type ListableBucket,
   purgeOrphanLogos,
@@ -134,6 +135,10 @@ export async function runDailyPlanner(
     [
       "billing_grace",
       () => planBillingGrace({ ...dependencies, database, now }),
+    ],
+    [
+      "recurring_cycles",
+      () => planRecurringCycles({ ...dependencies, database, now }),
     ],
     [
       "advisor_exports",

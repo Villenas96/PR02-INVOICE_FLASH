@@ -366,17 +366,17 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 10
 
-- [ ] T141 [P] [US10] Write unit tests for `src/lib/recurrence.ts`: every frequency and custom N days/weeks/months, day 31 → last day of month, end by date or by cycles, pending cycles after downtime, in `tests/unit/recurrence.test.ts`
-- [ ] T142 [P] [US10] Write integration tests over 12 cycles with injected clock: one document per cycle, correct numbering, redelivery and planner re-run without duplicates, 3-day outage recovery, archived client → draft + notification, downgrade → `skipped_plan`, edit/pause/finish affect only future cycles, in `tests/integration/recurring.test.ts`
+- [X] T141 [P] [US10] Write unit tests for `src/lib/recurrence.ts`: every frequency and custom N days/weeks/months, day 31 → last day of month, end by date or by cycles, pending cycles after downtime, in `tests/unit/recurrence.test.ts`
+- [X] T142 [P] [US10] Write integration tests over 12 cycles with injected clock: one document per cycle, correct numbering, redelivery and planner re-run without duplicates, 3-day outage recovery, archived client → draft + notification, downgrade → `skipped_plan`, edit/pause/finish affect only future cycles, in `tests/integration/recurring.test.ts`
 
 ### Implementation for User Story 10
 
-- [ ] T143 [P] [US10] Create `src/lib/recurrence.ts` (`nextRunOn`, `cycleDate`, `pendingCycles`, `isFinished`)
-- [ ] T144 [US10] Add the `recurring_cycle` idempotency strategy to `src/services/document-issuance.ts`
-- [ ] T145 [US10] Implement templates service and routes (create, list, get, patch with `version` increment, status changes, cycles list) with `requireFeature('recurring')`, in `src/services/recurring/templates.ts`, `src/app/api/v1/recurring-templates/route.ts`, `src/app/api/v1/recurring-templates/[id]/route.ts` and `src/app/api/v1/recurring-templates/[id]/cycles/route.ts`
-- [ ] T146 [US10] Add the recurrence step to the daily planner (active templates with `next_run_on <= today`, insert `recurring_cycle` claims, `skipped_plan` when the company lacks the feature, with a single `recurring_skipped` notification per template and downgrade, idempotency key `recurring_skipped:{template_id}:{plan_change_id}`) in `src/workers/scheduled.ts`
-- [ ] T147 [US10] Implement the `recurring.run` handler (create draft from template version, issue through the guard, enqueue email for `issue_and_send`, fall back to draft or pause with notification on failure, advance `next_run_on`) in `src/workers/handlers/recurring-run.ts`
-- [ ] T148 [US10] Build the recurring pages (list, editor reusing line components, cycles with generated documents, pause/resume/finish) behind `ProRoute` in `src/app/(app)/recurring/page.tsx`, `src/app/(app)/recurring/[id]/page.tsx` and `src/components/recurring/recurring-form.tsx`
+- [X] T143 [P] [US10] Create `src/lib/recurrence.ts` (`nextRunOn`, `cycleDate`, `pendingCycles`, `isFinished`)
+- [X] T144 [US10] Add the `recurring_cycle` idempotency strategy to `src/services/document-issuance.ts`
+- [X] T145 [US10] Implement templates service and routes (create, list, get, patch with `version` increment, status changes, cycles list) with `requireFeature('recurring')`, in `src/services/recurring/templates.ts`, `src/app/api/v1/recurring-templates/route.ts`, `src/app/api/v1/recurring-templates/[id]/route.ts` and `src/app/api/v1/recurring-templates/[id]/cycles/route.ts`
+- [X] T146 [US10] Add the recurrence step to the daily planner (active templates with `next_run_on <= today`, insert `recurring_cycle` claims, `skipped_plan` when the company lacks the feature, with a single `recurring_skipped` notification per template and downgrade, idempotency key `recurring_skipped:{template_id}:{plan_change_id}`) in `src/workers/scheduled.ts`
+- [X] T147 [US10] Implement the `recurring.run` handler (create draft from template version, issue through the guard, enqueue email for `issue_and_send`, fall back to draft or pause with notification on failure, advance `next_run_on`) in `src/workers/handlers/recurring-run.ts`
+- [X] T148 [US10] Build the recurring pages (list, editor reusing line components, cycles with generated documents, pause/resume/finish) behind `ProRoute` in `src/app/(app)/recurring/page.tsx`, `src/app/(app)/recurring/[id]/page.tsx` and `src/components/recurring/recurring-form.tsx`
 
 **Checkpoint**: Incremento 3 completo (V7–V10); SC-008 verificado. Activar `PRO_CHECKOUT_ENABLED` en staging y producción (Pro contratable) y validar la contratación de Pro de V8. Desplegable.
 

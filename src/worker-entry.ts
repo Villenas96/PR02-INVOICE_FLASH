@@ -18,6 +18,7 @@ import { handleImportAnalyze } from "@/workers/handlers/import-analyze";
 import { handleImportApply } from "@/workers/handlers/import-apply";
 import { createNoticeEmailHandler } from "@/workers/handlers/notice-email";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
+import { handleRecurringRun } from "@/workers/handlers/recurring-run";
 import { dispatchJob } from "@/workers/jobs";
 import type {
   EmailSendMessage,
@@ -138,6 +139,11 @@ async function runJob(message: JobMessage, env: QueueEnv): Promise<void> {
         pdfQueue: producer(env.PDF_RENDER_QUEUE),
         emailQueue: producer(env.EMAIL_SEND_QUEUE),
         secret: getDownloadTokenSecret(env),
+      }),
+    "recurring.run": (job) =>
+      handleRecurringRun(job, {
+        pdfQueue: producer(env.PDF_RENDER_QUEUE),
+        emailQueue: producer(env.EMAIL_SEND_QUEUE),
       }),
     "import.apply": (job) =>
       handleImportApply(job, {
