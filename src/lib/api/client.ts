@@ -1,8 +1,11 @@
+import type { DocumentType, Feature, Plan } from "@/lib/plan";
+
 interface ErrorPayload {
   error?: {
     code?: string;
     message?: string;
     fields?: Record<string, string>;
+    details?: Record<string, unknown>;
   };
 }
 
@@ -12,9 +15,68 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     public readonly code?: string,
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
+}
+
+/** A plan restriction the UI must present as an upgrade invitation
+ * (FR-009, FR-058), never as an error toast. */
+export type Upsell =
+  | {
+      kind: "feature";
+      message: string;
+      feature: Feature;
+      requiredPlan: Plan;
+      upgradeUrl: string;
+    }
+  | {
+      kind: "limit";
+      message: string;
+      documentType: DocumentType;
+      limit: number;
+      used: number;
+      upgradeUrl: string;
+    };
+
+export function upsellFromError(error: unknown): Upsell | null {
+  if (!(error instanceof ApiClientError) || !error.details) {
+    return null;
+  }
+  const details = error.details;
+  const upgradeUrl =
+    typeof details.upgrade_url === "string" ? details.upgrade_url : "/billing";
+
+  if (
+    error.code === "feature_not_in_plan" &&
+    typeof details.feature === "string" &&
+    typeof details.required_plan === "string"
+  ) {
+    return {
+      kind: "feature",
+      message: error.message,
+      feature: details.feature as Feature,
+      requiredPlan: details.required_plan as Plan,
+      upgradeUrl,
+    };
+  }
+  if (
+    error.code === "plan_limit_reached" &&
+    typeof details.document_type === "string" &&
+    typeof details.limit === "number" &&
+    typeof details.used === "number"
+  ) {
+    return {
+      kind: "limit",
+      message: error.message,
+      documentType: details.document_type as DocumentType,
+      limit: details.limit,
+      used: details.used,
+      upgradeUrl,
+    };
+  }
+  return null;
 }
 
 async function responseError(response: Response): Promise<ApiClientError> {
@@ -37,6 +99,7 @@ async function responseError(response: Response): Promise<ApiClientError> {
   return new ApiClientError(
     [message, ...fieldMessages].join(" "),
     payload?.error?.code,
+    payload?.error?.details,
   );
 }
 

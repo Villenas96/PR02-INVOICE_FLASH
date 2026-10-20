@@ -56,7 +56,7 @@ describe("plan tier migration (expand/contract)", () => {
     ["free", 5],
     ["basic", 5],
     ["essential", 100],
-    ["pro", 100],
+    ["pro", 1_000],
   ])(
     "issues with the %s plan value and enforces its limit",
     async (plan, limit) => {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,7 +52,9 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const { error, isLoading, run, status } = useAsyncAction<null>();
+  const { error, isLoading, run, status } = useMutation<null>({
+    refresh: false,
+  });
   const copy = content[mode];
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

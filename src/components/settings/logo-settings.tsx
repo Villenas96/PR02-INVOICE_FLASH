@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,8 +21,8 @@ interface LogoResponse {
 
 export function LogoSettings({ logoKey, onChange }: LogoSettingsProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const upload = useAsyncAction<LogoResponse>();
-  const removal = useAsyncAction<null>();
+  const upload = useMutation<LogoResponse>();
+  const removal = useMutation<null>();
   const isLoading = upload.isLoading || removal.isLoading;
   const error = upload.error ?? removal.error;
   const success = upload.status === "success" || removal.status === "success";

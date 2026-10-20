@@ -91,7 +91,7 @@ export async function GET(request: Request): Promise<Response> {
       dashboardQuerySchema,
       Object.fromEntries(searchParams.entries()),
     );
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
     const paidCents = paidCentsExpression(context.companyId);
     const isOverdue = isOverdueExpression();

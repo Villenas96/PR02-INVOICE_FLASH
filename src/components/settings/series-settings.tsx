@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,7 @@ function SeriesRowEditor({
 }) {
   const [prefix, setPrefix] = useState(series.prefix);
   const [nextNumber, setNextNumber] = useState(String(series.next_number));
-  const action = useAsyncAction<DocumentSeries>();
+  const action = useMutation<DocumentSeries>();
 
   async function update(body: Record<string, unknown>) {
     const updated = await action.run(() =>
@@ -143,7 +143,7 @@ function NewSeriesForm({
   );
   const [nextNumber, setNextNumber] = useState("1");
   const [isDefault, setIsDefault] = useState(false);
-  const action = useAsyncAction<DocumentSeries>();
+  const action = useMutation<DocumentSeries>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

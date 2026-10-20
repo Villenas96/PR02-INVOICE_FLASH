@@ -168,7 +168,7 @@ export async function GET(request: Request): Promise<Response> {
       searchParams.get("doc_type") ?? undefined,
     );
     const cursorId = decodeCursor(pagination.cursor);
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
 
     await ensureDefaultSeries(
@@ -208,7 +208,7 @@ export async function POST(request: Request): Promise<Response> {
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const inputPromise = parseJson(request, createSeriesSchema);
     const [context, input] = await Promise.all([contextPromise, inputPromise]);
     const database = createDatabase();

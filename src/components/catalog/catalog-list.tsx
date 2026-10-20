@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,7 +88,7 @@ function CreateCatalogItemDialog({
     unitPrice: "",
     taxRate: "21.00",
   });
-  const action = useAsyncAction<CatalogItemData>();
+  const action = useMutation<CatalogItemData>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -208,7 +208,7 @@ function EditCatalogItemDialog({
     unitPrice: (item.unit_price_cents / 100).toFixed(2).replace(".", ","),
     taxRate: item.tax_rate as (typeof TAX_RATE_OPTIONS)[number],
   });
-  const action = useAsyncAction<CatalogItemData>();
+  const action = useMutation<CatalogItemData>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -326,7 +326,7 @@ function ArchiveToggle({
   item: CatalogItemData;
   onChanged: (item: CatalogItemData) => void;
 }) {
-  const action = useAsyncAction<CatalogItemData>();
+  const action = useMutation<CatalogItemData>();
   const isArchived = item.archived_at !== null;
 
   async function handleClick() {

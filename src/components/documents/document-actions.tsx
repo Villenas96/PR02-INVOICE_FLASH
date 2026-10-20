@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import type { DocumentPayment } from "@/components/documents/payments-panel";
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { createCents, formatEur } from "@/lib/money";
@@ -33,7 +33,7 @@ function ConvertAction({
   documentLimit: number;
 }) {
   const router = useRouter();
-  const action = useAsyncAction<{ id: string }>();
+  const action = useMutation<{ id: string }>();
   const limitReached = issuedDocuments >= documentLimit;
 
   async function convert(issue: boolean) {
@@ -88,7 +88,7 @@ function ConvertAction({
 
 function DuplicateAction({ documentId }: { documentId: string }) {
   const router = useRouter();
-  const action = useAsyncAction<{ id: string }>();
+  const action = useMutation<{ id: string }>();
 
   async function handleDuplicate() {
     const result = await action.run(() =>
@@ -128,7 +128,7 @@ function ReceiptAction({
   payment: DocumentPayment;
 }) {
   const router = useRouter();
-  const action = useAsyncAction<{ id: string }>();
+  const action = useMutation<{ id: string }>();
 
   async function handleGenerate() {
     const result = await action.run(() =>

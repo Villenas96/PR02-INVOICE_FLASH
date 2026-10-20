@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +38,7 @@ export function CompanyProfileForm({
   const [address, setAddress] = useState(company.address ?? "");
   const [email, setEmail] = useState(company.email);
   const [phone, setPhone] = useState(company.phone ?? "");
-  const { error, isLoading, run, status } = useAsyncAction<CompanySettings>();
+  const { error, isLoading, run, status } = useMutation<CompanySettings>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -153,7 +153,7 @@ export function InvoicingPreferencesForm({
   const [taxRate, setTaxRate] = useState(company.default_tax_rate);
   const [retentionRate, setRetentionRate] = useState(company.retention_rate);
   const [currency, setCurrency] = useState(company.currency);
-  const { error, isLoading, run, status } = useAsyncAction<CompanySettings>();
+  const { error, isLoading, run, status } = useMutation<CompanySettings>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

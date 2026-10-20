@@ -11,7 +11,12 @@ import {
 } from "@/components/documents/payments-panel";
 import { PdfDownload } from "@/components/documents/pdf-download";
 import { SharePanel } from "@/components/documents/share-panel";
-import { useAsyncAction } from "@/components/ui/async-action";
+import {
+  type CompanyPlanData,
+  companyHasFeature,
+  usageForType,
+} from "@/components/plan/types";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -111,11 +116,9 @@ interface DocumentDetailData {
   payment_status: "overdue" | "paid" | "partial" | "pending" | null;
 }
 
-interface CompanyCapabilityData {
+interface CompanyCapabilityData
+  extends Pick<CompanyPlanData, "usage" | "features"> {
   is_ready_to_issue: boolean;
-  docs_issued_this_month: number;
-  doc_limit: number;
-  can_send_email: boolean;
 }
 
 const eventLabels: Record<string, string> = {
@@ -162,7 +165,7 @@ function VoidAction({
   onVoided: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const action = useAsyncAction<unknown>();
+  const action = useMutation<unknown>();
 
   async function handleVoid() {
     const result = await action.run(() =>
@@ -310,8 +313,8 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
                 document.doc_type === "proforma" ? "proforma" : "invoice"
               }
               isCompanyReady={company.is_ready_to_issue}
-              issuedDocuments={company.docs_issued_this_month}
-              documentLimit={company.doc_limit}
+              issuedDocuments={usageForType(company, document.doc_type).used}
+              documentLimit={usageForType(company, document.doc_type).limit}
               onIssued={loadDocument}
             />
           ) : null}
@@ -492,8 +495,8 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           documentId={document.id}
           documentType={document.doc_type}
           convertedToId={document.converted_to_id}
-          issuedDocuments={company.docs_issued_this_month}
-          documentLimit={company.doc_limit}
+          issuedDocuments={usageForType(company, "invoice").used}
+          documentLimit={usageForType(company, "invoice").limit}
           payments={document.payments}
         />
       ) : null}
@@ -502,7 +505,7 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
       company ? (
         <SharePanel
           documentId={document.id}
-          canSendEmail={company.can_send_email}
+          canSendEmail={companyHasFeature(company, "email")}
         />
       ) : null}
 

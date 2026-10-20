@@ -1,36 +1,152 @@
 /**
- * Compat release (specs/002 T011): the `plan` enum is the superset
- * `free, pro, basic, essential`. Until `0005_billing` maps the data, `basic`
- * behaves like the v1 free plan and `essential` like the v1 paid plan.
+ * Single versioned source of truth for plans, per-document-type limits and
+ * gated features (specs/002 research R2, FR-007–FR-013). API, UI, MCP and
+ * jobs read limits and features only from here.
  */
-export type Plan = "free" | "pro" | "basic" | "essential";
-export type IssuedDocumentType = "invoice" | "proforma" | "receipt";
+
+export const PLANS = ["basic", "essential", "pro"] as const;
+export type Plan = (typeof PLANS)[number];
+
+/**
+ * Values the `plan` enum can still hold. `free` disappears in the Polish
+ * contract migration; until then it is read as `basic`.
+ */
+export type StoredPlan = Plan | "free";
+
+export const DOCUMENT_TYPES = [
+  "invoice",
+  "proforma",
+  "receipt",
+  "quote",
+  "delivery_note",
+] as const;
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
+/** @deprecated kept for v1 call sites; every document type is issuable. */
+export type IssuedDocumentType = DocumentType;
 export type DocumentStatus = "draft" | "issued" | "voided";
 
-export interface PlanCapabilities {
-  canGeneratePdf: boolean;
-  canSendEmail: boolean;
-  canShareLink: boolean;
-  docLimit: number;
-  warningThreshold: number;
+/** Gated features (FR-012). Everything not listed is available in every plan. */
+export const FEATURES = [
+  "email",
+  "period_export",
+  "advanced_export",
+  "document_xlsx",
+  "advisor_schedule",
+  "advisor_access",
+  "catalog_import",
+  "recurring",
+  "reminders",
+  "bank_reconciliation",
+  "dashboard_full",
+  "ai_assistant",
+  "full_ui",
+] as const;
+export type Feature = (typeof FEATURES)[number];
+
+export type UiMode = "simple" | "full";
+
+interface PlanDefinition {
+  label: string;
+  /** Monthly limit applied to each document type separately. */
+  limitPerType: number;
+  features: readonly Feature[];
 }
 
-const PLAN_CAPABILITIES: Record<"free" | "pro", PlanCapabilities> = {
-  free: {
-    canGeneratePdf: true,
-    canSendEmail: false,
-    canShareLink: true,
-    docLimit: 5,
-    warningThreshold: 4,
+const PLAN_DEFINITIONS: Record<Plan, PlanDefinition> = {
+  basic: { label: "Básico", limitPerType: 5, features: [] },
+  essential: {
+    label: "Esencial",
+    limitPerType: 100,
+    features: ["email", "period_export"],
   },
-  pro: {
-    canGeneratePdf: true,
-    canSendEmail: true,
-    canShareLink: true,
-    docLimit: 100,
-    warningThreshold: 80,
-  },
+  // Pro has no commercial limit; 1.000 per type and month is a technical cap
+  // against abuse (FR-008).
+  pro: { label: "Pro", limitPerType: 1_000, features: FEATURES },
 };
+
+export const WARNING_RATIO = 0.8;
+
+export function normalizePlan(plan: StoredPlan): Plan {
+  return plan === "free" ? "basic" : plan;
+}
+
+export function planLabel(plan: StoredPlan): string {
+  return PLAN_DEFINITIONS[normalizePlan(plan)].label;
+}
+
+export function documentLimit(
+  plan: StoredPlan,
+  _documentType: DocumentType,
+): number {
+  return PLAN_DEFINITIONS[normalizePlan(plan)].limitPerType;
+}
+
+export function warningThreshold(
+  plan: StoredPlan,
+  documentType: DocumentType,
+): number {
+  return Math.ceil(documentLimit(plan, documentType) * WARNING_RATIO);
+}
+
+export interface TypeUsage {
+  documentType: DocumentType;
+  used: number;
+  limit: number;
+  /** Non-blocking 80 % warning (FR-009). */
+  warning: boolean;
+  /** Issuing this type is blocked until next month or an upgrade. */
+  reached: boolean;
+}
+
+export function usageFor(
+  plan: StoredPlan,
+  documentType: DocumentType,
+  used: number,
+): TypeUsage {
+  const limit = documentLimit(plan, documentType);
+  return {
+    documentType,
+    used,
+    limit,
+    warning: used >= warningThreshold(plan, documentType),
+    reached: used >= limit,
+  };
+}
+
+export function hasFeature(plan: StoredPlan, feature: Feature): boolean {
+  return PLAN_DEFINITIONS[normalizePlan(plan)].features.includes(feature);
+}
+
+export function featuresFor(plan: StoredPlan): Feature[] {
+  return FEATURES.filter((feature) => hasFeature(plan, feature));
+}
+
+/** Cheapest plan that includes `feature`, for upgrade prompts. */
+export function requiredPlanFor(feature: Feature): Plan {
+  const plan = PLANS.find((candidate) => hasFeature(candidate, feature));
+  if (!plan) {
+    throw new Error(`Ningún plan incluye la función ${feature}.`);
+  }
+  return plan;
+}
+
+export function defaultUiMode(plan: StoredPlan): UiMode {
+  return hasFeature(plan, "full_ui") ? "full" : "simple";
+}
+
+/**
+ * Interface actually shown. A stored `full` preference is ignored (never
+ * deleted) after a downgrade, so it applies again on upgrade.
+ */
+export function effectiveUiMode(
+  plan: StoredPlan,
+  preference: UiMode | null,
+): UiMode {
+  if (!hasFeature(plan, "full_ui")) {
+    return "simple";
+  }
+  return preference ?? defaultUiMode(plan);
+}
 
 const madridPartsFormatter = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/Madrid",
@@ -64,7 +180,11 @@ function getPart(
   return Number(value);
 }
 
-function madridMidnightAsUtc(year: number, month: number, day: number): Date {
+export function madridMidnightAsUtc(
+  year: number,
+  month: number,
+  day: number,
+): Date {
   const reference = new Date(Date.UTC(year, month - 1, day));
   const parts = madridDateTimeFormatter.formatToParts(reference);
   const localValueAsUtc = Date.UTC(
@@ -80,21 +200,13 @@ function madridMidnightAsUtc(year: number, month: number, day: number): Date {
   );
 }
 
-export function getPlanCapabilities(plan: Plan): PlanCapabilities {
-  return PLAN_CAPABILITIES[
-    plan === "free" || plan === "basic" ? "free" : "pro"
-  ];
-}
-
-export function usageWarning(plan: Plan, issuedDocumentCount: number): boolean {
-  return issuedDocumentCount >= getPlanCapabilities(plan).warningThreshold;
-}
-
-export function canCreateNewEmission(
-  plan: Plan,
-  issuedDocumentCount: number,
-): boolean {
-  return issuedDocumentCount < getPlanCapabilities(plan).docLimit;
+/** Calendar date (`YYYY-MM-DD`) of `now` in Europe/Madrid. */
+export function madridDate(now: Date): string {
+  const parts = madridPartsFormatter.formatToParts(now);
+  const year = getPart(parts, "year");
+  const month = getPart(parts, "month");
+  const day = getPart(parts, "day");
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 export function getMadridMonthBounds(now: Date): {
@@ -114,7 +226,7 @@ export function getMadridMonthBounds(now: Date): {
 }
 
 export function isIssuedDocumentCountable(document: {
-  documentType: IssuedDocumentType;
+  documentType: DocumentType;
   status: DocumentStatus;
 }): boolean {
   return document.status === "issued" || document.status === "voided";

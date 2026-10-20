@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { PlanIndicator } from "@/components/plan/plan-indicator";
+import { companyHasFeature } from "@/components/plan/types";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 import {
@@ -162,21 +163,21 @@ export function SettingsPanel() {
               : "Faltan datos fiscales para poder emitir"}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {company.plan === "free" ? "Plan gratuito" : "Plan Pro"} · consumo
-            del mes natural de Madrid
+            Plan {company.plan_label} · consumo del mes natural de Madrid
           </p>
         </div>
         <PlanIndicator
-          plan={company.plan}
-          issuedDocuments={company.docs_issued_this_month}
-          documentLimit={company.doc_limit}
+          planLabel={company.plan_label}
+          usage={company.usage}
           className="w-full sm:w-56"
         />
         <ul className="text-xs text-muted-foreground sm:text-right">
           <li>PDF y enlace profesional incluidos</li>
           <li>
             Email:{" "}
-            {company.can_send_email ? "incluido" : "disponible en Plan Pro"}
+            {companyHasFeature(company, "email")
+              ? "incluido"
+              : "disponible desde el plan Esencial"}
           </li>
         </ul>
       </section>

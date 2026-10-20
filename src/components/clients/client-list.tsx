@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,7 +55,7 @@ function CreateClientDialog({
   const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const action = useAsyncAction<ClientListItem>();
+  const action = useMutation<ClientListItem>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,7 +196,7 @@ function ArchiveToggle({
   client: ClientListItem;
   onChanged: (client: ClientListItem) => void;
 }) {
-  const action = useAsyncAction<ClientListItem>();
+  const action = useMutation<ClientListItem>();
   const isArchived = client.archived_at !== null;
 
   async function handleClick() {

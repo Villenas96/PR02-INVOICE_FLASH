@@ -13,12 +13,14 @@ import {
   createInitialEditorLine,
   InvoiceLines,
 } from "@/components/documents/editor/invoice-lines";
-import { useAsyncAction } from "@/components/ui/async-action";
+import { usageForType } from "@/components/plan/types";
+import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { calculateBilling } from "@/lib/billing";
+import { documentTypePlural } from "@/lib/documents/labels";
 import { createCents, formatEur, parseEuroInput } from "@/lib/money";
 
 import type { CreatedDraft, EditorCompany, EditorLine } from "./types";
@@ -56,7 +58,7 @@ export function InvoiceEditor() {
   ]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string>();
-  const saveAction = useAsyncAction<CreatedDraft>();
+  const saveAction = useMutation<CreatedDraft>();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -163,18 +165,19 @@ export function InvoiceEditor() {
     );
   }
 
+  const typeUsage = usageForType(company, documentType);
+
   return (
     <form className="space-y-6" onSubmit={handleSave}>
-      {company.usage_warning ||
-      company.docs_issued_this_month >= company.doc_limit ? (
+      {typeUsage.warning ? (
         <aside
           className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
           aria-live="polite"
         >
           <p className="font-medium">
-            {company.docs_issued_this_month >= company.doc_limit
-              ? "Has alcanzado el límite mensual de emisiones."
-              : `Has emitido ${company.docs_issued_this_month} de ${company.doc_limit} documentos este mes.`}
+            {typeUsage.reached
+              ? `Has alcanzado el límite mensual de ${documentTypePlural(documentType)}.`
+              : `Has emitido ${typeUsage.used} de ${typeUsage.limit} ${documentTypePlural(documentType)} este mes.`}
           </p>
           <p className="mt-1">
             Puedes seguir creando y guardando borradores sin consumir cupo.

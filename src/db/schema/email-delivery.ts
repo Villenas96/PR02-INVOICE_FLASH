@@ -17,6 +17,7 @@ export const emailPurposeEnum = pgEnum("email_purpose", [
   "document",
   "verify_email",
   "reset_password",
+  "billing_notice",
 ]);
 export const emailDeliveryStatusEnum = pgEnum("email_delivery_status", [
   "queued",

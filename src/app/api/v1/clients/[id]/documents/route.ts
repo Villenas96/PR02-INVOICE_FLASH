@@ -132,7 +132,7 @@ export async function GET(
     const searchParams = new URL(request.url).searchParams;
     const pagination = parsePagination(searchParams);
     const cursorId = decodeCursor(pagination.cursor);
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "read" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );

@@ -1,15 +1,13 @@
-import { and, count, eq, gte, inArray, lt } from "drizzle-orm";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { OnboardingGuard } from "@/components/onboarding-guard";
 import { PlanIndicator } from "@/components/plan/plan-indicator";
-import { createDatabase } from "@/db";
-import { companies } from "@/db/schema/company";
-import { documents } from "@/db/schema/document";
 import { auth } from "@/lib/auth";
-import { getMadridMonthBounds, getPlanCapabilities } from "@/lib/plan";
+import { planLabel } from "@/lib/plan";
+import { usageResponse } from "@/services/company-summary";
+import { getLayoutData } from "@/services/layout-data";
 
 const navigation = [
   { href: "/dashboard", label: "Resumen" },
@@ -28,46 +26,16 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const database = createDatabase();
-  const [company] = await database
-    .select({
-      legalName: companies.legalName,
-      taxId: companies.taxId,
-      address: companies.address,
-      plan: companies.plan,
-      id: companies.id,
-    })
-    .from(companies)
-    .where(eq(companies.userId, session.user.id))
-    .limit(1);
-  const missingFields: Array<"address" | "legal_name" | "tax_id"> = [];
-  if (!company?.legalName?.trim()) {
-    missingFields.push("legal_name");
-  }
-  if (!company?.taxId?.trim()) {
-    missingFields.push("tax_id");
-  }
-  if (!company?.address?.trim()) {
-    missingFields.push("address");
-  }
-  const plan = company?.plan ?? "free";
-  const { docLimit } = getPlanCapabilities(plan);
-  let issuedDocuments = 0;
-  if (company) {
-    const { start, endExclusive } = getMadridMonthBounds(new Date());
-    const [usage] = await database
-      .select({ value: count(documents.id) })
-      .from(documents)
-      .where(
-        and(
-          eq(documents.companyId, company.id),
-          inArray(documents.status, ["issued", "voided"]),
-          gte(documents.issuedAt, start),
-          lt(documents.issuedAt, endExclusive),
-        ),
-      );
-    issuedDocuments = Number(usage?.value ?? 0);
-  }
+  const summary = await getLayoutData(session.user.id);
+  // A brand-new account has no company row until its first API call; it is
+  // treated as an incomplete Basic company.
+  const missingFields = summary?.missingFields ?? [
+    "legal_name",
+    "tax_id",
+    "address",
+  ];
+  const plan = summary?.plan ?? "basic";
+  const usage = summary?.usage.map(usageResponse) ?? [];
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -76,11 +44,7 @@ export default async function AppLayout({
           <Link href="/dashboard" className="font-semibold tracking-tight">
             Invoice Flash
           </Link>
-          <PlanIndicator
-            plan={plan}
-            issuedDocuments={issuedDocuments}
-            documentLimit={docLimit}
-          />
+          <PlanIndicator planLabel={planLabel(plan)} usage={usage} />
         </div>
         <nav
           className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-3 sm:px-6"

@@ -17,6 +17,7 @@ import { users } from "./auth";
 // del plan»): v1 code still writes `free`/`pro` until `0005_billing` maps
 // them to `basic`/`essential`; `free` is dropped in the Polish contract step.
 export const planEnum = pgEnum("plan", ["free", "pro", "basic", "essential"]);
+export const uiModeEnum = pgEnum("ui_mode", ["simple", "full"]);
 
 export const companies = pgTable(
   "company",
@@ -39,7 +40,9 @@ export const companies = pgTable(
       .notNull()
       .default("0"),
     currency: text("currency").notNull().default("EUR"),
-    plan: planEnum("plan").notNull().default("free"),
+    plan: planEnum("plan").notNull().default("basic"),
+    /** `null` = plan default (simple for Basic/Essential, full for Pro). */
+    uiMode: uiModeEnum("ui_mode"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -36,6 +36,13 @@
       "when": 1792456778577,
       "tag": "0004_plan_tiers_expand",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792457072403,
+      "tag": "0005_billing",
+      "breakpoints": true
     }
   ]
 }

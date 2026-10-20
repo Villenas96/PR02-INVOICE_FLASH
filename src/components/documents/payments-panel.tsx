@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -165,7 +165,7 @@ function CreatePaymentForm({
     method: "",
   });
   const [confirmOverpayment, setConfirmOverpayment] = useState<number>();
-  const action = useAsyncAction<DocumentPayment>();
+  const action = useMutation<DocumentPayment>();
 
   async function submit(amountCents: number, confirmed: boolean) {
     const created = await action.run(() =>
@@ -294,7 +294,7 @@ function EditPaymentForm({
     method: payment.method ?? "",
   });
   const [confirmOverpayment, setConfirmOverpayment] = useState<number>();
-  const action = useAsyncAction<DocumentPayment>();
+  const action = useMutation<DocumentPayment>();
 
   async function submit(amountCents: number, confirmed: boolean) {
     const updated = await action.run(() =>
@@ -414,7 +414,7 @@ function DeletePaymentAction({
   onDeleted: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const action = useAsyncAction<null>();
+  const action = useMutation<null>();
 
   async function handleDelete() {
     const result = await action.run(() =>

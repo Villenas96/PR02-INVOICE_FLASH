@@ -53,7 +53,7 @@ async function verificationUrl(email: string): Promise<string> {
 
 async function setCompanyPlan(
   email: string,
-  plan: "free" | "pro",
+  plan: "basic" | "essential",
 ): Promise<void> {
   const database = postgres(e2eDatabaseUrl(), { max: 1 });
   try {
@@ -156,7 +156,7 @@ test("el plan de pago envía por correo y una reentrega con la misma clave no du
 }) => {
   const email = await registerVerifyAndSignIn(page);
   const documentId = await configureCompanyAndIssueInvoice(page, email);
-  await setCompanyPlan(email, "pro");
+  await setCompanyPlan(email, "essential");
 
   await page.goto(`/documents/${documentId}`);
   await page.reload();

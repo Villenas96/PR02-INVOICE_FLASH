@@ -1,6 +1,6 @@
 "use client";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
 
@@ -21,7 +21,7 @@ export function IssueAction({
   documentLimit,
   onIssued,
 }: IssueActionProps) {
-  const action = useAsyncAction<unknown>();
+  const action = useMutation<unknown>();
   const limitReached = issuedDocuments >= documentLimit;
   const label = documentType === "proforma" ? "proforma" : "factura";
 

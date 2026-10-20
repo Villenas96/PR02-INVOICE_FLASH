@@ -370,9 +370,10 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
 
   it("rejects a new direct emission at quota with 402 and no side effects", async () => {
     const clientId = await seedClient(owner);
-    // The free plan's monthly quota is shared across every document type, so
-    // issuing this proforma itself consumes the final (fifth) slot.
-    for (let number = 1; number <= 4; number += 1) {
+    // The quota is counted per document type (FR-008): the Basic plan's five
+    // invoices are used up, while issuing the proforma itself still fits in
+    // its own proforma quota.
+    for (let number = 1; number <= 5; number += 1) {
       await createIssuedInvoice(owner, clientId, number);
     }
     const proformaId = await createIssuedProforma(owner, clientId);

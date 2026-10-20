@@ -106,7 +106,9 @@ export async function PATCH(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const companyContextPromise = resolveCompanyContext(request);
+    const companyContextPromise = resolveCompanyContext(request, {
+      access: "write",
+    });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );

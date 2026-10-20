@@ -144,7 +144,7 @@ export async function GET(request: Request): Promise<Response> {
     );
     const pagination = parsePagination(searchParams);
     const cursorId = decodeCursor(pagination.cursor);
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
     const searchTerm = query.q ? `%${query.q}%` : undefined;
 
@@ -185,7 +185,7 @@ export async function POST(request: Request): Promise<Response> {
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const inputPromise = parseJson(request, createCatalogItemSchema);
     const [context, input] = await Promise.all([contextPromise, inputPromise]);
     const database = createDatabase();

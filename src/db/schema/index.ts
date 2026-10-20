@@ -1,4 +1,6 @@
 export * from "./auth";
+export * from "./billing-event";
+export * from "./billing-price";
 export * from "./catalog-item";
 export * from "./client";
 export * from "./company";
@@ -7,4 +9,6 @@ export * from "./document-event";
 export * from "./document-series";
 export * from "./email-delivery";
 export * from "./payment";
+export * from "./plan-change";
 export * from "./share-link";
+export * from "./subscription";

@@ -37,11 +37,10 @@ describe("concurrent proforma conversion", () => {
     const invoiceSeriesId = crypto.randomUUID();
     const proformaSeriesId = crypto.randomUUID();
     const proformaId = crypto.randomUUID();
-    // The free plan's monthly quota (5) is shared across every document
-    // type, so the already-issued proforma itself takes one of the five
-    // slots: 3 invoices + 1 proforma leaves exactly 1 remaining slot for the
-    // concurrent conversions to race for.
-    const existingIssuedCount = 3;
+    // Quotas are per document type (FR-008): 4 issued invoices leave exactly
+    // 1 invoice slot of the Basic plan's 5 for the concurrent conversions to
+    // race for; the issued proforma counts only towards the proforma quota.
+    const existingIssuedCount = 4;
     const concurrentAttemptCount = 8;
 
     queuedMessages.length = 0;
@@ -61,7 +60,7 @@ describe("concurrent proforma conversion", () => {
       taxId: "B11223344",
       address: "Calle de la Conversión 1, Madrid",
       email: "billing-conversion@example.test",
-      plan: "free",
+      plan: "basic",
       retentionRate: "0.00",
       createdAt: now,
       updatedAt: now,

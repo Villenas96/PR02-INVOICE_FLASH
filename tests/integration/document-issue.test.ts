@@ -57,7 +57,7 @@ async function seedIssueFixture({
     logoKey: `companies/${companyId}/logo.svg`,
     defaultDueDays: 30,
     retentionRate: "15.00",
-    plan: "free",
+    plan: "basic",
     createdAt: issuedAt,
     updatedAt: issuedAt,
   });

@@ -93,7 +93,12 @@ async function seedTenant(label: string): Promise<TenantFixture> {
   });
 
   return {
-    context: { userId, companyId },
+    context: {
+      userId,
+      companyId,
+      role: "owner" as const,
+      plan: "basic" as const,
+    },
     companyId,
     clientId,
     documentId,

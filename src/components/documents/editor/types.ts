@@ -13,16 +13,14 @@ export interface ClientPage {
   next_cursor: string | null;
 }
 
-export interface EditorCompany {
+import type { CompanyPlanData } from "@/components/plan/types";
+
+export interface EditorCompany extends Pick<CompanyPlanData, "plan" | "usage"> {
   default_due_days: number;
   default_tax_rate: string;
   retention_rate: string;
   currency: string;
   is_ready_to_issue: boolean;
-  plan: "free" | "pro";
-  docs_issued_this_month: number;
-  doc_limit: number;
-  usage_warning: boolean;
 }
 
 export interface EditorLine {

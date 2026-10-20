@@ -83,7 +83,9 @@ function sessionCookie(response: Response): string {
   return match[0];
 }
 
-async function createTenant(plan: "free" | "pro"): Promise<TenantFixture> {
+async function createTenant(
+  plan: "basic" | "essential",
+): Promise<TenantFixture> {
   const suffix = crypto.randomUUID();
   const email = `share-email-contract-${suffix}@example.test`;
   const now = new Date();
@@ -188,8 +190,8 @@ describe("share link and document email HTTP contract", () => {
       EMAIL_SEND_QUEUE: { send: () => Promise.resolve() },
     };
     setAuthEmailDeliveryHandler(() => Promise.resolve());
-    proTenant = await createTenant("pro");
-    freeTenant = await createTenant("free");
+    proTenant = await createTenant("essential");
+    freeTenant = await createTenant("basic");
   });
 
   it("creates a share link with an opaque token url and reuses it on repeat calls", async () => {
@@ -301,7 +303,7 @@ describe("share link and document email HTTP contract", () => {
     expect(items[0]).toMatchObject({ id: body.delivery_id });
   });
 
-  it("rejects a free-plan email request as a feature not in plan, with alternatives", async () => {
+  it("rejects a Basic-plan email request as a feature not in plan", async () => {
     const documentId = await seedDocument(freeTenant, { status: "issued" });
     const response = await sendDocumentEmail(
       authenticatedRequest(

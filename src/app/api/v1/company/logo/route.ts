@@ -486,7 +486,7 @@ export async function PUT(request: Request): Promise<Response> {
 
   try {
     assertRequestSize(request);
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "write" });
     companyId = context.companyId;
     const file = await logoFileFrom(request);
 
@@ -562,7 +562,7 @@ export async function DELETE(request: Request): Promise<Response> {
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "write" });
     const database = createDatabase();
 
     for (let attempt = 0; attempt < MAX_REPLACEMENT_ATTEMPTS; attempt += 1) {

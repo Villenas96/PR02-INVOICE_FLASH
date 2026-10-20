@@ -15,12 +15,17 @@ import {
   getCompanyReadiness,
   validateIssue,
 } from "@/lib/documents";
+import { documentTypePlural } from "@/lib/documents/labels";
 import { createUuidV7 } from "@/lib/ids";
 import { createCents } from "@/lib/money";
 import {
+  type DocumentType,
+  documentLimit,
   getMadridMonthBounds,
-  getPlanCapabilities,
-  type Plan,
+  normalizePlan,
+  PLANS,
+  planLabel,
+  type StoredPlan,
 } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
 import { createPdfRenderMessage } from "@/workers/messages";
@@ -94,7 +99,7 @@ interface IssuePreparation {
     logoKey: string | null;
     defaultDueDays: number;
     retentionRate: string;
-    plan: Plan;
+    plan: StoredPlan;
   };
   document: {
     id: string;
@@ -151,6 +156,9 @@ interface AtomicIssueRow extends Record<string, unknown> {
   document_id: string | null;
   company_locked: boolean;
   series_locked: boolean;
+  /** Only for `plan_limit`: plan and same-type usage read under the lock. */
+  locked_plan: StoredPlan | null;
+  used_count: number | null;
 }
 
 async function executeIssuanceTransaction(
@@ -226,12 +234,46 @@ function documentStateConflict(
   );
 }
 
-function planLimitError(plan: Plan): ApiError {
-  const limit = getPlanCapabilities(plan).docLimit;
+export const UPGRADE_URL = "/billing";
+
+function planLimitError(
+  plan: StoredPlan,
+  documentType: DocumentType,
+  used: number,
+): ApiError {
+  const limit = documentLimit(plan, documentType);
   return new ApiError(
     "plan_limit_reached",
     402,
-    `Has alcanzado el límite de ${limit} documentos emitidos este mes para tu plan.`,
+    `Has alcanzado el límite de ${limit} ${documentTypePlural(documentType)} este mes en el plan ${planLabel(plan)}. Mejora tu plan para seguir emitiendo; el borrador se conserva.`,
+    undefined,
+    {
+      document_type: documentType,
+      limit,
+      used,
+      plan: normalizePlan(plan),
+      upgrade_url: UPGRADE_URL,
+    },
+  );
+}
+
+/**
+ * `CASE` over every stored plan value, with limits injected from
+ * `src/lib/plan.ts`, so the limit is chosen from the plan read under the
+ * company lock rather than the one seen during preparation.
+ */
+function limitCaseSql(documentType: DocumentType): SQL {
+  const storedPlans: StoredPlan[] = [...PLANS, "free"];
+  return sql.join(
+    [
+      sql`CASE locked_company.plan`,
+      ...storedPlans.map(
+        (plan) =>
+          sql`WHEN ${plan}::plan THEN ${documentLimit(plan, documentType)}::integer`,
+      ),
+      sql`END`,
+    ],
+    sql` `,
   );
 }
 
@@ -593,8 +635,7 @@ async function executeAtomicIssue(
   const nowIso = now.toISOString();
   const preparedDocumentUpdatedAtIso =
     preparation.document.updatedAt.toISOString();
-  const freeLimit = getPlanCapabilities("free").docLimit;
-  const proLimit = getPlanCapabilities("pro").docLimit;
+  const documentType = preparation.document.documentType;
   const eventId = createUuidV7(now.getTime());
   const idempotencyKind = input.idempotency?.kind ?? null;
   const idempotencyReference =
@@ -662,6 +703,7 @@ async function executeAtomicIssue(
           'issued'::document_status,
           'voided'::document_status
         )
+        AND issued_document.document_type = ${documentType}::document_type
         AND issued_document.issued_at >= ${start.toISOString()}
         AND issued_document.issued_at < ${endExclusive.toISOString()}
       WHERE NOT EXISTS (SELECT 1 FROM idempotent_result)
@@ -671,12 +713,7 @@ async function executeAtomicIssue(
       FROM locked_company
       CROSS JOIN monthly_usage
       WHERE NOT EXISTS (SELECT 1 FROM idempotent_result)
-        AND monthly_usage.issued_count < CASE
-          WHEN locked_company.plan IN ('free'::plan, 'basic'::plan)
-            THEN ${freeLimit}::integer
-          WHEN locked_company.plan IN ('pro'::plan, 'essential'::plan)
-            THEN ${proLimit}::integer
-        END
+        AND monthly_usage.issued_count < ${limitCaseSql(documentType)}
     ),
     target_document AS MATERIALIZED (
       SELECT
@@ -874,14 +911,18 @@ async function executeAtomicIssue(
       'existing'::text AS outcome,
       idempotent_result.document_id,
       TRUE AS company_locked,
-      FALSE AS series_locked
+      FALSE AS series_locked,
+      NULL::plan AS locked_plan,
+      NULL::integer AS used_count
     FROM idempotent_result
     UNION ALL
     SELECT
       'issued'::text AS outcome,
       issued_document.id AS document_id,
       TRUE AS company_locked,
-      TRUE AS series_locked
+      TRUE AS series_locked,
+      NULL::plan AS locked_plan,
+      NULL::integer AS used_count
     FROM issued_document
     JOIN inserted_event
       ON inserted_event.document_id = issued_document.id
@@ -890,8 +931,11 @@ async function executeAtomicIssue(
       'plan_limit'::text AS outcome,
       NULL::uuid AS document_id,
       TRUE AS company_locked,
-      FALSE AS series_locked
+      FALSE AS series_locked,
+      locked_company.plan AS locked_plan,
+      monthly_usage.issued_count AS used_count
     FROM locked_company
+    CROSS JOIN monthly_usage
     WHERE NOT EXISTS (SELECT 1 FROM idempotent_result)
       AND NOT EXISTS (SELECT 1 FROM quota_slot)
   `;
@@ -988,7 +1032,11 @@ export async function issueDocument(
       return loadIssuedDocument(database, input.companyId, row.document_id);
     }
     if (row?.outcome === "plan_limit") {
-      throw planLimitError(preparation.company.plan);
+      throw planLimitError(
+        row.locked_plan ?? preparation.company.plan,
+        preparation.document.documentType,
+        Number(row.used_count ?? 0),
+      );
     }
     if (row?.outcome === "issued" && row.document_id) {
       await dependencies.queue.send(createPdfRenderMessage(row.document_id));
