@@ -8,12 +8,11 @@ import { parsePagination } from "@/lib/api/pagination";
 import { parseJson, validate } from "@/lib/api/validate";
 import { createUuidV7 } from "@/lib/ids";
 import { logSafe } from "@/lib/log";
+import { resolveCatalogTax } from "@/services/catalog-tax";
 import { resolveCompanyContext } from "@/services/context";
-import { getDefaultTaxRate } from "@/services/tax-rates";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
-const TAX_RATE_VALUES = ["0.00", "4.00", "10.00", "21.00"] as const;
 
 const paginationQuerySchema = z
   .object({
@@ -41,7 +40,12 @@ const createCatalogItemSchema = z
       .int("El precio debe ser un entero en céntimos.")
       .min(0, "El precio no puede ser negativo.")
       .max(MAX_POSTGRES_INTEGER),
-    tax_rate: z.enum(TAX_RATE_VALUES).optional(),
+    tax_rate: z
+      .union([z.string(), z.number()])
+      .transform((value) => String(value))
+      .optional(),
+    tax_rate_id: z.string().uuid().nullable().optional(),
+    unit: z.string().trim().max(20).nullable().optional(),
   })
   .strict();
 
@@ -89,6 +93,8 @@ function catalogItemResponse(item: CatalogItemRow) {
     description: item.description,
     unit_price_cents: item.unitPriceCents,
     tax_rate: item.taxRate,
+    tax_rate_id: item.taxRateId,
+    unit: item.unit,
     archived_at: item.archivedAt,
   };
 }
@@ -189,11 +195,9 @@ export async function POST(request: Request): Promise<Response> {
     const inputPromise = parseJson(request, createCatalogItemSchema);
     const [context, input] = await Promise.all([contextPromise, inputPromise]);
     const database = createDatabase();
-    let taxRate: string | undefined = input.tax_rate;
-    if (!taxRate) {
-      const defaultRate = await getDefaultTaxRate(database, context.companyId);
-      taxRate = defaultRate?.rate ?? "21.00";
-    }
+    const tax = await resolveCatalogTax(database, context.companyId, input, {
+      useDefault: true,
+    });
     const [createdItem] = await database
       .insert(catalogItems)
       .values({
@@ -201,7 +205,9 @@ export async function POST(request: Request): Promise<Response> {
         companyId: context.companyId,
         description: input.description,
         unitPriceCents: input.unit_price_cents,
-        taxRate,
+        taxRate: tax.taxRate ?? "21.00",
+        taxRateId: tax.taxRateId ?? null,
+        unit: input.unit?.trim() ? input.unit.trim() : null,
       })
       .returning();
 

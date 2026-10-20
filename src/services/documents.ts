@@ -5,6 +5,7 @@ import { createDatabase, type Database } from "@/db";
 import { executionRows } from "@/db/result";
 import { catalogItems } from "@/db/schema/catalog-item";
 import { clients } from "@/db/schema/client";
+import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
@@ -15,6 +16,8 @@ import { type BillingResult, calculateBilling } from "@/lib/billing";
 import { createUuidV7 } from "@/lib/ids";
 import { createCents } from "@/lib/money";
 import { ResourceNotFoundError } from "@/services/context";
+import { seriesArchivedError } from "@/services/document-errors";
+import { ensureDefaultSeries, findSelectableSeries } from "@/services/series";
 
 const MAX_DRAFT_LINES = 500;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -40,6 +43,8 @@ const draftLineSchema = z
 const draftFieldsSchema = z.object({
   documentType: z.enum(["invoice", "proforma"]),
   clientId: nullableUuidSchema.default(null),
+  /** Omitted → the company's default collection method (FR-022). */
+  collectionMethodId: nullableUuidSchema.optional(),
   issueDate: z.iso.date(),
   dueDate: z.iso.date().nullable().default(null),
   notes: z.string().trim().max(5_000).nullable().default(null),
@@ -58,6 +63,9 @@ const updateDraftSchema = z
     actor: z.string().uuid(),
     documentType: z.enum(["invoice", "proforma"]).optional(),
     clientId: nullableUuidSchema.optional(),
+    /** `null` returns to the type's default series (FR-016). */
+    seriesId: nullableUuidSchema.optional(),
+    collectionMethodId: nullableUuidSchema.optional(),
     issueDate: z.iso.date().optional(),
     dueDate: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
@@ -68,6 +76,8 @@ const updateDraftSchema = z
     (value) =>
       value.documentType !== undefined ||
       value.clientId !== undefined ||
+      value.seriesId !== undefined ||
+      value.collectionMethodId !== undefined ||
       value.issueDate !== undefined ||
       value.dueDate !== undefined ||
       value.notes !== undefined ||
@@ -168,6 +178,8 @@ export async function loadDocumentClient(
 
 export type DocumentDetail = typeof documents.$inferSelect & {
   lines: Array<typeof documentLines.$inferSelect>;
+  /** Set when saving this draft created the type's first series. */
+  seriesCreated?: { prefix: string; renamed: boolean };
 };
 
 export interface DocumentServiceDependencies {
@@ -325,6 +337,60 @@ async function assertClientCanBeAssigned(
   }
 }
 
+async function assertSeriesSelectable(
+  database: Database,
+  companyId: string,
+  seriesId: string,
+  documentType: string,
+): Promise<void> {
+  const series = await findSelectableSeries(database, companyId, seriesId);
+  if (!series) {
+    throw new ResourceNotFoundError();
+  }
+  if (series.documentType !== documentType) {
+    throw new ApiError(
+      "validation_error",
+      400,
+      "Elige una serie del mismo tipo de documento.",
+      { series_id: "La serie no corresponde a este tipo de documento." },
+    );
+  }
+  if (series.archivedAt) {
+    throw seriesArchivedError();
+  }
+}
+
+/** Active method of the company; `undefined` → its default (or none). */
+async function resolveCollectionMethod(
+  database: Database,
+  companyId: string,
+  requested: string | null | undefined,
+): Promise<string | null> {
+  if (requested === null) {
+    return null;
+  }
+  const rows = await database
+    .select({
+      id: collectionMethods.id,
+      isDefault: collectionMethods.isDefault,
+    })
+    .from(collectionMethods)
+    .where(
+      and(
+        eq(collectionMethods.companyId, companyId),
+        isNull(collectionMethods.archivedAt),
+        requested
+          ? eq(collectionMethods.id, requested)
+          : eq(collectionMethods.isDefault, true),
+      ),
+    )
+    .limit(1);
+  if (requested && rows.length === 0) {
+    throw new ResourceNotFoundError();
+  }
+  return rows[0]?.id ?? null;
+}
+
 async function throwMutationFailure(
   database: Database,
   companyId: string,
@@ -428,6 +494,18 @@ export async function createDraftDocument(
     input.actor,
   );
   await assertClientCanBeAssigned(database, input.companyId, input.clientId);
+  // FR-019: the editor shows the series from the first draft of a type.
+  const seriesResult = await ensureDefaultSeries(
+    database,
+    input.companyId,
+    input.documentType,
+    now,
+  );
+  const collectionMethodId = await resolveCollectionMethod(
+    database,
+    input.companyId,
+    input.collectionMethodId,
+  );
 
   const billing = calculateDraftBilling(input.lines, company.retentionRate);
   const documentId = createUuidV7(now.getTime());
@@ -463,6 +541,7 @@ export async function createDraftDocument(
         ${sql.identifier(documents.issueDate.name)},
         ${sql.identifier(documents.dueDate.name)},
         ${sql.identifier(documents.notes.name)},
+        ${sql.identifier(documents.collectionMethodId.name)},
         ${sql.identifier(documents.subtotalCents.name)},
         ${sql.identifier(documents.taxBreakdown.name)},
         ${sql.identifier(documents.retentionRate.name)},
@@ -480,6 +559,7 @@ export async function createDraftDocument(
         ${input.issueDate},
         ${input.dueDate},
         ${input.notes},
+        ${collectionMethodId}::uuid,
         ${billing.subtotalCents},
         ${JSON.stringify(billing.taxBreakdown)}::jsonb,
         scoped_company.retention_rate,
@@ -598,11 +678,20 @@ export async function createDraftDocument(
     );
   }
 
-  return getDocumentDetail<DocumentDetail>({
+  const created = await getDocumentDetail<DocumentDetail>({
     database,
     companyId: input.companyId,
     documentId,
   });
+  return seriesResult.created && seriesResult.prefix
+    ? {
+        ...created,
+        seriesCreated: {
+          prefix: seriesResult.prefix,
+          renamed: seriesResult.renamed,
+        },
+      }
+    : created;
 }
 
 export async function updateDraftDocument(
@@ -618,6 +707,35 @@ export async function updateDraftDocument(
     input.actor,
   );
   await assertClientCanBeAssigned(database, input.companyId, input.clientId);
+  if (input.seriesId) {
+    const [current] = await database
+      .select({ documentType: documents.documentType })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.id, input.documentId),
+          eq(documents.companyId, input.companyId),
+        ),
+      )
+      .limit(1);
+    if (!current) {
+      throw new ResourceNotFoundError();
+    }
+    await assertSeriesSelectable(
+      database,
+      input.companyId,
+      input.seriesId,
+      input.documentType ?? current.documentType,
+    );
+  }
+  const collectionMethodId =
+    input.collectionMethodId === undefined
+      ? undefined
+      : await resolveCollectionMethod(
+          database,
+          input.companyId,
+          input.collectionMethodId,
+        );
 
   const replacesLines = input.lines !== undefined;
   const lines = input.lines ?? [];
@@ -676,6 +794,20 @@ export async function updateDraftDocument(
         client_id = CASE
           WHEN ${input.clientId !== undefined} THEN ${input.clientId ?? null}
           ELSE target_document.client_id
+        END,
+        -- A chosen series only applies to drafts of its type; changing the
+        -- type returns to that type's default series.
+        series_id = CASE
+          WHEN ${input.seriesId !== undefined} THEN ${input.seriesId ?? null}::uuid
+          WHEN ${input.documentType !== undefined}
+            AND target_document.document_type IS DISTINCT FROM
+              ${input.documentType ?? "invoice"}::document_type
+            THEN NULL
+          ELSE target_document.series_id
+        END,
+        collection_method_id = CASE
+          WHEN ${collectionMethodId !== undefined} THEN ${collectionMethodId ?? null}::uuid
+          ELSE target_document.collection_method_id
         END,
         issue_date = CASE
           WHEN ${input.issueDate !== undefined} THEN ${input.issueDate ?? now.toISOString().slice(0, 10)}
@@ -893,4 +1025,145 @@ export async function softDeleteDraftDocument(
   if (executionRows(result).length === 0) {
     return throwMutationFailure(database, input.companyId, input.documentId);
   }
+}
+
+export type DuplicateWarning =
+  | "client_archived"
+  | "product_archived"
+  | "tax_archived";
+
+/**
+ * Duplicates any non-receipt document, in any state, into a new draft dated
+ * today (FR-018). Archived data never blocks the copy: the archived client
+ * is left unset and archived product/tax references are dropped (the line
+ * keeps its frozen values), each reported as a warning for the editor.
+ */
+export async function duplicateDocument(
+  input: { companyId: string; documentId: string; actor: string },
+  dependencies: DocumentServiceDependencies = {},
+): Promise<{ document: DocumentDetail; warnings: DuplicateWarning[] }> {
+  const database = databaseFrom(dependencies);
+  const now = dependencies.now ?? new Date();
+  const source = await getDocumentDetail<DocumentDetail>({
+    database,
+    companyId: input.companyId,
+    documentId: input.documentId,
+  });
+  if (source.documentType !== "invoice" && source.documentType !== "proforma") {
+    throw new ApiError(
+      "conflict",
+      409,
+      "Los recibos no se pueden duplicar; genera uno nuevo desde un pago.",
+    );
+  }
+
+  const warnings = new Set<DuplicateWarning>();
+  let clientId = source.clientId;
+  if (clientId) {
+    const [client] = await database
+      .select({ archivedAt: clients.archivedAt })
+      .from(clients)
+      .where(
+        and(eq(clients.id, clientId), eq(clients.companyId, input.companyId)),
+      )
+      .limit(1);
+    if (!client || client.archivedAt) {
+      warnings.add("client_archived");
+      clientId = null;
+    }
+  }
+
+  const archivedItems = new Set(
+    (
+      await database
+        .select({ id: catalogItems.id, archivedAt: catalogItems.archivedAt })
+        .from(catalogItems)
+        .where(eq(catalogItems.companyId, input.companyId))
+    )
+      .filter((item) => item.archivedAt)
+      .map((item) => item.id),
+  );
+  const archivedTaxes = new Set(
+    (
+      await database
+        .select({ id: taxRates.id, archivedAt: taxRates.archivedAt })
+        .from(taxRates)
+        .where(eq(taxRates.companyId, input.companyId))
+    )
+      .filter((tax) => tax.archivedAt)
+      .map((tax) => tax.id),
+  );
+
+  let collectionMethodId: string | null | undefined;
+  if (source.collectionMethodId) {
+    const [method] = await database
+      .select({ archivedAt: collectionMethods.archivedAt })
+      .from(collectionMethods)
+      .where(eq(collectionMethods.id, source.collectionMethodId))
+      .limit(1);
+    collectionMethodId =
+      method && !method.archivedAt ? source.collectionMethodId : undefined;
+  }
+
+  const document = await createDraftDocument(
+    {
+      companyId: input.companyId,
+      actor: input.actor,
+      documentType: source.documentType,
+      clientId,
+      collectionMethodId,
+      issueDate: madridIsoDate(now),
+      dueDate: null,
+      notes: source.notes,
+      lines: source.lines.map((line) => {
+        const productArchived =
+          line.catalogItemId !== null && archivedItems.has(line.catalogItemId);
+        const taxArchived =
+          line.taxRateId !== null && archivedTaxes.has(line.taxRateId);
+        if (productArchived) {
+          warnings.add("product_archived");
+        }
+        if (taxArchived) {
+          warnings.add("tax_archived");
+        }
+        return {
+          description: line.description,
+          quantity: line.quantity,
+          unitPriceCents: line.unitPriceCents,
+          taxRate: line.taxRate,
+          taxName: line.taxName,
+          unit: line.unit,
+          taxRateId: taxArchived ? null : line.taxRateId,
+          catalogItemId: productArchived ? null : line.catalogItemId,
+          discountPercentage: line.discountPercentage,
+        };
+      }),
+    },
+    { database, now },
+  );
+
+  await database.insert(documentEvents).values({
+    id: createUuidV7(now.getTime()),
+    companyId: input.companyId,
+    documentId: document.id,
+    actor: input.actor,
+    event: "duplicated",
+    payload: { source_document_id: input.documentId },
+    createdAt: now,
+  });
+
+  return { document, warnings: [...warnings] };
+}
+
+function madridIsoDate(now: Date): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return `${value.year}-${value.month}-${value.day}`;
 }

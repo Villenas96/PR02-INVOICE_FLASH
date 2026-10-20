@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   allocateDocumentNumber,
+  autoSeriesPrefix,
   formatFullNumber,
   rolloverAnnualSeries,
   selectDefaultSeries,
@@ -113,5 +114,43 @@ describe("document numbering", () => {
       ...invoiceSeries,
       nextNumber: 38,
     });
+  });
+});
+
+describe("automatic series prefixes (FR-019, research R7)", () => {
+  it("derives each type's prefix from the invoice series prefix", () => {
+    expect(autoSeriesPrefix("proforma", "2026-", [])).toEqual({
+      prefix: "PRO-2026-",
+      renamed: false,
+    });
+    expect(autoSeriesPrefix("receipt", "2026-", [])).toEqual({
+      prefix: "REC-2026-",
+      renamed: false,
+    });
+    expect(autoSeriesPrefix("quote", "F-2026-", [])).toEqual({
+      prefix: "PRE-F-2026-",
+      renamed: false,
+    });
+    expect(autoSeriesPrefix("delivery_note", "2026-", [])).toEqual({
+      prefix: "ALB-2026-",
+      renamed: false,
+    });
+  });
+
+  it("uses only the type code when the invoice prefix is empty", () => {
+    expect(autoSeriesPrefix("quote", "", [])).toEqual({
+      prefix: "PRE-",
+      renamed: false,
+    });
+  });
+
+  it("adds a numeric suffix to the code when the prefix already exists", () => {
+    expect(autoSeriesPrefix("quote", "2026-", ["PRE-2026-"])).toEqual({
+      prefix: "PRE2-2026-",
+      renamed: true,
+    });
+    expect(
+      autoSeriesPrefix("quote", "2026-", ["PRE-2026-", "PRE2-2026-"]),
+    ).toEqual({ prefix: "PRE3-2026-", renamed: true });
   });
 });

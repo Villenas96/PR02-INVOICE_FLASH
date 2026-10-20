@@ -6,6 +6,9 @@ const SENSITIVE_KEY_PATTERN =
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const NIF_PATTERN =
   /\b(?:[0-9]{8}[A-Z]|[XYZ][0-9]{7}[A-Z]|[ABCDEFGHJNPQRSUVW][0-9]{7}[0-9A-J])\b/gi;
+// IBAN with or without grouping spaces (defence in depth, research R5).
+const IBAN_PATTERN =
+  /\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\b/g;
 const TOKEN_PATTERN = /\b(?:bearer\s+)?[A-Za-z0-9_-]{24,}\b/gi;
 // request_id is a server-generated UUID with no user data; it must survive
 // redaction (TOKEN_PATTERN would match it) so logs and Sentry correlate.
@@ -17,6 +20,7 @@ export type SafeLogContext = Record<string, unknown>;
 function redactString(value: string): string {
   return value
     .replace(EMAIL_PATTERN, "[redacted-email]")
+    .replace(IBAN_PATTERN, "[redacted-iban]")
     .replace(NIF_PATTERN, "[redacted-tax-id]")
     .replace(TOKEN_PATTERN, "[redacted-token]");
 }

@@ -65,6 +65,7 @@ const createDraftSchema = z
   .object({
     doc_type: z.enum(["invoice", "proforma"]),
     client_id: z.string().uuid().nullable().optional(),
+    collection_method_id: z.string().uuid().nullable().optional(),
     issue_date: z.iso.date().optional(),
     due_date: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
@@ -367,6 +368,7 @@ export async function POST(request: Request): Promise<Response> {
       actor: context.userId,
       documentType: input.doc_type,
       clientId: input.client_id ?? null,
+      collectionMethodId: input.collection_method_id,
       issueDate: input.issue_date ?? madridDate(),
       dueDate: input.due_date ?? null,
       notes: input.notes ?? null,
@@ -384,7 +386,13 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     return withRequestId(
-      Response.json(draftResponse(createdDocument), { status: 201 }),
+      Response.json(
+        {
+          ...draftResponse(createdDocument),
+          series_created: createdDocument.seriesCreated ?? null,
+        },
+        { status: 201 },
+      ),
       requestId,
     );
   } catch (error) {

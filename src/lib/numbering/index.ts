@@ -1,4 +1,9 @@
-export type DocumentType = "invoice" | "proforma" | "receipt";
+export type DocumentType =
+  | "invoice"
+  | "proforma"
+  | "receipt"
+  | "quote"
+  | "delivery_note";
 export type NumberAllocationStatus = "draft" | "issued";
 
 export interface NumberSeries {
@@ -161,4 +166,40 @@ export function rolloverAnnualSeries<TSeries extends NumberSeries>(
       isDefault: true,
     },
   };
+}
+
+/** Code prepended to the invoice prefix for every other type (R7). */
+export const SERIES_TYPE_CODES: Record<
+  Exclude<DocumentType, "invoice">,
+  string
+> = {
+  proforma: "PRO",
+  receipt: "REC",
+  quote: "PRE",
+  delivery_note: "ALB",
+};
+
+/**
+ * Prefix of the automatic default series of a type (FR-019): the type code
+ * plus the invoice series prefix (`PRE-` + `2026-` → `PRE-2026-`). A
+ * collision with any existing prefix appends a counter to the code
+ * (`PRE2-2026-`) and reports `renamed` so the user is told.
+ */
+export function autoSeriesPrefix(
+  documentType: Exclude<DocumentType, "invoice">,
+  invoicePrefix: string,
+  existingPrefixes: readonly string[],
+): { prefix: string; renamed: boolean } {
+  const code = SERIES_TYPE_CODES[documentType];
+  const taken = new Set(existingPrefixes);
+  const base = `${code}-${invoicePrefix}`;
+  if (!taken.has(base)) {
+    return { prefix: base, renamed: false };
+  }
+  for (let counter = 2; ; counter += 1) {
+    const candidate = `${code}${counter}-${invoicePrefix}`;
+    if (!taken.has(candidate)) {
+      return { prefix: candidate, renamed: true };
+    }
+  }
 }

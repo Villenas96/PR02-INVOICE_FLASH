@@ -3,6 +3,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "@/db";
 import { taxRates } from "@/db/schema/tax-rate";
 import { runStatements } from "@/db/transaction";
+import { ApiError, ResourceNotFoundError } from "@/lib/api/errors";
 import { createUuidV7 } from "@/lib/ids";
 
 export type TaxRateRow = typeof taxRates.$inferSelect;
@@ -111,4 +112,139 @@ export async function setDefaultIvaRate(
   if (target) {
     await setDefaultTaxRate(database, companyId, target.id);
   }
+}
+
+const RATE_PATTERN = /^\d{1,2}(?:\.\d{1,2})?$/;
+
+export function normalizeRate(value: string | number): string {
+  const text = String(value).trim().replace(",", ".");
+  if (!RATE_PATTERN.test(text)) {
+    throw new ApiError(
+      "validation_error",
+      400,
+      "El porcentaje debe estar entre 0 y 99,99 con dos decimales como máximo.",
+      { rate: "Indica un porcentaje entre 0 y 99,99." },
+    );
+  }
+  return Number(text).toFixed(2);
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  const code =
+    (error as { code?: string; cause?: { code?: string } })?.code ??
+    (error as { cause?: { code?: string } })?.cause?.code;
+  return code === "23505";
+}
+
+function duplicateTaxError(): ApiError {
+  return new ApiError(
+    "conflict",
+    409,
+    "Ya tienes un impuesto activo con ese nombre y porcentaje.",
+  );
+}
+
+export async function createTaxRate(
+  database: Database,
+  companyId: string,
+  input: { name: string; rate: string | number; is_default?: boolean },
+  now = new Date(),
+): Promise<TaxRateRow> {
+  await ensureTaxRates(database, companyId, now);
+  const id = createUuidV7(now.getTime());
+  try {
+    await database.insert(taxRates).values({
+      id,
+      companyId,
+      name: input.name.trim(),
+      rate: normalizeRate(input.rate),
+      createdAt: now,
+      updatedAt: now,
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw duplicateTaxError();
+    }
+    throw error;
+  }
+  if (input.is_default) {
+    await setDefaultTaxRate(database, companyId, id, now);
+  }
+  return loadTaxRate(database, companyId, id);
+}
+
+async function loadTaxRate(
+  database: Database,
+  companyId: string,
+  id: string,
+): Promise<TaxRateRow> {
+  const [row] = await database
+    .select()
+    .from(taxRates)
+    .where(and(eq(taxRates.id, id), eq(taxRates.companyId, companyId)))
+    .limit(1);
+  if (!row) {
+    throw new ResourceNotFoundError();
+  }
+  return row;
+}
+
+/**
+ * Edits a tax type. Issued documents never change: their lines froze name
+ * and rate at issue (FR-023). The default type cannot be archived.
+ */
+export async function updateTaxRate(
+  database: Database,
+  companyId: string,
+  id: string,
+  input: {
+    name?: string;
+    rate?: string | number;
+    is_default?: true;
+    archived?: boolean;
+  },
+  now = new Date(),
+): Promise<TaxRateRow> {
+  const current = await loadTaxRate(database, companyId, id);
+  if (input.archived && (current.isDefault || input.is_default)) {
+    throw new ApiError(
+      "conflict",
+      409,
+      "No puedes archivar el impuesto predeterminado. Elige antes otro.",
+    );
+  }
+  try {
+    await database
+      .update(taxRates)
+      .set({
+        ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+        ...(input.rate !== undefined
+          ? { rate: normalizeRate(input.rate) }
+          : {}),
+        ...(input.archived !== undefined
+          ? { archivedAt: input.archived ? now : null }
+          : {}),
+        updatedAt: now,
+      })
+      .where(and(eq(taxRates.id, id), eq(taxRates.companyId, companyId)));
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw duplicateTaxError();
+    }
+    throw error;
+  }
+  if (input.is_default) {
+    await setDefaultTaxRate(database, companyId, id, now);
+  }
+  return loadTaxRate(database, companyId, id);
+}
+
+export function taxRateResponse(row: TaxRateRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    rate: row.rate,
+    is_default: row.isDefault,
+    archived_at: row.archivedAt,
+  };
 }

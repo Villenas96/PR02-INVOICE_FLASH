@@ -3,6 +3,7 @@ import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { createDatabase, type Database } from "@/db";
 import { firstExecutionRow } from "@/db/result";
 import { clients } from "@/db/schema/client";
+import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
@@ -28,6 +29,8 @@ import {
   type StoredPlan,
 } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
+import { seriesArchivedError } from "@/services/document-errors";
+import { ensureDefaultSeries } from "@/services/series";
 import { createPdfRenderMessage } from "@/workers/messages";
 
 const MAX_ISSUANCE_PREPARATION_ATTEMPTS = 3;
@@ -106,6 +109,8 @@ interface IssuePreparation {
     documentType: "invoice" | "proforma" | "receipt";
     status: "draft" | "issued" | "voided";
     clientId: string | null;
+    /** Series chosen in the editor; `null` → the type's default series. */
+    seriesId: string | null;
     issueDate: string;
     dueDate: string | null;
     deletedAt: Date | null;
@@ -303,6 +308,7 @@ async function loadIssuePreparation(
         documentType: documents.documentType,
         status: documents.status,
         clientId: documents.clientId,
+        seriesId: documents.seriesId,
         issueDate: documents.issueDate,
         dueDate: documents.dueDate,
         deletedAt: documents.deletedAt,
@@ -725,6 +731,7 @@ async function executeAtomicIssue(
         target.id,
         target.document_type,
         target.client_id,
+        target.series_id,
         target.issue_date,
         target.due_date
       FROM ${documents} target
@@ -831,7 +838,11 @@ async function executeAtomicIssue(
         ON validated_target.document_type = numbering_series.document_type
       JOIN quota_slot
         ON quota_slot.id = numbering_series.company_id
-      WHERE numbering_series.is_default
+      WHERE (
+          (validated_target.series_id IS NULL AND numbering_series.is_default)
+          OR numbering_series.id = validated_target.series_id
+        )
+        AND numbering_series.archived_at IS NULL
         AND numbering_series.next_number < 2147483647
       FOR UPDATE OF numbering_series
     ),
@@ -870,6 +881,23 @@ async function executeAtomicIssue(
         total_cents = ${billing.totalCents},
         issuer_snapshot = ${JSON.stringify(issuerSnapshot)}::jsonb,
         client_snapshot = ${JSON.stringify(clientSnapshot)}::jsonb,
+        -- FR-022: the collection method is frozen as it is at issue time.
+        collection_method_snapshot = (
+          SELECT jsonb_strip_nulls(jsonb_build_object(
+            'kind', method.kind,
+            'label', method.label,
+            'holder', method.holder_name,
+            'iban', method.iban,
+            'bic', method.bic,
+            'phone', method.phone,
+            'email_or_url', method.email_or_url,
+            'instructions', method.instructions
+          ))
+          FROM ${collectionMethods} method
+          WHERE method.id = target.collection_method_id
+            AND method.company_id = target.company_id
+            AND method.archived_at IS NULL
+        ),
         pdf_status = 'pending'::pdf_status,
         pdf_ready_at = NULL,
         issued_at = ${nowIso},
@@ -961,13 +989,16 @@ async function throwAtomicIssueFailure(
     .select({
       id: documentSeries.id,
       nextNumber: documentSeries.nextNumber,
+      archivedAt: documentSeries.archivedAt,
     })
     .from(documentSeries)
     .where(
       and(
         eq(documentSeries.companyId, input.companyId),
         eq(documentSeries.documentType, preparation.document.documentType),
-        eq(documentSeries.isDefault, true),
+        preparation.document.seriesId
+          ? eq(documentSeries.id, preparation.document.seriesId)
+          : eq(documentSeries.isDefault, true),
       ),
     )
     .limit(1);
@@ -979,6 +1010,9 @@ async function throwAtomicIssueFailure(
         seriesId: `Falta una serie predeterminada para ${preparation.document.documentType}.`,
       },
     );
+  }
+  if (defaultSeries.archivedAt) {
+    throw seriesArchivedError();
   }
   if (defaultSeries.nextNumber >= 2_147_483_647) {
     throw new ApiError(
@@ -1012,6 +1046,15 @@ export async function issueDocument(
     attempt += 1
   ) {
     const preparation = await loadIssuePreparation(database, input);
+    if (attempt === 0 && preparation.document.status === "draft") {
+      // FR-019: a type's first issue never fails for lack of a series.
+      await ensureDefaultSeries(
+        database,
+        input.companyId,
+        preparation.document.documentType,
+        now,
+      );
+    }
 
     // A concurrent call sharing the same idempotency key (converting the
     // same proforma, or receipting the same payment) may have issued this

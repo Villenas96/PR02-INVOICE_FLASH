@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
@@ -92,6 +92,7 @@ function seriesResponse(series: SeriesRow) {
     prefix: series.prefix,
     next_number: series.nextNumber,
     is_default: series.isDefault,
+    archived_at: series.archivedAt,
   };
 }
 
@@ -167,6 +168,10 @@ export async function GET(request: Request): Promise<Response> {
       documentTypeSchema.optional(),
       searchParams.get("doc_type") ?? undefined,
     );
+    const archived = validate(
+      z.enum(["true", "false"]).optional(),
+      searchParams.get("archived") ?? undefined,
+    );
     const cursorId = decodeCursor(pagination.cursor);
     const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
@@ -180,6 +185,8 @@ export async function GET(request: Request): Promise<Response> {
     const conditions = [
       eq(documentSeries.companyId, context.companyId),
       documentType ? eq(documentSeries.documentType, documentType) : undefined,
+      archived === "true" ? isNotNull(documentSeries.archivedAt) : undefined,
+      archived === "false" ? isNull(documentSeries.archivedAt) : undefined,
       cursorId ? gt(documentSeries.id, cursorId) : undefined,
     ].filter((condition) => condition !== undefined);
     const rows = await database

@@ -45,6 +45,8 @@ const updateDraftSchema = z
   .object({
     doc_type: z.enum(["invoice", "proforma"]).optional(),
     client_id: z.string().uuid().nullable().optional(),
+    series_id: z.string().uuid().nullable().optional(),
+    collection_method_id: z.string().uuid().nullable().optional(),
     issue_date: z.iso.date().optional(),
     due_date: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
@@ -350,6 +352,10 @@ export async function PATCH(
       actor: context.userId,
       ...(input.doc_type === undefined ? {} : { documentType: input.doc_type }),
       ...(input.client_id === undefined ? {} : { clientId: input.client_id }),
+      ...(input.series_id === undefined ? {} : { seriesId: input.series_id }),
+      ...(input.collection_method_id === undefined
+        ? {}
+        : { collectionMethodId: input.collection_method_id }),
       ...(input.issue_date === undefined
         ? {}
         : { issueDate: input.issue_date }),
