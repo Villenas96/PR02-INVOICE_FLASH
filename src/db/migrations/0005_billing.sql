@@ -52,6 +52,8 @@ CREATE TABLE "subscription" (
 --> statement-breakpoint
 ALTER TABLE "company" ALTER COLUMN "plan" SET DEFAULT 'basic';--> statement-breakpoint
 ALTER TABLE "company" ADD COLUMN "ui_mode" "ui_mode";--> statement-breakpoint
+ALTER TABLE "email_delivery" ADD COLUMN "template" text;--> statement-breakpoint
+ALTER TABLE "email_delivery" ADD COLUMN "payload" jsonb;--> statement-breakpoint
 ALTER TABLE "plan_change" ADD CONSTRAINT "plan_change_company_id_company_id_fk" FOREIGN KEY ("company_id") REFERENCES "public"."company"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "plan_change" ADD CONSTRAINT "plan_change_billing_event_id_billing_event_id_fk" FOREIGN KEY ("billing_event_id") REFERENCES "public"."billing_event"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "subscription" ADD CONSTRAINT "subscription_company_id_company_id_fk" FOREIGN KEY ("company_id") REFERENCES "public"."company"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint

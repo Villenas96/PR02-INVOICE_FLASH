@@ -18,13 +18,29 @@ export const emailSendMessageSchema = z
   })
   .strict();
 
+/** Jobs queue (`invoice-flash-jobs`): opaque ids only, strict schemas. */
+export const billingGraceMessageSchema = z
+  .object({
+    type: z.literal("billing.grace"),
+    companyId: opaqueId,
+    enqueuedAt: z.string().datetime(),
+  })
+  .strict();
+
+export const jobMessageSchema = z.discriminatedUnion("type", [
+  billingGraceMessageSchema,
+]);
+
 export const queueMessageSchema = z.discriminatedUnion("type", [
   pdfRenderMessageSchema,
   emailSendMessageSchema,
+  billingGraceMessageSchema,
 ]);
 
 export type PdfRenderMessage = z.infer<typeof pdfRenderMessageSchema>;
 export type EmailSendMessage = z.infer<typeof emailSendMessageSchema>;
+export type BillingGraceMessage = z.infer<typeof billingGraceMessageSchema>;
+export type JobMessage = z.infer<typeof jobMessageSchema>;
 export type QueueMessage = z.infer<typeof queueMessageSchema>;
 
 export const EMAIL_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -45,6 +61,17 @@ export function createEmailSendMessage(deliveryId: string): EmailSendMessage {
     type: "email.send",
     deliveryId,
     enqueuedAt: new Date().toISOString(),
+  });
+}
+
+export function createBillingGraceMessage(
+  companyId: string,
+  now = new Date(),
+): BillingGraceMessage {
+  return billingGraceMessageSchema.parse({
+    type: "billing.grace",
+    companyId,
+    enqueuedAt: now.toISOString(),
   });
 }
 

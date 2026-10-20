@@ -102,3 +102,13 @@ export function isProCheckoutEnabled(
     rawValue(source, "PRO_CHECKOUT_ENABLED");
   return value === true || value === "true";
 }
+
+/**
+ * Stripe tax rate (IVA 21 %, inclusive) applied to subscription prices so
+ * Stripe's invoices are valid Spanish invoices. Optional in local/test.
+ */
+export function getStripeTaxRateId(
+  source: EnvSource = defaultSource(),
+): string | undefined {
+  return readText(source, "STRIPE_TAX_RATE_ID");
+}

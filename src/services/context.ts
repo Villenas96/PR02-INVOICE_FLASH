@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { createDatabase } from "@/db";
 import { companies } from "@/db/schema";
 import {
+  ApiError,
   AuthenticationRequiredError,
   ResourceNotFoundError,
 } from "@/lib/api/errors";
@@ -109,4 +110,15 @@ export async function resolveCompanyResource<T>(
   }
 
   return resource;
+}
+
+/** Owner-only operations (subscription, advisor management, …). */
+export function requireOwner(context: CompanyContext): void {
+  if (context.role !== "owner") {
+    throw new ApiError(
+      "read_only_access",
+      403,
+      "Tu acceso a esta empresa es de solo lectura.",
+    );
+  }
 }

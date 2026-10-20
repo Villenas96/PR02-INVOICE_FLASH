@@ -34,6 +34,7 @@ export type Upsell =
   | {
       kind: "limit";
       message: string;
+      plan: Plan;
       documentType: DocumentType;
       limit: number;
       used: number;
@@ -70,6 +71,7 @@ export function upsellFromError(error: unknown): Upsell | null {
     return {
       kind: "limit",
       message: error.message,
+      plan: (typeof details.plan === "string" ? details.plan : "basic") as Plan,
       documentType: details.document_type as DocumentType,
       limit: details.limit,
       used: details.used,

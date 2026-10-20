@@ -12,6 +12,7 @@ import {
 } from "./company-settings";
 import { LogoSettings } from "./logo-settings";
 import { SeriesSettings } from "./series-settings";
+import { SubscriptionSettings } from "./subscription-settings";
 import type { CompanySettings, DocumentSeries, SeriesPage } from "./types";
 
 export function SettingsPanel() {
@@ -205,6 +206,8 @@ export function SettingsPanel() {
           <InvoicingPreferencesForm company={company} onChange={setCompany} />
         </div>
       </div>
+
+      {company.role === "owner" ? <SubscriptionSettings /> : null}
 
       <SeriesSettings
         items={series}

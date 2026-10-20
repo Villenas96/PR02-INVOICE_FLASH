@@ -4,6 +4,22 @@ import type { Database } from "@/db";
 import { createDatabase } from "@/db";
 import { verifications } from "@/db/schema/auth";
 import { emailDeliveries } from "@/db/schema/email-delivery";
+import { subscriptions } from "@/db/schema/subscription";
+import { logSafe } from "@/lib/log";
+import { createBillingGraceMessage } from "@/workers/messages";
+
+export const PURGE_CRON = "0 3 * * *";
+export const PLANNER_CRON = "0 5 * * *";
+
+export interface JobsQueue {
+  send(message: unknown): Promise<void>;
+}
+
+export interface PlannerDependencies {
+  database?: Database;
+  queue: JobsQueue;
+  now?: Date;
+}
 
 export const PII_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -64,4 +80,58 @@ export async function runScheduledPurge(
   const now = dependencies.now ?? new Date();
   await purgeTerminalEmailDeliveryPii(database, now);
   await purgeExpiredAuthVerifications(database, now);
+}
+
+/**
+ * Planner step: one `billing.grace` job per company in a payment grace
+ * period. The handler decides (notice, downgrade or nothing), so re-running
+ * the planner is harmless.
+ */
+export async function planBillingGrace(
+  dependencies: PlannerDependencies,
+): Promise<number> {
+  const database = dependencies.database ?? createDatabase();
+  const now = dependencies.now ?? new Date();
+  const due = await database
+    .select({ companyId: subscriptions.companyId })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.status, "past_due"),
+        isNotNull(subscriptions.graceUntil),
+      ),
+    );
+  for (const { companyId } of due) {
+    await dependencies.queue.send(createBillingGraceMessage(companyId, now));
+  }
+  return due.length;
+}
+
+/**
+ * Daily planner (`0 5 * * *`, research R11): it only selects pending work,
+ * inserts idempotent claims and enqueues jobs; it never does the work itself.
+ */
+export async function runDailyPlanner(
+  dependencies: PlannerDependencies,
+): Promise<void> {
+  const database = dependencies.database ?? createDatabase();
+  const now = dependencies.now ?? new Date();
+  const steps: Array<[string, () => Promise<number>]> = [
+    [
+      "billing_grace",
+      () => planBillingGrace({ ...dependencies, database, now }),
+    ],
+  ];
+  for (const [step, run] of steps) {
+    // Each step is independent: one failing step must not starve the rest.
+    try {
+      const planned = await run();
+      logSafe("info", "planner.step_completed", { step, planned });
+    } catch (error) {
+      logSafe("error", "planner.step_failed", {
+        step,
+        error_type: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
+  }
 }

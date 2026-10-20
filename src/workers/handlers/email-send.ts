@@ -46,6 +46,8 @@ export interface EmailSendHandlerDependencies {
   provider: TransactionalEmailProvider;
   appBaseUrl: string;
   documentHandler?: DocumentEmailHandler;
+  /** Billing, advisor and user notices (template stored on the delivery). */
+  noticeHandler?: DocumentEmailHandler;
   now?: () => Date;
 }
 
@@ -420,6 +422,14 @@ export function createEmailSendHandler(
       .limit(1);
 
     if (!delivery || delivery.status === "sent") {
+      return;
+    }
+
+    if (delivery.purpose === "billing_notice") {
+      if (!dependencies.noticeHandler) {
+        throw new Error("El consumidor de avisos no está configurado.");
+      }
+      await dependencies.noticeHandler(message);
       return;
     }
 

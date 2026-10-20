@@ -7,6 +7,8 @@ UPDATE "company" SET "plan" = 'pro' WHERE "plan" = 'essential';
 
 ALTER TABLE "company" ALTER COLUMN "plan" SET DEFAULT 'free';
 ALTER TABLE "company" DROP COLUMN IF EXISTS "ui_mode";
+ALTER TABLE "email_delivery" DROP COLUMN IF EXISTS "template";
+ALTER TABLE "email_delivery" DROP COLUMN IF EXISTS "payload";
 
 DROP TABLE IF EXISTS "subscription";
 DROP TABLE IF EXISTS "plan_change";

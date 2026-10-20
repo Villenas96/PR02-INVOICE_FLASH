@@ -1,15 +1,25 @@
 import { getEmailFrom, getEmailReplyTo, optionalEnv } from "@/lib/env";
 import type { PrivateBucket } from "@/services/storage";
+import { handleBillingGrace } from "@/workers/handlers/billing-grace";
 import {
   createDocumentEmailHandler,
   createEmailSendHandler,
   createResendEmailProvider,
   type TransactionalEmailProvider,
 } from "@/workers/handlers/email-send";
+import { createNoticeEmailHandler } from "@/workers/handlers/notice-email";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
-import type { EmailSendMessage, PdfRenderMessage } from "@/workers/messages";
+import type {
+  EmailSendMessage,
+  JobMessage,
+  PdfRenderMessage,
+} from "@/workers/messages";
 import { processQueueBatch, type QueueBatch } from "@/workers/queue-consumer";
-import { runScheduledPurge } from "@/workers/scheduled";
+import {
+  PLANNER_CRON,
+  runDailyPlanner,
+  runScheduledPurge,
+} from "@/workers/scheduled";
 import openNextWorker, {
   BucketCachePurge,
   DOQueueHandler,
@@ -80,15 +90,46 @@ async function queue(
       provider: emailProvider,
       appBaseUrl,
     }),
+    noticeHandler: createNoticeEmailHandler({
+      provider: emailProvider,
+      appBaseUrl,
+    }),
   });
 
   await processQueueBatch(adaptedBatch, {
     renderPdf: (message: PdfRenderMessage) => renderPdf(message),
     sendEmail: (message: EmailSendMessage) => sendEmail(message),
+    runJob: (message: JobMessage) => runJob(message, env),
   });
 }
 
-async function scheduled(): Promise<void> {
+/** Adapts a Cloudflare queue binding to the minimal producer interface. */
+function producer(queue: { send(message: unknown): Promise<unknown> }) {
+  return {
+    send: async (message: unknown) => {
+      await queue.send(message);
+    },
+  };
+}
+
+async function runJob(message: JobMessage, env: QueueEnv): Promise<void> {
+  switch (message.type) {
+    case "billing.grace":
+      await handleBillingGrace(message, {
+        emailQueue: producer(env.EMAIL_SEND_QUEUE),
+      });
+      return;
+  }
+}
+
+async function scheduled(
+  controller: { cron: string },
+  env: QueueEnv,
+): Promise<void> {
+  if (controller.cron === PLANNER_CRON) {
+    await runDailyPlanner({ queue: producer(env.JOBS_QUEUE) });
+    return;
+  }
   await runScheduledPurge();
 }
 

@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -53,6 +54,12 @@ export const emailDeliveries = pgTable(
     recipientEmail: text("recipient_email"),
     recipientHash: text("recipient_hash").notNull(),
     customMessage: text("custom_message"),
+    /** Notice template (billing, advisor, user notices); null for documents
+     * and account emails, whose template follows from `purpose`. */
+    template: text("template"),
+    /** Non-sensitive template parameters (never NIF, IBAN, amounts or
+     * tokens); PII-free by construction. */
+    payload: jsonb("payload"),
     status: emailDeliveryStatusEnum("status").notNull().default("queued"),
     providerMessageId: text("provider_message_id"),
     attemptCount: integer("attempt_count").notNull().default(0),

@@ -6,6 +6,10 @@ import type { Database } from "@/db";
 import * as schema from "@/db/schema";
 
 const BUSINESS_TABLES = [
+  "plan_change",
+  "subscription",
+  "billing_event",
+  "billing_price",
   "document_event",
   "email_delivery",
   "share_link",

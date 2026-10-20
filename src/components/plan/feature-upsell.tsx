@@ -80,6 +80,10 @@ const FEATURE_COPY: Record<Feature, { title: string; description: string }> = {
   },
 };
 
+export function featureTitle(feature: Feature): string {
+  return FEATURE_COPY[feature].title;
+}
+
 interface UpsellCardProps {
   title: string;
   description: string;
@@ -166,9 +170,12 @@ export function FeatureUpsell({
 /** Inline invitation built from an API upsell (feature or quota limit). */
 export function UpsellNotice({
   upsell,
+  upgradeUrl,
   className,
 }: {
   upsell: Upsell;
+  /** Overrides the API link, e.g. to resume an issue after paying. */
+  upgradeUrl?: string;
   className?: string;
 }) {
   if (upsell.kind === "feature") {
@@ -177,7 +184,7 @@ export function UpsellNotice({
         title={FEATURE_COPY[upsell.feature].title}
         description={upsell.message}
         requiredPlan={upsell.requiredPlan}
-        upgradeUrl={upsell.upgradeUrl}
+        upgradeUrl={upgradeUrl ?? upsell.upgradeUrl}
         className={className}
       />
     );
@@ -186,8 +193,8 @@ export function UpsellNotice({
     <UpsellCard
       title={`Has emitido ${upsell.used} de ${upsell.limit} ${documentTypePlural(upsell.documentType)} este mes`}
       description="Tu borrador se conserva sin número. Mejora tu plan para emitirlo ahora o espera al mes que viene."
-      requiredPlan="essential"
-      upgradeUrl={upsell.upgradeUrl}
+      requiredPlan={upsell.plan === "basic" ? "essential" : "pro"}
+      upgradeUrl={upgradeUrl ?? upsell.upgradeUrl}
       className={className}
     />
   );

@@ -1,5 +1,5 @@
 {
-  "id": "2b6028f4-e980-41fb-b5ef-49853f68ad5d",
+  "id": "c3aac4cc-e7ae-4608-8723-b02357245d0d",
   "prevId": "7f367e98-a4ae-4fbc-9271-4e2139ee3adf",
   "version": "7",
   "dialect": "postgresql",
@@ -1759,6 +1759,18 @@
         "custom_message": {
           "name": "custom_message",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "template": {
+          "name": "template",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
