@@ -236,19 +236,19 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 6
 
-- [ ] T085 [P] [US6] Write PDF template tests for header logo scaled with preserved aspect ratio (including extreme ratios), client logo, payment block (due date, amount, holder/IBAN/BIC; Bizum/PayPal/other variants), unit printed next to the quantity on each line (nothing when the line has no unit), "Observaciones" box only when present, and update the approved layout, in `tests/unit/pdf-template.test.ts` and `tests/fixtures/pdf/invoice-layout.approved.json`
-- [ ] T086 [P] [US6] Write unit tests for the per-document spreadsheet rows (issuer, client, number, dates, lines with unit, tax breakdown by name, retention, total taken from stored totals) in `tests/unit/document-xlsx.test.ts`
-- [ ] T087 [P] [US6] Write integration tests: changing a logo after issuing does not change the issued snapshot key; `/documents/:id/xlsx` → 403 for Basic/Essential, 200 for Pro, totals equal the PDF data, in `tests/integration/document-design.test.ts`
+- [X] T085 [P] [US6] Write PDF template tests for header logo scaled with preserved aspect ratio (including extreme ratios), client logo, payment block (due date, amount, holder/IBAN/BIC; Bizum/PayPal/other variants), unit printed next to the quantity on each line (nothing when the line has no unit), "Observaciones" box only when present, and update the approved layout, in `tests/unit/pdf-template.test.ts` and `tests/fixtures/pdf/invoice-layout.approved.json`
+- [X] T086 [P] [US6] Write unit tests for the per-document spreadsheet rows (issuer, client, number, dates, lines with unit, tax breakdown by name, retention, total taken from stored totals) in `tests/unit/document-xlsx.test.ts`
+- [X] T087 [P] [US6] Write integration tests: changing a logo after issuing does not change the issued snapshot key; `/documents/:id/xlsx` → 403 for Basic/Essential, 200 for Pro, totals equal the PDF data, in `tests/integration/document-design.test.ts`
 
 ### Implementation for User Story 6
 
-- [ ] T088 [US6] Store logos with content-addressed keys and accept only PNG/JPEG ≤ 2 MB and ≤ 4.000 px in `src/app/api/v1/company/logo/route.ts` and `src/services/storage.ts`; create `PUT`/`DELETE /api/v1/clients/:id/logo` in `src/app/api/v1/clients/[id]/logo/route.ts`
-- [ ] T089 [P] [US6] Rasterize SVG uploads to PNG (2× render size) in the browser before upload, with clear errors for unsupported files, in `src/components/settings/logo-settings.tsx` and a reusable `src/components/ui/logo-upload.tsx` used also in `src/components/clients/client-detail.tsx`
-- [ ] T090 [US6] Freeze `logo_key` in issuer and client snapshots at issue in `src/lib/documents/index.ts` and `src/services/document-issuance.ts`
-- [ ] T091 [US6] Render issuer logo in the header and client logo next to client data with `scaleToFit`, the line unit next to the quantity (FR-030), the payment footer block and the "Observaciones" box in `src/services/pdf/template.ts` and `src/services/pdf/render.ts` (load logo bytes from R2 in the PDF consumer `src/workers/handlers/pdf-render.ts`)
-- [ ] T092 [US6] Mirror logos, line units, payment block and observations in the public view `src/app/d/[token]/page.tsx` and in `src/components/documents/printable-document.tsx`
-- [ ] T093 [P] [US6] Create `src/lib/exports/document-sheet.ts` building rows from stored totals (no recalculation; cents → euros only at presentation)
-- [ ] T094 [US6] Implement `GET /api/v1/documents/:id/xlsx` with `requireFeature('document_xlsx')`, SheetJS write and `Content-Disposition: attachment`, in `src/app/api/v1/documents/[id]/xlsx/route.ts`, and add "Descargar Excel" (Pro) to `src/components/documents/document-actions.tsx`
+- [X] T088 [US6] Store logos with content-addressed keys and accept only PNG/JPEG ≤ 2 MB and ≤ 4.000 px in `src/app/api/v1/company/logo/route.ts` and `src/services/storage.ts`; create `PUT`/`DELETE /api/v1/clients/:id/logo` in `src/app/api/v1/clients/[id]/logo/route.ts`
+- [X] T089 [P] [US6] Rasterize SVG uploads to PNG (2× render size) in the browser before upload, with clear errors for unsupported files, in `src/components/settings/logo-settings.tsx` and a reusable `src/components/ui/logo-upload.tsx` used also in `src/components/clients/client-detail.tsx`
+- [X] T090 [US6] Freeze `logo_key` in issuer and client snapshots at issue in `src/lib/documents/index.ts` and `src/services/document-issuance.ts`
+- [X] T091 [US6] Render issuer logo in the header and client logo next to client data with `scaleToFit`, the line unit next to the quantity (FR-030), the payment footer block and the "Observaciones" box in `src/services/pdf/template.ts` and `src/services/pdf/render.ts` (load logo bytes from R2 in the PDF consumer `src/workers/handlers/pdf-render.ts`)
+- [X] T092 [US6] Mirror logos, line units, payment block and observations in the public view `src/app/d/[token]/page.tsx` and in `src/components/documents/printable-document.tsx`
+- [X] T093 [P] [US6] Create `src/lib/exports/document-sheet.ts` building rows from stored totals (no recalculation; cents → euros only at presentation)
+- [X] T094 [US6] Implement `GET /api/v1/documents/:id/xlsx` with `requireFeature('document_xlsx')`, SheetJS write and `Content-Disposition: attachment`, in `src/app/api/v1/documents/[id]/xlsx/route.ts`, and add "Descargar Excel" (Pro) to `src/components/documents/document-actions.tsx`
 
 **Checkpoint**: Incremento 2 completo (V4–V6). Desplegable.
 

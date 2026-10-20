@@ -529,6 +529,10 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           issuedDocuments={usageForType(company, "invoice").used}
           documentLimit={usageForType(company, "invoice").limit}
           payments={document.payments}
+          canDownloadXlsx={
+            document.status !== "draft" &&
+            companyHasFeature(company, "document_xlsx")
+          }
         />
       ) : null}
 

@@ -43,8 +43,12 @@ export interface ClientSnapshotInput {
   name: string;
   taxId: string | null;
   address: string | null;
+  /** Kept for sending the document; never printed (FR-006). */
   email: string | null;
   phone: string | null;
+  /** Content-addressed key, frozen so later logo changes never alter an
+   * issued document (FR-025). */
+  logoKey?: string | null;
 }
 
 export type ClientSnapshot = Readonly<ClientSnapshotInput>;
@@ -295,5 +299,6 @@ export function buildClientSnapshot(
     address: client.address,
     email: client.email,
     phone: client.phone,
+    ...(client.logoKey ? { logoKey: client.logoKey } : {}),
   });
 }

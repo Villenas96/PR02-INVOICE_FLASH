@@ -6,7 +6,11 @@ import { documentEvents } from "@/db/schema/document-event";
 import { payments } from "@/db/schema/payment";
 import { createUuidV7 } from "@/lib/ids";
 import { logSafe } from "@/lib/log";
-import { renderDocumentPdf } from "@/services/pdf/render";
+import {
+  type PdfAssets,
+  type PdfLogoAsset,
+  renderDocumentPdf,
+} from "@/services/pdf/render";
 import type {
   DocumentPdfInput,
   DocumentPdfParty,
@@ -17,8 +21,17 @@ import type { PdfRenderMessage } from "@/workers/messages";
 interface PdfRenderHandlerDependencies {
   database?: Database;
   bucket: PrivateBucket;
-  renderPdf?: (input: DocumentPdfInput) => Promise<Uint8Array>;
+  renderPdf?: (
+    input: DocumentPdfInput,
+    assets?: PdfAssets,
+  ) => Promise<Uint8Array>;
   now?: () => Date;
+}
+
+interface LoadedPdf {
+  input: DocumentPdfInput;
+  issuerLogoKey: string | null;
+  clientLogoKey: string | null;
 }
 
 interface DocumentSnapshot extends Record<string, unknown> {
@@ -98,6 +111,9 @@ function taxBreakdown(value: unknown): DocumentPdfInput["taxBreakdown"] {
       throw new PdfInputError("El desglose fiscal del documento no es válido.");
     }
     return {
+      ...("name" in entry && typeof entry.name === "string"
+        ? { name: entry.name }
+        : {}),
       rate: entry.rate,
       baseCents: entry.baseCents as number,
       taxCents: entry.taxCents as number,
@@ -137,10 +153,57 @@ async function loadReceiptDetails(
   };
 }
 
+function snapshotLogoKey(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const key = (value as { logoKey?: unknown }).logoKey;
+  return typeof key === "string" && /\.(png|jpe?g)$/i.test(key) ? key : null;
+}
+
+async function loadLogo(
+  bucket: PrivateBucket,
+  key: string | null,
+): Promise<PdfLogoAsset | null> {
+  if (!key) {
+    return null;
+  }
+  // A transient R2 failure throws and the message is retried; a missing
+  // object just renders the document without that logo.
+  const object = await bucket.get(key);
+  if (!object) {
+    return null;
+  }
+  const bytes = new Uint8Array(await new Response(object.body).arrayBuffer());
+  return { bytes, format: /\.png$/i.test(key) ? "png" : "jpg" };
+}
+
+function paymentSnapshot(value: unknown): DocumentPdfInput["payment"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const snapshot = value as Record<string, unknown>;
+  if (typeof snapshot.kind !== "string" || typeof snapshot.label !== "string") {
+    return null;
+  }
+  const text = (key: string) =>
+    typeof snapshot[key] === "string" ? (snapshot[key] as string) : undefined;
+  return {
+    kind: snapshot.kind,
+    label: snapshot.label,
+    holder: text("holder"),
+    iban: text("iban"),
+    bic: text("bic"),
+    phone: text("phone"),
+    email_or_url: text("email_or_url"),
+    instructions: text("instructions"),
+  };
+}
+
 async function loadPdfInput(
   database: Database,
   documentId: string,
-): Promise<DocumentPdfInput | null> {
+): Promise<LoadedPdf | null> {
   const [document] = await database
     .select({
       documentType: documents.documentType,
@@ -156,6 +219,7 @@ async function loadPdfInput(
       totalCents: documents.totalCents,
       issuerSnapshot: documents.issuerSnapshot,
       clientSnapshot: documents.clientSnapshot,
+      collectionMethodSnapshot: documents.collectionMethodSnapshot,
       pdfStatus: documents.pdfStatus,
       invoiceId: documents.invoiceId,
       paymentId: documents.paymentId,
@@ -190,8 +254,10 @@ async function loadPdfInput(
             position: documentLines.position,
             description: documentLines.description,
             quantity: documentLines.quantity,
+            unit: documentLines.unit,
             unitPriceCents: documentLines.unitPriceCents,
             taxRate: documentLines.taxRate,
+            taxName: documentLines.taxName,
             lineSubtotalCents: documentLines.lineSubtotalCents,
             lineTaxCents: documentLines.lineTaxCents,
             lineTotalCents: documentLines.lineTotalCents,
@@ -208,7 +274,7 @@ async function loadPdfInput(
         )
       : undefined;
 
-  return {
+  const input: DocumentPdfInput = {
     documentType: document.documentType,
     fullNumber: document.fullNumber,
     issueDate: document.issueDate,
@@ -231,7 +297,16 @@ async function loadPdfInput(
     retentionCents: document.retentionCents,
     totalCents: document.totalCents,
     notes: document.notes,
+    payment:
+      document.documentType === "invoice"
+        ? paymentSnapshot(document.collectionMethodSnapshot)
+        : null,
     receipt,
+  };
+  return {
+    input,
+    issuerLogoKey: snapshotLogoKey(document.issuerSnapshot),
+    clientLogoKey: snapshotLogoKey(document.clientSnapshot),
   };
 }
 
@@ -286,7 +361,7 @@ async function processPdf(
   dependencies: PdfRenderHandlerDependencies,
 ): Promise<void> {
   const database = dependencies.database ?? createDatabase();
-  let input: DocumentPdfInput | null;
+  let input: LoadedPdf | null;
   try {
     input = await loadPdfInput(database, message.documentId);
   } catch (error) {
@@ -308,8 +383,18 @@ async function processPdf(
     return;
   }
 
+  // Outside the try below: a transient R2 error must retry the message,
+  // never mark the PDF as permanently failed.
+  const [issuerLogo, clientLogo] = await Promise.all([
+    loadLogo(dependencies.bucket, input.issuerLogoKey),
+    loadLogo(dependencies.bucket, input.clientLogoKey),
+  ]);
+
   try {
-    const bytes = await (dependencies.renderPdf ?? renderDocumentPdf)(input);
+    const bytes = await (dependencies.renderPdf ?? renderDocumentPdf)(
+      input.input,
+      { issuerLogo, clientLogo },
+    );
     await storeDocumentPdf(dependencies.bucket, message.documentId, bytes);
     await markPdfTerminal(
       database,

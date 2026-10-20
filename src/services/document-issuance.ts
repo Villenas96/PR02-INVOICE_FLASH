@@ -130,6 +130,7 @@ interface IssuePreparation {
     address: string | null;
     email: string | null;
     phone: string | null;
+    logoKey: string | null;
     archivedAt: Date | null;
   } | null;
   lines: Array<{
@@ -326,6 +327,7 @@ async function loadIssuePreparation(
         address: clients.address,
         email: clients.email,
         phone: clients.phone,
+        logoKey: clients.logoKey,
         archivedAt: clients.archivedAt,
       },
       line: {
@@ -630,6 +632,7 @@ function prepareSnapshots(preparation: IssuePreparation): {
       address: client.address,
       email: client.email,
       phone: client.phone,
+      logoKey: client.logoKey,
     }),
   };
 }
@@ -763,6 +766,8 @@ async function executeAtomicIssue(
           ${preparation.client?.email ?? null}
         AND customer.phone IS NOT DISTINCT FROM
           ${preparation.client?.phone ?? null}
+        AND customer.logo_key IS NOT DISTINCT FROM
+          ${preparation.client?.logoKey ?? null}
       FOR SHARE OF customer
     ),
     line_input AS MATERIALIZED (

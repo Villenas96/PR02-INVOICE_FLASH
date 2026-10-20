@@ -17,6 +17,8 @@ interface DocumentActionsProps {
   issuedDocuments: number;
   documentLimit: number;
   payments: DocumentPayment[];
+  /** Pro (FR-033): the issued document as a spreadsheet. */
+  canDownloadXlsx: boolean;
 }
 
 function formattedDate(date: string): string {
@@ -170,12 +172,19 @@ export function DocumentActions({
   issuedDocuments,
   documentLimit,
   payments,
+  canDownloadXlsx,
 }: DocumentActionsProps) {
   const canConvert = documentType === "proforma" && !convertedToId;
   const canDuplicate = documentType !== "receipt";
   const canGenerateReceipts = documentType === "invoice";
 
-  if (!canConvert && !canDuplicate && !canGenerateReceipts && !convertedToId) {
+  if (
+    !canConvert &&
+    !canDuplicate &&
+    !canGenerateReceipts &&
+    !convertedToId &&
+    !canDownloadXlsx
+  ) {
     return null;
   }
 
@@ -204,6 +213,14 @@ export function DocumentActions({
       ) : null}
 
       {canDuplicate ? <DuplicateAction documentId={documentId} /> : null}
+
+      {canDownloadXlsx ? (
+        <Button asChild variant="outline">
+          <a href={`/api/v1/documents/${documentId}/xlsx`} download>
+            Descargar Excel
+          </a>
+        </Button>
+      ) : null}
 
       {canGenerateReceipts && payments.length > 0 ? (
         <div>

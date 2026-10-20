@@ -167,6 +167,7 @@ function clientResponse(
     email: client.email,
     phone: client.phone,
     notes: client.notes,
+    logo_key: client.logoKey,
     archived_at: client.archivedAt,
     pending_cents: aggregates.pendingCents,
     overdue_cents: aggregates.overdueCents,

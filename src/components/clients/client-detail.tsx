@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LogoUpload } from "@/components/ui/logo-upload";
 import {
   Table,
   TableBody,
@@ -37,6 +38,7 @@ interface ClientDetailData {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  logo_key: string | null;
   archived_at: string | null;
   pending_cents: number;
   overdue_cents: number;
@@ -370,6 +372,29 @@ export function ClientDetail({ clientId }: { clientId: string }) {
           {error}
         </p>
       ) : null}
+
+      <section
+        aria-labelledby="client-logo-title"
+        className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"
+      >
+        <h2 id="client-logo-title" className="font-semibold">
+          Logotipo del cliente
+        </h2>
+        <p className="mt-1 mb-4 text-sm text-muted-foreground">
+          Opcional. Aparece junto a sus datos en los documentos que emitas a
+          partir de ahora.
+        </p>
+        <LogoUpload
+          endpoint={`/api/v1/clients/${client.id}/logo`}
+          inputId="client-logo"
+          logoKey={client.logo_key}
+          onChange={(logoKey) =>
+            setClient((current) =>
+              current ? { ...current, logo_key: logoKey } : current,
+            )
+          }
+        />
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border bg-card p-5 shadow-sm">
