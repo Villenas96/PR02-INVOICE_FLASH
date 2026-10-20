@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { safeNextPath } from "@/lib/safe-next";
 
 type AuthMode = "login" | "register" | "forgot-password" | "reset-password";
 
@@ -44,11 +45,6 @@ function errorFromResponse(response: { error?: { message?: string } | null }) {
       response.error.message ?? "No se ha podido completar la acción.",
     );
   }
-}
-
-/** Only same-origin relative paths (e.g. an advisor invitation link). */
-function safeNextPath(value: string | null): string | null {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : null;
 }
 
 export function AuthForm({ mode }: { mode: AuthMode }) {
@@ -116,8 +112,10 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
     if (mode === "login") {
       router.replace(
-        safeNextPath(new URLSearchParams(window.location.search).get("next")) ??
-          "/documents",
+        safeNextPath(
+          new URLSearchParams(window.location.search).get("next"),
+          window.location.origin,
+        ) ?? "/documents",
       );
       router.refresh();
       return;
