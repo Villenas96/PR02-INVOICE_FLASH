@@ -136,6 +136,7 @@ La política de recordatorios se edita en `PUT /company` (`reminder_policy`); la
 | GET | `/oauth/consent` | sesión (página) | Consentimiento explícito; crea `ai_connection` (FR-054). |
 | POST | `/api/mcp` | Bearer OAuth | Servidor MCP Streamable HTTP sin estado. Rate limit 60/min por conexión. Conexión revocada o empresa sin Pro → `401`/`403` inmediato. |
 | GET | `/ai-connections` | owner | Conexiones con `authorized_at`, `last_used_at`, estado. |
+| POST | `/ai-connections` | owner, Pro | `{oauth_client_id}` → `201`. La llama la página de consentimiento justo antes de aceptar; idempotente por usuario y cliente. |
 | DELETE | `/ai-connections/:id` | owner | Revoca (FR-054). |
 
 **Herramientas MCP** (todas con el mismo Zod, scoping y límites del plan que la API; listas paginadas):

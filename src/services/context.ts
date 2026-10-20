@@ -15,6 +15,7 @@ import {
   recordAdvisorSession,
   resolveActiveCompany,
 } from "@/services/active-company";
+import { mcpPrincipalOf } from "@/services/mcp/principal";
 
 export { AuthenticationRequiredError, ResourceNotFoundError };
 
@@ -27,6 +28,13 @@ export interface CompanyContext {
   role: CompanyRole;
   /** Effective plan of the active company, read on every request. */
   plan: Plan;
+  /** Set when an AI assistant acts for the owner (FR-056): audit actor. */
+  actingAs?: string;
+}
+
+/** Who document events are attributed to: the assistant, or the user. */
+export function auditActor(context: CompanyContext): string {
+  return context.actingAs ?? context.userId;
 }
 
 export interface ResolveCompanyContextOptions {
@@ -85,6 +93,18 @@ export async function resolveCompanyContext(
   request: Request,
   options: ResolveCompanyContextOptions,
 ): Promise<CompanyContext> {
+  const assistant = mcpPrincipalOf(request);
+  if (assistant) {
+    // Already authenticated and authorised by the MCP endpoint (Bearer token,
+    // active connection, Pro): act as the owner of the connected company.
+    return {
+      userId: assistant.userId,
+      companyId: assistant.companyId,
+      role: "owner",
+      plan: assistant.plan,
+      actingAs: assistant.actingAs,
+    };
+  }
   const session = await auth.api.getSession({ headers: request.headers });
 
   if (!session) {

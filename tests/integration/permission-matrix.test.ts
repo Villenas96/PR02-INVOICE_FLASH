@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  aiConnections,
   bankStatements,
   bankTransactions,
   catalogItems,
@@ -11,6 +12,7 @@ import {
   documents,
   exportJobs,
   importJobs,
+  oauthClients,
   payments,
   reconciliations,
   recurringTemplates,
@@ -110,6 +112,7 @@ const READ_MUTATIONS = new Set([
 /** Reads reserved to the owner (subscription, advisor management). */
 const OWNER_ONLY_READS = new Set([
   "GET /advisor-access",
+  "GET /ai-connections",
   "GET /advisor-schedule",
   "GET /billing/subscription",
 ]);
@@ -484,6 +487,25 @@ async function foreignResources(): Promise<{
       startOn: "2026-12-01",
     })
     .returning({ id: recurringTemplates.id });
+  const [oauthClient] = await database
+    .insert(oauthClients)
+    .values({
+      id: crypto.randomUUID(),
+      clientId: `client-${crypto.randomUUID()}`,
+      redirectUris: ["https://assistant.example.test/callback"],
+      name: "Asistente ajeno",
+    })
+    .returning({ clientId: oauthClients.clientId });
+  const [connection] = await database
+    .insert(aiConnections)
+    .values({
+      id: crypto.randomUUID(),
+      userId: foreign.userId,
+      companyId,
+      oauthClientId: oauthClient?.clientId as string,
+      clientName: "Asistente ajeno",
+    })
+    .returning({ id: aiConnections.id });
   const [sample] = await database
     .insert(sampleRenders)
     .values({ id: crypto.randomUUID(), companyId })
@@ -499,6 +521,7 @@ async function foreignResources(): Promise<{
     stranger,
     ids: {
       "advisor-access": accessId,
+      "ai-connections": connection?.id as string,
       "catalog-items": catalogItem?.id as string,
       company: sample?.id as string,
       clients: foreign.clientId,

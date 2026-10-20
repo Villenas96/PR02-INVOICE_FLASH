@@ -10,7 +10,7 @@ import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parsePagination } from "@/lib/api/pagination";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { resolveCompanyContext } from "@/services/context";
+import { auditActor, resolveCompanyContext } from "@/services/context";
 import {
   deliveryNoteInvoicedExpression,
   derivedStateExpression,
@@ -411,6 +411,7 @@ export async function POST(request: Request): Promise<Response> {
     const createdDocument = await createDraftDocument({
       companyId: context.companyId,
       actor: context.userId,
+      eventActor: auditActor(context),
       documentType: input.doc_type,
       validUntil: input.valid_until ?? null,
       clientId: input.client_id ?? null,

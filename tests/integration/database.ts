@@ -24,6 +24,7 @@ const BUSINESS_TABLES = [
   "account",
   "verification",
   "rate_limit",
+  "jwks",
   "user",
 ] as const;
 

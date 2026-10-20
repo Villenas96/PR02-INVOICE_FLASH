@@ -111,6 +111,15 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     }
 
     if (mode === "login") {
+      // An assistant asked for authorization before the user was signed in:
+      // resume the OAuth flow with the signed query it arrived with.
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("sig") && params.has("client_id")) {
+        window.location.assign(
+          `/api/auth/oauth2/authorize?${params.toString()}`,
+        );
+        return;
+      }
       router.replace(
         safeNextPath(
           new URLSearchParams(window.location.search).get("next"),

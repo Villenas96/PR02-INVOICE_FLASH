@@ -65,6 +65,8 @@ export interface IssueDocumentInput {
   companyId: string;
   documentId: string;
   actor: string;
+  /** Audit actor of the events when it differs from `actor` (AI, FR-056). */
+  eventActor?: string;
   idempotency?: IssuanceIdempotencyStrategy;
 }
 
@@ -968,7 +970,7 @@ async function executeAtomicIssue(
         ${eventId},
         issued_document.company_id,
         issued_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'issued'::document_event_type,
         ${nowIso}
       FROM issued_document

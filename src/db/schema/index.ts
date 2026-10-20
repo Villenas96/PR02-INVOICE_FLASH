@@ -1,5 +1,7 @@
 export * from "./access-event";
 export * from "./advisor-schedule";
+export * from "./ai-confirmation";
+export * from "./ai-connection";
 export * from "./auth";
 export * from "./bank-statement";
 export * from "./bank-transaction";
@@ -18,6 +20,7 @@ export * from "./email-delivery";
 export * from "./export-job";
 export * from "./import-job";
 export * from "./measurement-unit";
+export * from "./oauth";
 export * from "./payment";
 export * from "./payment-reminder";
 export * from "./plan-change";

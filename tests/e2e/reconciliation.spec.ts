@@ -87,10 +87,16 @@ test("importa Norma 43, confirma una sugerencia, deshace y no duplica al reimpor
   ).toBe("paid");
 
   const movements = page.getByRole("region", { name: "Movimientos" });
+  const undone = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/v1/reconciliations/") &&
+      response.request().method() === "DELETE",
+  );
   await movements
     .getByRole("button", { name: /Deshacer/ })
     .first()
     .click();
+  expect((await undone).ok()).toBe(true);
   const unpaid = await page.request.get(`/api/v1/documents/${invoiceId}`);
   expect(
     ((await unpaid.json()) as { payment_status: string }).payment_status,

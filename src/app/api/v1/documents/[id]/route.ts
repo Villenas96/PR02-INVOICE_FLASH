@@ -14,7 +14,7 @@ import {
 } from "@/lib/documents/conversion";
 import { logSafe } from "@/lib/log";
 import { madridDate } from "@/lib/plan";
-import { resolveCompanyContext } from "@/services/context";
+import { auditActor, resolveCompanyContext } from "@/services/context";
 import {
   clientDisplayFor,
   type DocumentDetail,
@@ -424,6 +424,7 @@ export async function PATCH(
       companyId: context.companyId,
       documentId: params.id,
       actor: context.userId,
+      eventActor: auditActor(context),
       ...(input.doc_type === undefined ? {} : { documentType: input.doc_type }),
       ...(input.valid_until === undefined
         ? {}
@@ -484,6 +485,7 @@ export async function DELETE(
       companyId: context.companyId,
       documentId: params.id,
       actor: context.userId,
+      eventActor: auditActor(context),
     });
 
     return withRequestId(new Response(null, { status: 204 }), requestId);

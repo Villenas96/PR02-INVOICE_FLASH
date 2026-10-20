@@ -5,7 +5,7 @@ import { createDatabase } from "@/db";
 import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { resolveCompanyContext } from "@/services/context";
+import { auditActor, resolveCompanyContext } from "@/services/context";
 import {
   issueDocument,
   type PdfRenderQueue,
@@ -126,6 +126,7 @@ export async function POST(
         companyId: context.companyId,
         documentId: params.id,
         actor: context.userId,
+        eventActor: auditActor(context),
       },
       {
         database: createDatabase(),

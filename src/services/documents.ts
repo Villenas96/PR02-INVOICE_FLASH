@@ -72,6 +72,8 @@ const createDraftSchema = draftFieldsSchema
   .extend({
     companyId: z.string().uuid(),
     actor: z.string().uuid(),
+    /** Audit actor when it differs from `actor` (AI assistant, FR-056). */
+    eventActor: z.string().max(200).optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -95,6 +97,8 @@ const updateDraftSchema = z
     companyId: z.string().uuid(),
     documentId: z.string().uuid(),
     actor: z.string().uuid(),
+    /** Audit actor when it differs from `actor` (AI assistant, FR-056). */
+    eventActor: z.string().max(200).optional(),
     documentType: z.enum(EDITABLE_DOCUMENT_TYPES).optional(),
     validUntil: z.iso.date().nullable().optional(),
     clientId: nullableUuidSchema.optional(),
@@ -125,6 +129,8 @@ const deleteDraftSchema = z
     companyId: z.string().uuid(),
     documentId: z.string().uuid(),
     actor: z.string().uuid(),
+    /** Audit actor when it differs from `actor` (AI assistant, FR-056). */
+    eventActor: z.string().max(200).optional(),
   })
   .strict();
 
@@ -738,7 +744,7 @@ export async function createDraftDocument(
         ${eventId},
         inserted_document.company_id,
         inserted_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'created'::document_event_type,
         ${now.toISOString()}
       FROM inserted_document
@@ -1031,7 +1037,7 @@ export async function updateDraftDocument(
         ${eventId},
         updated_document.company_id,
         updated_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'updated'::document_event_type,
         ${now.toISOString()}
       FROM updated_document
@@ -1098,7 +1104,7 @@ export async function softDeleteDraftDocument(
         ${createUuidV7(now.getTime())},
         deleted_document.company_id,
         deleted_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'updated'::document_event_type,
         '{"operation":"draft_deleted"}'::jsonb,
         ${now.toISOString()}

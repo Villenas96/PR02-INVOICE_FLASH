@@ -13,6 +13,7 @@ import {
   CompanyProfileForm,
   InvoicingPreferencesForm,
 } from "./company-settings";
+import { IntegrationsSettings } from "./integrations-settings";
 import { InterfaceSettings } from "./interface-settings";
 import { LogoSettings } from "./logo-settings";
 import { ReminderSettings } from "./reminder-settings";
@@ -230,6 +231,15 @@ export function SettingsPanel() {
             content: (
               <AdvisorSettings
                 enabled={companyHasFeature(company, "advisor_access")}
+              />
+            ),
+          },
+          {
+            id: "assistants",
+            label: "Asistentes de IA",
+            content: (
+              <IntegrationsSettings
+                enabled={companyHasFeature(company, "ai_assistant")}
               />
             ),
           },

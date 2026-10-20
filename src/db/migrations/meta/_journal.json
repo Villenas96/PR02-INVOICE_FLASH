@@ -99,6 +99,13 @@
       "when": 1792510469838,
       "tag": "0013_reconciliation_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792512215836,
+      "tag": "0014_ai_connections",
+      "breakpoints": true
     }
   ]
 }

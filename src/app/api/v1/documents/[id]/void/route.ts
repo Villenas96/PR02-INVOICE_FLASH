@@ -4,7 +4,7 @@ import { createDatabase } from "@/db";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { resolveCompanyContext } from "@/services/context";
+import { auditActor, resolveCompanyContext } from "@/services/context";
 import { voidIssuedDocument } from "@/services/document-void";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -102,7 +102,7 @@ export async function POST(
       database: createDatabase(),
       companyId: context.companyId,
       documentId: params.id,
-      actor: context.userId,
+      actor: auditActor(context),
     });
 
     logSafe("info", "documents.voided", {

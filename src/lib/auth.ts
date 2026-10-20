@@ -1,6 +1,8 @@
+import { mcp } from "@better-auth/mcp";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { jwt } from "better-auth/plugins";
 
 import { createDatabase } from "@/db";
 import * as schema from "@/db/schema";
@@ -18,7 +20,23 @@ const authSchema = {
   account: schema.accounts,
   verification: schema.verifications,
   rateLimit: schema.rateLimits,
+  // OAuth provider of the MCP assistant connection (US15, FR-054).
+  jwks: schema.jwks,
+  oauthClient: schema.oauthClients,
+  oauthResource: schema.oauthResources,
+  oauthClientResource: schema.oauthClientResources,
+  oauthRefreshToken: schema.oauthRefreshTokens,
+  oauthAccessToken: schema.oauthAccessTokens,
+  oauthConsent: schema.oauthConsents,
+  oauthClientAssertion: schema.oauthClientAssertions,
 };
+
+const AUTH_BASE_URL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+
+/** Protected resource served by the MCP endpoint (audience of its tokens). */
+export const MCP_RESOURCE = `${AUTH_BASE_URL.replace(/\/+$/, "")}/api/mcp`;
+/** The single scope of the assistant connection; the plan gate is per request. */
+export const MCP_SCOPE = "invoicing";
 
 export type AuthEmailPurpose = "reset_password" | "verify_email";
 
@@ -68,7 +86,7 @@ function getAuthSecret() {
 
 export const auth = betterAuth({
   appName: "Factum",
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  baseURL: AUTH_BASE_URL,
   secret: getAuthSecret(),
   database: drizzleAdapter(createDatabase(), {
     provider: "pg",
@@ -110,6 +128,21 @@ export const auth = betterAuth({
         token,
       }),
   },
+  plugins: [
+    // Tokens are minted by the OAuth provider only; do not attach a JWT to
+    // every get-session response (it would touch the signing keys per request).
+    jwt({ disableSettingJwtHeader: true }),
+    mcp({
+      loginPage: "/login",
+      consentPage: "/oauth/consent",
+      resource: MCP_RESOURCE,
+      scopes: [MCP_SCOPE, "offline_access"],
+      clientRegistrationDefaultScopes: [MCP_SCOPE, "offline_access"],
+      // Public MCP clients (ChatGPT, Claude) register themselves (PKCE only).
+      allowDynamicClientRegistration: true,
+      allowUnauthenticatedClientRegistration: true,
+    }),
+  ],
   emailVerification: {
     expiresIn: EMAIL_VERIFICATION_EXPIRES_IN_SECONDS,
     sendOnSignUp: true,

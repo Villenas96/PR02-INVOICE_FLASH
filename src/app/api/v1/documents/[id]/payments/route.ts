@@ -4,7 +4,7 @@ import { createDatabase } from "@/db";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { resolveCompanyContext } from "@/services/context";
+import { auditActor, resolveCompanyContext } from "@/services/context";
 import { createPayment, type PaymentRecord } from "@/services/payments";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -106,6 +106,7 @@ export async function POST(
         companyId: context.companyId,
         documentId: params.id,
         actor: context.userId,
+        eventActor: auditActor(context),
         amountCents: input.amount_cents,
         paidOn: input.paid_on,
         method: input.method ?? null,
