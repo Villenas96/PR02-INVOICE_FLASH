@@ -1,8 +1,10 @@
+import { getEmailFrom, getEmailReplyTo, optionalEnv } from "@/lib/env";
 import type { PrivateBucket } from "@/services/storage";
 import {
   createDocumentEmailHandler,
   createEmailSendHandler,
   createResendEmailProvider,
+  type TransactionalEmailProvider,
 } from "@/workers/handlers/email-send";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
 import type { EmailSendMessage, PdfRenderMessage } from "@/workers/messages";
@@ -20,7 +22,9 @@ export { BucketCachePurge, DOQueueHandler, DOShardedTagCache };
 type QueueEnv = CloudflareEnv & {
   STORAGE_BUCKET: PrivateBucket;
   RESEND_API_KEY?: string;
-  RESEND_FROM_EMAIL?: string;
+  EMAIL_FROM?: string;
+  EMAIL_REPLY_TO?: string;
+  APP_BASE_URL?: string;
   BETTER_AUTH_URL?: string;
 };
 
@@ -33,6 +37,15 @@ interface CloudflareQueueMessage {
 
 interface CloudflareMessageBatch {
   messages: CloudflareQueueMessage[];
+}
+
+/** `APP_BASE_URL`, falling back to the auth base URL of v1 deployments. */
+function appBaseUrlFrom(env: QueueEnv): string {
+  return (
+    optionalEnv("APP_BASE_URL", env) ??
+    env.BETTER_AUTH_URL ??
+    "http://localhost:3000"
+  ).replace(/\/+$/, "");
 }
 
 async function queue(
@@ -49,11 +62,17 @@ async function queue(
   };
 
   const renderPdf = createPdfRenderHandler({ bucket: env.STORAGE_BUCKET });
-  const emailProvider = createResendEmailProvider({
-    apiKey: env.RESEND_API_KEY ?? "",
-    from: env.RESEND_FROM_EMAIL ?? "facturas@invoiceflash.app",
-  });
-  const appBaseUrl = env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  // Resolve the sender lazily: a missing EMAIL_FROM must only fail (and
+  // retry) email deliveries, never PDF renders in the same batch.
+  const emailProvider: TransactionalEmailProvider = {
+    send: (message) =>
+      createResendEmailProvider({
+        apiKey: env.RESEND_API_KEY ?? "",
+        from: getEmailFrom(env),
+        replyTo: getEmailReplyTo(env),
+      }).send(message),
+  };
+  const appBaseUrl = appBaseUrlFrom(env);
   const sendEmail = createEmailSendHandler({
     provider: emailProvider,
     appBaseUrl,

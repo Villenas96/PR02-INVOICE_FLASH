@@ -105,6 +105,60 @@ export interface DocumentDetailProjection {
   }>;
 }
 
+/** Human-readable client of a document (FR-004): never an internal id. */
+export interface ClientDisplay {
+  name: string;
+  tax_id: string | null;
+}
+
+/**
+ * Issued documents show the frozen snapshot; drafts show the live client.
+ */
+export function clientDisplayFor(
+  clientSnapshot: unknown,
+  liveClient: { name: string | null; taxId: string | null } | null,
+): ClientDisplay | null {
+  if (
+    clientSnapshot &&
+    typeof clientSnapshot === "object" &&
+    "name" in clientSnapshot &&
+    typeof clientSnapshot.name === "string"
+  ) {
+    const taxId =
+      "taxId" in clientSnapshot && typeof clientSnapshot.taxId === "string"
+        ? clientSnapshot.taxId
+        : null;
+    return { name: clientSnapshot.name, tax_id: taxId };
+  }
+  if (liveClient?.name) {
+    return { name: liveClient.name, tax_id: liveClient.taxId };
+  }
+  return null;
+}
+
+/** Live client of a document, scoped to the company. */
+export async function loadDocumentClient(
+  database: Database,
+  companyId: string,
+  documentId: string,
+): Promise<{ name: string; taxId: string | null } | null> {
+  const [row] = await database
+    .select({ name: clients.name, taxId: clients.taxId })
+    .from(documents)
+    .innerJoin(
+      clients,
+      and(
+        eq(clients.id, documents.clientId),
+        eq(clients.companyId, documents.companyId),
+      ),
+    )
+    .where(
+      and(eq(documents.id, documentId), eq(documents.companyId, companyId)),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 export type DocumentDetail = typeof documents.$inferSelect & {
   lines: Array<typeof documentLines.$inferSelect>;
 };

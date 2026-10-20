@@ -144,13 +144,15 @@ test("crea, busca, factura, edita y archiva un cliente sin alterar el documento 
   await page.getByLabel("Buscar").fill("");
 
   await page.goto("/documents/new");
-  await page.getByLabel("Buscar cliente").fill("E2E Clientes");
+  await page.getByRole("combobox", { name: "Cliente" }).click();
+  await page.keyboard.type("E2E Clientes");
   await expect(
-    page.getByLabel("Cliente", { exact: true }).locator("option"),
-  ).toHaveCount(2);
-  await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente E2E Clientes · A87654321" });
+    page.getByRole("option", { name: /^Cliente E2E Clientes/ }),
+  ).toHaveCount(1);
+  await page.getByRole("option", { name: /^Cliente E2E Clientes/ }).click();
+  await expect(page.getByRole("combobox", { name: "Cliente" })).toContainText(
+    "A87654321",
+  );
   const firstLine = page.getByRole("group", { name: "Línea 1" });
   await firstLine.getByLabel("Descripción").fill("Servicio de prueba");
   await firstLine.getByLabel("Cantidad").fill("1");
@@ -200,8 +202,13 @@ test("crea, busca, factura, edita y archiva un cliente sin alterar el documento 
   await expect(page.getByText("Archivado")).toBeVisible();
 
   await page.goto("/documents/new");
-  await page.getByLabel("Buscar cliente").fill("E2E Renombrado");
+  await page.getByRole("combobox", { name: "Cliente" }).click();
+  await page.keyboard.type("E2E Renombrado");
+  // Archived clients never appear; only «Sin cliente» and «Crear …» remain.
   await expect(
-    page.getByLabel("Cliente", { exact: true }).locator("option"),
-  ).toHaveCount(1);
+    page.getByRole("option", { name: /Crear «E2E Renombrado»/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /^Cliente E2E Renombrado/ }),
+  ).toHaveCount(0);
 });

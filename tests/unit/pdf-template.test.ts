@@ -139,6 +139,44 @@ describe("professional invoice PDF template", () => {
     expect(text).toContain("29/08/2026");
   });
 
+  it("never prints the client's email, even when the snapshot keeps it", () => {
+    const layout = buildDocumentPdfLayout(createInput()) as PdfLayout;
+    const text = visibleText(layout).join("\n");
+
+    expect(text).not.toContain(invoiceFixture.client.email);
+    expect(text).toContain(invoiceFixture.issuer.email);
+  });
+
+  it.each([null, "", "   \n  "])(
+    "omits the notes block entirely when notes are %j",
+    (notes) => {
+      const layout = buildDocumentPdfLayout({
+        ...createInput(),
+        notes,
+      }) as PdfLayout;
+      const text = visibleText(layout).join("\n");
+
+      expect(layout.pages.flatMap(roles)).not.toContain("notes");
+      expect(text).not.toContain("Sin notas");
+      expect(text).not.toMatch(/^Notas$/m);
+    },
+  );
+
+  it("prints non-empty notes trimmed under their heading", () => {
+    const layout = buildDocumentPdfLayout({
+      ...createInput(),
+      notes: "  Pago por transferencia a 30 días.  ",
+    }) as PdfLayout;
+    const notes = layout.pages
+      .flatMap((page) => page.elements)
+      .find((element) => element.role === "notes");
+
+    expect(notes).toMatchObject({
+      kind: "text",
+      text: "Notas\nPago por transferencia a 30 días.",
+    });
+  });
+
   it("paginates every line exactly once and repeats the Spanish table header", () => {
     const layout = buildDocumentPdfLayout(createInput()) as PdfLayout;
     const tables = lineTables(layout);

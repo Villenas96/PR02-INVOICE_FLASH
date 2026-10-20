@@ -11,8 +11,10 @@ import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
 import { resolveCompanyContext } from "@/services/context";
 import {
+  clientDisplayFor,
   type DocumentDetail,
   getDocumentDetail,
+  loadDocumentClient,
   softDeleteDraftDocument,
   updateDraftDocument,
 } from "@/services/documents";
@@ -251,18 +253,26 @@ export async function GET(
       )
       .limit(1);
 
+    const clientPromise = loadDocumentClient(
+      database,
+      context.companyId,
+      params.id,
+    );
+
     const [
       document,
       documentPayments,
       documentLinks,
       documentEventsRows,
       paymentSummaryRows,
+      liveClient,
     ] = await Promise.all([
       detailPromise,
       paymentsPromise,
       linksPromise,
       eventsPromise,
       paymentSummaryPromise,
+      clientPromise,
     ]);
     const paymentSummary = paymentSummaryRows[0] ?? {
       paidCents: 0,
@@ -272,6 +282,7 @@ export async function GET(
     return withRequestId(
       Response.json({
         ...draftResponse(document),
+        client_display: clientDisplayFor(document.clientSnapshot, liveClient),
         payments: documentPayments.map((payment) => ({
           id: payment.id,
           amount_cents: payment.amountCents,

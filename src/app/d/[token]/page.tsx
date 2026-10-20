@@ -178,6 +178,16 @@ export default async function SharedDocumentPage({
             </div>
           </div>
         </section>
+
+        {/* FR-005: the notes block only exists when there are notes. */}
+        {document.notes?.trim() ? (
+          <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6">
+            <h2 className="font-semibold">Notas</h2>
+            <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+              {document.notes.trim()}
+            </p>
+          </section>
+        ) : null}
       </main>
     </div>
   );

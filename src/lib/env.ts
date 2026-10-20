@@ -5,7 +5,8 @@
  * `env` object in queue/cron handlers, so every reader takes an explicit
  * source. Error messages name the variable but never echo any value.
  */
-export type EnvSource = Record<string, unknown>;
+/** `process.env`, the Worker `env` binding object or a plain record. */
+export type EnvSource = object;
 
 export type RequiredEnvName =
   | "STRIPE_SECRET_KEY"
@@ -30,11 +31,15 @@ export class MissingEnvError extends Error {
 }
 
 function defaultSource(): EnvSource {
-  return typeof process === "undefined" ? {} : (process.env as EnvSource);
+  return typeof process === "undefined" ? {} : process.env;
+}
+
+function rawValue(source: EnvSource, name: string): unknown {
+  return (source as Record<string, unknown>)[name];
 }
 
 function readText(source: EnvSource, name: string): string | undefined {
-  const value = source[name];
+  const value = rawValue(source, name);
   if (typeof value !== "string") {
     return undefined;
   }
@@ -93,6 +98,7 @@ export function isProCheckoutEnabled(
   source: EnvSource = defaultSource(),
 ): boolean {
   const value =
-    readText(source, "PRO_CHECKOUT_ENABLED") ?? source.PRO_CHECKOUT_ENABLED;
+    readText(source, "PRO_CHECKOUT_ENABLED") ??
+    rawValue(source, "PRO_CHECKOUT_ENABLED");
   return value === true || value === "true";
 }

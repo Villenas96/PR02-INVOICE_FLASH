@@ -278,9 +278,9 @@ test("al agotar el cupo mensual, convertir y emitir ofrece guardar la conversió
   const email = await registerVerifyAndSignIn(page, crypto.randomUUID());
   const clientId = await configureCompanyAndClient(page, email);
 
-  // Four issued invoices plus the proforma issued below hit the free plan's
-  // five-document monthly limit, shared across every document type.
-  for (let index = 0; index < 4; index += 1) {
+  // Quotas are per document type: five issued invoices use up the Basic
+  // plan's invoice quota, while the proforma still fits in its own quota.
+  for (let index = 0; index < 5; index += 1) {
     await createIssuedInvoice(page, clientId);
   }
   const proformaId = await createIssuedProforma(page, clientId, 20_000);
@@ -295,7 +295,7 @@ test("al agotar el cupo mensual, convertir y emitir ofrece guardar la conversió
   });
   await expect(convertButton).toBeDisabled();
   await expect(
-    page.getByText(/Has alcanzado el límite de 5 emisiones de este mes/),
+    page.getByText(/Has alcanzado el límite de 5 facturas de este mes/),
   ).toBeVisible();
   await expectAccessible(page);
 

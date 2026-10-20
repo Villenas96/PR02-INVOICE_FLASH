@@ -43,6 +43,8 @@ export interface DocumentPdfParty {
    * client may lack it (proformas carry no fiscal validity). */
   taxId: string | null;
   addressLines: string[];
+  /** Printed for the issuer only: documents never show the client's email
+   * (FR-006), even though the client snapshot keeps it for sending. */
   email?: string | null;
 }
 
@@ -138,13 +140,24 @@ function formatMoney(value: number): string {
   return formatEur(createCents(value));
 }
 
-function partyDetails(party: DocumentPdfParty): string {
+function partyDetails(
+  party: DocumentPdfParty,
+  { includeEmail }: { includeEmail: boolean },
+): string {
   return [
     party.legalName,
     ...(party.taxId ? [`NIF: ${party.taxId}`] : []),
     ...party.addressLines,
-    ...(party.email ? [party.email] : []),
+    ...(includeEmail && party.email ? [party.email] : []),
   ].join("\n");
+}
+
+function issuerDetails(party: DocumentPdfParty): string {
+  return partyDetails(party, { includeEmail: true });
+}
+
+function clientDetails(party: DocumentPdfParty): string {
+  return partyDetails(party, { includeEmail: false });
 }
 
 function paginateLines(lines: DocumentPdfLine[]): DocumentPdfLine[][] {
@@ -275,7 +288,7 @@ function buildReceiptPdfLayout(input: DocumentPdfInput): DocumentPdfLayout {
     {
       kind: "text",
       role: "issuer_details",
-      text: partyDetails(input.issuer),
+      text: issuerDetails(input.issuer),
       x: PDF_MARGINS.left,
       y: 666,
     },
@@ -289,7 +302,7 @@ function buildReceiptPdfLayout(input: DocumentPdfInput): DocumentPdfLayout {
     {
       kind: "text",
       role: "client_details",
-      text: partyDetails(input.client),
+      text: clientDetails(input.client),
       x: 310,
       y: 666,
     },
@@ -394,7 +407,7 @@ export function buildDocumentPdfLayout(
         {
           kind: "text",
           role: "issuer_details",
-          text: partyDetails(input.issuer),
+          text: issuerDetails(input.issuer),
           x: PDF_MARGINS.left,
           y: 666,
         },
@@ -408,7 +421,7 @@ export function buildDocumentPdfLayout(
         {
           kind: "text",
           role: "client_details",
-          text: partyDetails(input.client),
+          text: clientDetails(input.client),
           x: 310,
           y: 666,
         },
@@ -452,14 +465,18 @@ export function buildDocumentPdfLayout(
           x: 310,
           y: totalsY,
         },
-        {
+      );
+      // FR-005: no notes block at all when there are no notes.
+      const notes = input.notes?.trim();
+      if (notes) {
+        elements.push({
           kind: "text",
           role: "notes",
-          text: `Notas\n${input.notes?.trim() || "Sin notas."}`,
+          text: `Notas\n${notes}`,
           x: PDF_MARGINS.left,
           y: Math.min(totalsY - 76, 170),
-        },
-      );
+        });
+      }
     }
 
     elements.push(pageFooter(pageIndex + 1, pageCount));

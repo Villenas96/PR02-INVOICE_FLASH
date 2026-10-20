@@ -60,6 +60,10 @@ export interface ComboboxProps<T> {
 
 export const COMBOBOX_DEBOUNCE_MS = 250;
 
+// Muted text must keep 4.5:1 contrast on the highlighted option background.
+const MUTED_OPTION_TEXT =
+  "text-muted-foreground group-data-[selected=true]/command-item:text-accent-foreground";
+
 const CREATE_VALUE_PREFIX = "__create__";
 const CLEAR_VALUE = "__clear__";
 const MORE_VALUE = "__more__";
@@ -206,15 +210,15 @@ export function Combobox<T>({
             <span className="flex min-w-0 flex-col">
               <span className="truncate">{getLabel(value)}</span>
               {description ? (
-                <span className="truncate text-xs text-muted-foreground">
+                // The trigger gets a muted background on hover/focus;
+                // `foreground/70` keeps 4.5:1 there (muted text does not).
+                <span className="truncate text-xs text-foreground/70">
                   {description}
                 </span>
               ) : null}
             </span>
           ) : (
-            <span className="truncate text-muted-foreground">
-              {placeholder}
-            </span>
+            <span className="truncate text-foreground/70">{placeholder}</span>
           )}
           <ChevronsUpDownIcon
             aria-hidden="true"
@@ -245,7 +249,7 @@ export function Combobox<T>({
             <CommandGroup>
               {clearLabel ? (
                 <CommandItem value={CLEAR_VALUE} onSelect={() => select(null)}>
-                  <span className="text-muted-foreground">{clearLabel}</span>
+                  <span className={MUTED_OPTION_TEXT}>{clearLabel}</span>
                 </CommandItem>
               ) : null}
               {items.map((item) => {
@@ -262,7 +266,9 @@ export function Combobox<T>({
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate">{getLabel(item)}</span>
                       {itemDescription ? (
-                        <span className="truncate text-xs text-muted-foreground">
+                        <span
+                          className={cn("truncate text-xs", MUTED_OPTION_TEXT)}
+                        >
                           {itemDescription}
                         </span>
                       ) : null}
@@ -281,7 +287,7 @@ export function Combobox<T>({
                     void remoteOptions.loadMore(remoteOptions.nextCursor)
                   }
                 >
-                  <span className="text-muted-foreground">
+                  <span className={MUTED_OPTION_TEXT}>
                     {remoteOptions.loading ? "Cargando…" : "Mostrar más"}
                   </span>
                 </CommandItem>

@@ -31,6 +31,8 @@ export interface TransactionalEmail {
   text: string;
   html: string;
   idempotencyKey: string;
+  /** Where replies go; document emails use the issuing company's email. */
+  replyTo?: string | null;
 }
 
 export interface TransactionalEmailProvider {
@@ -320,6 +322,7 @@ export function createDocumentEmailHandler(
         fullNumber: documents.fullNumber,
         totalCents: documents.totalCents,
         legalName: companies.legalName,
+        companyEmail: companies.email,
       })
       .from(documents)
       .innerJoin(companies, eq(companies.id, documents.companyId))
@@ -366,6 +369,8 @@ export function createDocumentEmailHandler(
         to: claimed.recipientEmail,
         ...template,
         idempotencyKey: `email/${claimed.id}`,
+        // The client answers the self-employed issuer, not Factum (R16).
+        replyTo: document.companyEmail,
       });
       await markDocumentDeliverySent(
         database,
@@ -435,13 +440,20 @@ export function createEmailSendHandler(
   };
 }
 
+/**
+ * Resend transport. `from` is always `EMAIL_FROM` (`Factum <no-reply@…>`,
+ * FR-001); `replyTo` is the default Reply-To for system emails, overridden
+ * per message (document emails reply to the issuing company).
+ */
 export function createResendEmailProvider({
   apiKey,
   from,
+  replyTo,
   fetchImplementation = fetch,
 }: {
   apiKey: string;
   from: string;
+  replyTo?: string;
   fetchImplementation?: typeof fetch;
 }): TransactionalEmailProvider {
   return {
@@ -461,6 +473,9 @@ export function createResendEmailProvider({
             subject: message.subject,
             text: message.text,
             html: message.html,
+            ...((message.replyTo ?? replyTo)
+              ? { reply_to: message.replyTo ?? replyTo }
+              : {}),
           }),
         },
       );

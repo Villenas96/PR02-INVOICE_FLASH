@@ -2,6 +2,7 @@ import { and, asc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase } from "@/db";
+import { clients } from "@/db/schema/client";
 import { documentStatusEnum, documents } from "@/db/schema/document";
 import { documentTypeEnum } from "@/db/schema/document-series";
 import { payments } from "@/db/schema/payment";
@@ -10,7 +11,11 @@ import { parsePagination } from "@/lib/api/pagination";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
 import { resolveCompanyContext } from "@/services/context";
-import { createDraftDocument, type DocumentDetail } from "@/services/documents";
+import {
+  clientDisplayFor,
+  createDraftDocument,
+  type DocumentDetail,
+} from "@/services/documents";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -288,8 +293,18 @@ export async function GET(request: Request): Promise<Response> {
         updatedAt: documents.updatedAt,
         paidCents,
         paymentStatus,
+        clientSnapshot: documents.clientSnapshot,
+        clientName: clients.name,
+        clientTaxId: clients.taxId,
       })
       .from(documents)
+      .leftJoin(
+        clients,
+        and(
+          eq(clients.id, documents.clientId),
+          eq(clients.companyId, documents.companyId),
+        ),
+      )
       .where(and(...conditions))
       .orderBy(asc(documents.id))
       .limit(pagination.limit + 1);
@@ -305,6 +320,12 @@ export async function GET(request: Request): Promise<Response> {
           status: row.status,
           full_number: row.fullNumber,
           client_id: row.clientId,
+          client_display: clientDisplayFor(
+            row.clientSnapshot,
+            row.clientName === null
+              ? null
+              : { name: row.clientName, taxId: row.clientTaxId },
+          ),
           issue_date: row.issueDate,
           due_date: row.dueDate,
           total_cents: row.totalCents,

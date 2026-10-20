@@ -3,6 +3,7 @@
 import { useMutation } from "@/components/ui/async-action";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/api/client";
+import { documentTypePlural } from "@/lib/documents/labels";
 
 interface IssueActionProps {
   documentId: string;
@@ -24,6 +25,7 @@ export function IssueAction({
   const action = useMutation<unknown>();
   const limitReached = issuedDocuments >= documentLimit;
   const label = documentType === "proforma" ? "proforma" : "factura";
+  const plural = documentTypePlural(documentType);
 
   async function handleIssue() {
     const issued = await action.run(() =>
@@ -51,12 +53,12 @@ export function IssueAction({
         </p>
       ) : limitReached ? (
         <p className="mt-2 max-w-md text-sm text-destructive">
-          Has alcanzado el límite de {documentLimit} emisiones de este mes. El
+          Has alcanzado el límite de {documentLimit} {plural} de este mes. El
           borrador permanece disponible.
         </p>
       ) : issuedDocuments / documentLimit >= 0.8 ? (
         <p className="mt-2 max-w-md text-sm text-amber-700">
-          Te quedan {documentLimit - issuedDocuments} emisiones este mes.
+          Te quedan {documentLimit - issuedDocuments} {plural} este mes.
         </p>
       ) : null}
       {action.error ? (

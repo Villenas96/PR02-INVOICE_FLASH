@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { selectClientInEditor } from "./helpers";
 
 function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
@@ -139,10 +140,11 @@ test("copia un concepto del catálogo en una línea sin acoplar el documento a e
   expect(clientResponse.status(), await clientResponse.text()).toBe(201);
 
   await page.goto("/documents/new");
-  await page.getByLabel("Buscar cliente").fill("Cliente Catálogo E2E");
-  await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente Catálogo E2E · A87654321" });
+  await selectClientInEditor(
+    page,
+    "Cliente Catálogo E2E",
+    /Cliente Catálogo E2E.*A87654321/,
+  );
   await page.getByRole("button", { name: "Añadir desde catálogo" }).click();
   await page.getByRole("button", { name: /Hora de consultoría E2E/ }).click();
   const catalogLine = page.getByRole("group", { name: "Línea 2" });

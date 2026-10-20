@@ -84,18 +84,18 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 1
 
-- [ ] T023 [P] [US1] Write E2E tests without page reloads for: banner disappears after saving fiscal data, counter goes from "0 de 5" to "1 de 5" after issuing, the selected client shows name and NIF (also after reopening the draft), in `tests/e2e/fluency-fixes.spec.ts`
-- [ ] T024 [P] [US1] Update PDF template tests: no notes block when notes are empty, no client email anywhere, in `tests/unit/pdf-template.test.ts` and the approved layout in `tests/fixtures/pdf/invoice-layout.approved.json`
-- [ ] T025 [P] [US1] Write a unit test that renders every email template (document, verify, reset) and fails if the output contains "Invoice Flash" or the sender is not `EMAIL_FROM`, in `tests/unit/email-branding.test.ts`
+- [X] T023 [P] [US1] Write E2E tests without page reloads for: banner disappears after saving fiscal data, counter goes from "0 de 5" to "1 de 5" after issuing, the selected client shows name and NIF (also after reopening the draft), in `tests/e2e/fluency-fixes.spec.ts`
+- [X] T024 [P] [US1] Update PDF template tests: no notes block when notes are empty, no client email anywhere, in `tests/unit/pdf-template.test.ts` and the approved layout in `tests/fixtures/pdf/invoice-layout.approved.json`
+- [X] T025 [P] [US1] Write a unit test that renders every email template (document, verify, reset) and fails if the output contains "Invoice Flash" or the sender is not `EMAIL_FROM`, in `tests/unit/email-branding.test.ts`
 
 ### Implementation for User Story 1
 
-- [ ] T026 [US1] Remove the "Notas … Sin notas." fallback and render the notes block only when notes are non-empty, and stop printing the client email in `src/services/pdf/template.ts` and in the public view `src/app/d/[token]/page.tsx`
-- [ ] T027 [P] [US1] Create the shared Factum email layout in `src/services/email/templates/layout.ts` and refactor `src/services/email/templates/document.ts` and `src/services/email/templates/auth.ts` to use it, replacing every "Invoice Flash" text and subject
-- [ ] T028 [US1] Use `EMAIL_FROM` as sender and the company email as `Reply-To` for document emails in the Resend call of `src/workers/handlers/email-send.ts`, and set `appName: "Factum"` in `src/lib/auth.ts`
-- [ ] T029 [US1] Replace the `<select>` in `src/components/documents/editor/client-picker.tsx` with the `Combobox` (remote mode over `/api/v1/clients`), keep the selected client object in editor state, and show name + NIF; keep the inline client creation dialog
-- [ ] T030 [US1] Return `client_display {name, tax_id}` from `GET /api/v1/documents/:id` and from each row of `GET /api/v1/documents` in `src/services/documents.ts`, and initialize the editor selection from it in `src/components/documents/editor/invoice-editor.tsx` and `src/components/documents/document-list.tsx` (FR-004)
-- [ ] T031 [US1] Verify the layout banner and counter re-render after `router.refresh()` by moving their data loading into a cached server helper `src/services/layout-data.ts` used by `src/app/(app)/layout.tsx`, and confirm the company settings form and issue action use `useMutation` in `src/components/settings/company-settings.tsx` and `src/components/documents/editor/issue-action.tsx`
+- [X] T026 [US1] Remove the "Notas … Sin notas." fallback and render the notes block only when notes are non-empty, and stop printing the client email in `src/services/pdf/template.ts` and in the public view `src/app/d/[token]/page.tsx`
+- [X] T027 [P] [US1] Create the shared Factum email layout in `src/services/email/templates/layout.ts` and refactor `src/services/email/templates/document.ts` and `src/services/email/templates/auth.ts` to use it, replacing every "Invoice Flash" text and subject
+- [X] T028 [US1] Use `EMAIL_FROM` as sender and the company email as `Reply-To` for document emails in the Resend call of `src/workers/handlers/email-send.ts`, and set `appName: "Factum"` in `src/lib/auth.ts`
+- [X] T029 [US1] Replace the `<select>` in `src/components/documents/editor/client-picker.tsx` with the `Combobox` (remote mode over `/api/v1/clients`), keep the selected client object in editor state, and show name + NIF; keep the inline client creation dialog
+- [X] T030 [US1] Return `client_display {name, tax_id}` from `GET /api/v1/documents/:id` and from each row of `GET /api/v1/documents` in `src/services/documents.ts`, and initialize the editor selection from it in `src/components/documents/editor/invoice-editor.tsx` and `src/components/documents/document-list.tsx` (FR-004)
+- [X] T031 [US1] Verify the layout banner and counter re-render after `router.refresh()` by moving their data loading into a cached server helper `src/services/layout-data.ts` used by `src/app/(app)/layout.tsx`, and confirm the company settings form and issue action use `useMutation` in `src/components/settings/company-settings.tsx` and `src/components/documents/editor/issue-action.tsx`
 
 **Checkpoint**: V1 de la quickstart completa; SC-001 verificado por T023–T025.
 

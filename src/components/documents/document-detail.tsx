@@ -103,6 +103,7 @@ interface DocumentDetailData {
   total_cents: number;
   issuer_snapshot: IssuerSnapshot | null;
   client_snapshot: ClientSnapshot | null;
+  client_display: { name: string; tax_id: string | null } | null;
   converted_to_id: string | null;
   invoice_id: string | null;
   pdf_status: PdfStatus | null;
@@ -306,6 +307,11 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-2">
+          {document.status === "draft" ? (
+            <Button asChild variant="outline">
+              <Link href={`/documents/${document.id}/edit`}>Editar</Link>
+            </Button>
+          ) : null}
           {document.status === "draft" && company ? (
             <IssueAction
               documentId={document.id}
@@ -384,11 +390,21 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
             empresa o cliente.
           </p>
         </section>
-      ) : document.client_id ? (
+      ) : document.client_id && document.client_display ? (
         <section className="rounded-xl border bg-card p-5 text-sm shadow-sm">
-          <p>
-            Cliente seleccionado:{" "}
-            <span className="font-mono text-xs">{document.client_id}</span>
+          <h2 className="font-semibold">Cliente</h2>
+          <p className="mt-2">
+            <Link
+              className="font-medium underline-offset-4 hover:underline"
+              href={`/clients/${document.client_id}`}
+            >
+              {document.client_display.name}
+            </Link>
+          </p>
+          <p className="text-muted-foreground">
+            {document.client_display.tax_id
+              ? `NIF ${document.client_display.tax_id}`
+              : "Sin NIF"}
           </p>
         </section>
       ) : null}

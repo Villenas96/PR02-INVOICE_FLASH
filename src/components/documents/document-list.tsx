@@ -26,6 +26,7 @@ interface DocumentListItem {
   status: DocumentStatus;
   full_number: string | null;
   client_id: string | null;
+  client_display: { name: string; tax_id: string | null } | null;
   issue_date: string;
   due_date: string | null;
   total_cents: number;
@@ -244,6 +245,7 @@ export function DocumentList() {
             <TableHeader>
               <TableRow>
                 <TableHead>Documento</TableHead>
+                <TableHead>Cliente</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
@@ -266,6 +268,22 @@ export function DocumentList() {
                         {typeLabels[document.doc_type]}
                       </Badge>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {document.client_display ? (
+                      <>
+                        <span className="block max-w-56 truncate">
+                          {document.client_display.name}
+                        </span>
+                        {document.client_display.tax_id ? (
+                          <span className="text-xs text-muted-foreground">
+                            {document.client_display.tax_id}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">Sin cliente</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusVariant(document.status)}>

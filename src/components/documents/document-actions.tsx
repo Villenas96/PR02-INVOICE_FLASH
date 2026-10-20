@@ -72,7 +72,7 @@ function ConvertAction({
       </div>
       {limitReached ? (
         <p className="mt-2 max-w-md text-sm text-destructive">
-          Has alcanzado el límite de {documentLimit} emisiones de este mes.
+          Has alcanzado el límite de {documentLimit} facturas de este mes.
           Puedes guardar la conversión como borrador sin consumir cupo y
           emitirla el mes que viene.
         </p>

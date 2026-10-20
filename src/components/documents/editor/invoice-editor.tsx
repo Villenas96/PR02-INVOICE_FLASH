@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { ClientPicker } from "@/components/documents/editor/client-picker";
+import {
+  ClientPicker,
+  type SelectedClient,
+} from "@/components/documents/editor/client-picker";
 import {
   DocumentTypeSelector,
   type EditableDocumentType,
@@ -23,7 +26,12 @@ import { calculateBilling } from "@/lib/billing";
 import { documentTypePlural } from "@/lib/documents/labels";
 import { createCents, formatEur, parseEuroInput } from "@/lib/money";
 
-import type { CreatedDraft, EditorCompany, EditorLine } from "./types";
+import type {
+  CreatedDraft,
+  EditableDraft,
+  EditorCompany,
+  EditorLine,
+} from "./types";
 
 function madridToday(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en", {
@@ -44,12 +52,38 @@ function addCalendarDays(date: string, days: number): string {
   return value.toISOString().slice(0, 10);
 }
 
-export function InvoiceEditor() {
+function centsToEuroInput(cents: number): string {
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
+function decimalToInput(value: string): string {
+  return String(Number(value));
+}
+
+function editorLinesFromDraft(draft: EditableDraft): EditorLine[] {
+  if (draft.lines.length === 0) {
+    return [createInitialEditorLine()];
+  }
+  return draft.lines.map((line) => ({
+    localId: line.id,
+    description: line.description,
+    quantity: decimalToInput(line.quantity),
+    unitPrice: centsToEuroInput(line.unit_price_cents),
+    taxRate: line.tax_rate,
+    discountPercentage: decimalToInput(line.discount_pct),
+  }));
+}
+
+/**
+ * Creates a new draft or, with `documentId`, edits an existing one. Saving a
+ * new draft POSTs it; an existing draft is PATCHed in place.
+ */
+export function InvoiceEditor({ documentId }: { documentId?: string } = {}) {
   const router = useRouter();
   const [company, setCompany] = useState<EditorCompany>();
   const [documentType, setDocumentType] =
     useState<EditableDocumentType>("invoice");
-  const [selectedClientId, setSelectedClientId] = useState("");
+  const [client, setClient] = useState<SelectedClient | null>(null);
   const [issueDate, setIssueDate] = useState(() => madridToday());
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -62,11 +96,43 @@ export function InvoiceEditor() {
 
   useEffect(() => {
     const controller = new AbortController();
-    apiRequest<EditorCompany>("/api/v1/company", {
+    const companyRequest = apiRequest<EditorCompany>("/api/v1/company", {
       signal: controller.signal,
-    })
-      .then((companyResult) => {
+    });
+    const draftRequest = documentId
+      ? apiRequest<EditableDraft>(`/api/v1/documents/${documentId}`, {
+          signal: controller.signal,
+        })
+      : Promise.resolve(undefined);
+    Promise.all([companyRequest, draftRequest])
+      .then(([companyResult, draft]) => {
         setCompany(companyResult);
+        if (draft) {
+          if (draft.status !== "draft") {
+            setLoadError(
+              "Solo puedes editar borradores. Los documentos emitidos no se modifican.",
+            );
+            setCompany(undefined);
+            return;
+          }
+          if (draft.doc_type === "invoice" || draft.doc_type === "proforma") {
+            setDocumentType(draft.doc_type);
+          }
+          setClient(
+            draft.client_id && draft.client_display
+              ? {
+                  id: draft.client_id,
+                  name: draft.client_display.name,
+                  tax_id: draft.client_display.tax_id,
+                }
+              : null,
+          );
+          setIssueDate(draft.issue_date);
+          setDueDate(draft.due_date ?? "");
+          setNotes(draft.notes ?? "");
+          setLines(editorLinesFromDraft(draft));
+          return;
+        }
         setDueDate(
           (current) =>
             current ||
@@ -97,7 +163,7 @@ export function InvoiceEditor() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [documentId]);
 
   const calculation = useMemo(() => {
     if (!company) {
@@ -120,12 +186,12 @@ export function InvoiceEditor() {
 
   async function handleSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const created = await saveAction.run(() =>
+    const saved = await saveAction.run(() =>
       apiRequest<CreatedDraft>(
-        "/api/v1/documents",
-        jsonRequest("POST", {
+        documentId ? `/api/v1/documents/${documentId}` : "/api/v1/documents",
+        jsonRequest(documentId ? "PATCH" : "POST", {
           doc_type: documentType,
-          client_id: selectedClientId || null,
+          client_id: client?.id ?? null,
           issue_date: issueDate,
           due_date: dueDate || null,
           notes: notes.trim() || null,
@@ -139,8 +205,8 @@ export function InvoiceEditor() {
         }),
       ),
     );
-    if (created) {
-      router.push(`/documents/${created.id}`);
+    if (saved) {
+      router.push(`/documents/${saved.id}`);
     }
   }
 
@@ -190,10 +256,7 @@ export function InvoiceEditor() {
             value={documentType}
             onChange={setDocumentType}
           />
-          <ClientPicker
-            selectedId={selectedClientId}
-            onChange={setSelectedClientId}
-          />
+          <ClientPicker value={client} onChange={setClient} />
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="invoice-issue-date">Fecha de emisión</Label>
@@ -303,7 +366,9 @@ export function InvoiceEditor() {
 
       <div className="sticky bottom-4 flex flex-col-reverse gap-2 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur sm:flex-row sm:justify-end">
         <Button type="button" variant="ghost" asChild>
-          <Link href="/documents">Cancelar</Link>
+          <Link href={documentId ? `/documents/${documentId}` : "/documents"}>
+            Cancelar
+          </Link>
         </Button>
         <Button type="submit" disabled={saveAction.isLoading}>
           {saveAction.isLoading ? "Guardando borrador…" : "Guardar borrador"}
