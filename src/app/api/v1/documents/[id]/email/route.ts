@@ -88,7 +88,7 @@ function routeErrorResponse(
 
 async function emailQueue(): Promise<EmailQueue> {
   const cloudflare = await getCloudflareContext();
-  const queue = (cloudflare.env as { EMAIL_SEND_QUEUE?: EmailQueue })
+  const queue = (cloudflare.env as unknown as { EMAIL_SEND_QUEUE?: EmailQueue })
     .EMAIL_SEND_QUEUE;
 
   if (!queue) {

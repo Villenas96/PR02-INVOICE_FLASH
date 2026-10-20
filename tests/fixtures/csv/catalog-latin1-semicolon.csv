@@ -1,0 +1,51 @@
+Descripción;Precio;IVA;Unidad
+Revisión técnica 1;12,45;10;hora
+Hora de consultoría 2;14,90;4;día
+Mantenimiento año 3;17,35;0;mes
+Instalación eléctrica 4;19,80;21;kg
+;12,50;21;unidad
+Traducción página 6;24,70;4;unidad
+Formación in situ 7;27,15;0;hora
+Reparación caldera 8;29,60;21;día
+Auditoría energética 9;32,05;10;mes
+Diseño de logotipo 10;34,50;4;kg
+   ;8,00;21;hora
+Hora de consultoría 12;39,40;21;unidad
+Mantenimiento año 13;41,85;10;hora
+Instalación eléctrica 14;44,30;4;día
+Café en grano (kg) 15;46,75;0;mes
+Traducción página 16;49,20;21;kg
+Pieza devuelta;-15,00;21;unidad
+Reparación caldera 18;54,10;4;unidad
+Auditoría energética 19;56,55;0;hora
+Diseño de logotipo 20;59,00;21;día
+Revisión técnica 21;61,45;10;mes
+Hora de consultoría 22;63,90;4;kg
+Material extra;-0,01;10;unidad
+Instalación eléctrica 24;68,80;21;unidad
+Café en grano (kg) 25;71,25;10;hora
+Traducción página 26;73,70;4;día
+Formación in situ 27;76,15;0;mes
+Reparación caldera 28;78,60;21;kg
+Servicio urgente;doce euros;21;servicio
+Diseño de logotipo 30;83,50;4;unidad
+Revisión técnica 31;85,95;0;hora
+Hora de consultoría 32;88,40;21;día
+Mantenimiento año 33;90,85;10;mes
+Instalación eléctrica 34;93,30;4;kg
+Bono horas;12,5,0;21;hora
+Traducción página 36;98,20;21;unidad
+Formación in situ 37;100,65;10;hora
+Reparación caldera 38;103,10;4;día
+Auditoría energética 39;105,55;0;mes
+Diseño de logotipo 40;108,00;21;kg
+Licencia anual;120,00;150;mes
+Hora de consultoría 42;112,90;4;unidad
+Mantenimiento año 43;115,35;0;hora
+Instalación eléctrica 44;117,80;21;día
+Café en grano (kg) 45;120,25;10;mes
+Traducción página 46;122,70;4;kg
+Consultoría remota;;21;hora
+Reparación caldera 48;127,60;21;unidad
+Auditoría energética 49;130,05;10;hora
+Diseño de logotipo 50;132,50;4;día

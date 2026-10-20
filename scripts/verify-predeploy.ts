@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { neon } from "@neondatabase/serverless";
 import { z } from "zod";
 
 const MAX_EVIDENCE_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -102,7 +103,8 @@ function requireEnvironment(
     | "DATABASE_URL"
     | "DEPLOY_ENVIRONMENT"
     | "PREDEPLOY_EVIDENCE_FILE"
-    | "SENTRY_DSN",
+    | "SENTRY_DSN"
+    | "STRIPE_WEBHOOK_SECRET",
 ): string {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -175,6 +177,135 @@ function checkTimestamp(
   return { name: label, detail: value };
 }
 
+interface WranglerEnvironmentConfig {
+  queues?: {
+    producers?: Array<{ queue: string; binding: string }>;
+    consumers?: Array<{
+      queue: string;
+      max_retries?: number;
+      dead_letter_queue?: string;
+    }>;
+  };
+  triggers?: { crons?: string[] };
+  unsafe?: { bindings?: Array<{ name: string; type: string }> };
+  limits?: { cpu_ms?: number };
+}
+
+interface WranglerConfig extends WranglerEnvironmentConfig {
+  env?: Record<string, WranglerEnvironmentConfig>;
+}
+
+async function readWranglerEnvironment(
+  environment: "staging" | "production",
+): Promise<WranglerEnvironmentConfig> {
+  const raw = await readFile("wrangler.jsonc", "utf8");
+  // wrangler.jsonc only uses full-line comments; strip them before parsing.
+  const json = raw
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
+  const config = JSON.parse(json) as WranglerConfig;
+  const environmentConfig = config.env?.[environment];
+  if (!environmentConfig) {
+    throw new Error(`wrangler.jsonc has no env.${environment} block`);
+  }
+  return environmentConfig;
+}
+
+/**
+ * v2 platform wiring (specs/002 T005): jobs queue with DLQ, daily planner
+ * cron, new rate limiters and the CPU limit for export/import consumers.
+ * Wrangler does not inherit these bindings into environments, so each
+ * environment block is checked on its own.
+ */
+function checkV2Wiring(
+  config: WranglerEnvironmentConfig,
+  environment: "staging" | "production",
+): CheckResult[] {
+  const queuePrefix =
+    environment === "staging" ? "invoice-flash-staging" : "invoice-flash";
+  const jobsQueue = `${queuePrefix}-jobs`;
+  const producer = config.queues?.producers?.find(
+    (candidate) => candidate.binding === "JOBS_QUEUE",
+  );
+  if (producer?.queue !== jobsQueue) {
+    throw new Error(`JOBS_QUEUE producer must target ${jobsQueue}`);
+  }
+  const consumer = config.queues?.consumers?.find(
+    (candidate) => candidate.queue === jobsQueue,
+  );
+  if (
+    !consumer ||
+    consumer.max_retries !== 3 ||
+    consumer.dead_letter_queue !== `${jobsQueue}-dlq`
+  ) {
+    throw new Error(
+      `${jobsQueue} consumer must use max_retries 3 and DLQ ${jobsQueue}-dlq`,
+    );
+  }
+
+  const crons = config.triggers?.crons ?? [];
+  for (const cron of ["0 3 * * *", "0 5 * * *"]) {
+    if (!crons.includes(cron)) {
+      throw new Error(`cron trigger "${cron}" is not registered`);
+    }
+  }
+
+  const limiterNames = new Set(
+    (config.unsafe?.bindings ?? [])
+      .filter((binding) => binding.type === "ratelimit")
+      .map((binding) => binding.name),
+  );
+  for (const limiter of [
+    "PUBLIC_RATE_LIMITER",
+    "EXPORT_RATE_LIMITER",
+    "MCP_RATE_LIMITER",
+  ]) {
+    if (!limiterNames.has(limiter)) {
+      throw new Error(`rate limiter ${limiter} is not configured`);
+    }
+  }
+
+  if ((config.limits?.cpu_ms ?? 0) < 300_000) {
+    throw new Error("limits.cpu_ms must be at least 300000");
+  }
+
+  return [
+    { name: "Jobs queue", detail: `${jobsQueue} (DLQ ${jobsQueue}-dlq)` },
+    { name: "Cron triggers", detail: crons.join(", ") },
+    { name: "Rate limiters", detail: [...limiterNames].sort().join(", ") },
+    { name: "CPU limit", detail: `${config.limits?.cpu_ms} ms` },
+  ];
+}
+
+function checkStripeWebhookSecret(value: string): CheckResult {
+  if (!value.startsWith("whsec_") || value.length < 20) {
+    throw new Error(
+      "STRIPE_WEBHOOK_SECRET does not look like a Stripe signing secret",
+    );
+  }
+  return {
+    name: "Stripe webhook secret",
+    detail: "configured (value not printed)",
+  };
+}
+
+async function checkBillingPrices(databaseUrl: string): Promise<CheckResult> {
+  const query = neon(databaseUrl);
+  const rows = (await query`
+    SELECT count(*)::integer AS active_prices
+    FROM billing_price
+    WHERE active
+  `) as Array<{ active_prices: number }>;
+  const activePrices = rows[0]?.active_prices ?? 0;
+  if (activePrices === 0) {
+    throw new Error(
+      "billing_price has no active prices: sync Stripe prices before deploying",
+    );
+  }
+  return { name: "Billing prices", detail: `${activePrices} active price(s)` };
+}
+
 async function readEvidence(
   path: string,
 ): Promise<z.infer<typeof evidenceSchema>> {
@@ -226,7 +357,13 @@ async function main(): Promise<void> {
   }
 
   const sentryDsn = parseHttpsSentryDsn(requireEnvironment("SENTRY_DSN"));
-  const databaseUrl = parseNeonDatabaseUrl(requireEnvironment("DATABASE_URL"));
+  const databaseUrlValue = requireEnvironment("DATABASE_URL");
+  const databaseUrl = parseNeonDatabaseUrl(databaseUrlValue);
+  const v2Checks = [
+    ...checkV2Wiring(await readWranglerEnvironment(environment), environment),
+    checkStripeWebhookSecret(requireEnvironment("STRIPE_WEBHOOK_SECRET")),
+    await checkBillingPrices(databaseUrlValue),
+  ];
 
   const timestampChecks = [
     checkTimestamp("verifiedAt", evidence.verifiedAt, now),
@@ -290,6 +427,7 @@ async function main(): Promise<void> {
           ? "Free plan limits monitored; no billable spend"
           : `${evidence.neonCost.spendingLimitUsdCents} USD cents limit; 80%/100% alerts`,
     },
+    ...v2Checks,
     ...timestampChecks,
   ];
 

@@ -1,0 +1,4 @@
+# Byte-exact fixtures (Latin-1 encodings, CRLF records): never normalise.
+tests/fixtures/bank/*.n43 -text
+tests/fixtures/bank/*.csv -text
+tests/fixtures/csv/*.csv -text

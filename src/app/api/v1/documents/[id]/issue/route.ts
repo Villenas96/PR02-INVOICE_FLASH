@@ -64,7 +64,7 @@ function routeErrorResponse(
 async function pdfRenderQueue(): Promise<PdfRenderQueue> {
   const cloudflare = await getCloudflareContext();
   const queue = (
-    cloudflare.env as {
+    cloudflare.env as unknown as {
       PDF_RENDER_QUEUE?: PdfRenderQueue;
     }
   ).PDF_RENDER_QUEUE;
