@@ -281,20 +281,20 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 7
 
-- [ ] T104 [P] [US7] Write unit tests for CSV encoding detection (UTF-8 vs windows-1252), delimiter detection, header mapping suggestion, per-row validation (comma decimals → cents, negative prices, missing required columns) and the 5.000-row limit in `tests/unit/csv-import.test.ts`
-- [ ] T105 [P] [US7] Write integration tests for accent/case-insensitive client search over name, NIF, email, phone, address, postal code and city, and for catalog search, in `tests/integration/search-unaccent.test.ts`
-- [ ] T106 [P] [US7] Write integration tests for catalog import: analyze creates nothing, confirm with `skip` vs `update` duplicates, summary counts, `import_too_large`, Pro-only (`403` otherwise), queue redelivery without duplicates, in `tests/integration/catalog-import.test.ts`
-- [ ] T107 [P] [US7] Extend the client search performance scenario to 10.000 clients per company with p95 < 200 ms in `tests/performance/client-search.test.ts`
+- [X] T104 [P] [US7] Write unit tests for CSV encoding detection (UTF-8 vs windows-1252), delimiter detection, header mapping suggestion, per-row validation (comma decimals → cents, negative prices, missing required columns) and the 5.000-row limit in `tests/unit/csv-import.test.ts`
+- [X] T105 [P] [US7] Write integration tests for accent/case-insensitive client search over name, NIF, email, phone, address, postal code and city, and for catalog search, in `tests/integration/search-unaccent.test.ts`
+- [X] T106 [P] [US7] Write integration tests for catalog import: analyze creates nothing, confirm with `skip` vs `update` duplicates, summary counts, `import_too_large`, Pro-only (`403` otherwise), queue redelivery without duplicates, in `tests/integration/catalog-import.test.ts`
+- [X] T107 [P] [US7] Extend the client search performance scenario to 10.000 clients per company with p95 < 200 ms in `tests/performance/client-search.test.ts`
 
 ### Implementation for User Story 7
 
-- [ ] T108 [US7] Use `search_text LIKE '%' || immutable_unaccent(lower(:q)) || '%'` for `q` in `GET /api/v1/clients` and `GET /api/v1/catalog-items`, and accept `postal_code`/`city` in client create/update, in `src/app/api/v1/clients/route.ts`, `src/app/api/v1/clients/[id]/route.ts` and `src/app/api/v1/catalog-items/route.ts`
-- [ ] T109 [US7] Add "Archivar"/"Restaurar" row actions and an "Archivados" filter to `src/components/clients/client-list.tsx`, the same action and logo upload to `src/components/clients/client-detail.tsx`, and show postal code and city columns
-- [ ] T110 [US7] Add the unit `Combobox` (predefined + custom, "Crear unidad") to the product form in `src/components/catalog/catalog-list.tsx`
-- [ ] T111 [P] [US7] Create `src/lib/csv/` (`decode.ts`, `detect.ts`, `map-columns.ts`, `validate-catalog-row.ts`) reusing the catalog item Zod schema
-- [ ] T112 [US7] Implement `POST /api/v1/imports` (multipart to R2, 5 MB limit, `requireFeature('catalog_import')` for `kind=catalog`), `GET /api/v1/imports/:id`, `POST /api/v1/imports/:id/confirm` and the static template `GET /api/v1/imports/templates/catalog.csv`, in `src/services/imports/index.ts`, `src/app/api/v1/imports/route.ts`, `src/app/api/v1/imports/[id]/route.ts`, `src/app/api/v1/imports/[id]/confirm/route.ts` and `src/app/api/v1/imports/templates/catalog.csv/route.ts`
-- [ ] T113 [US7] Implement the `import.analyze` (preview only) and `import.apply` (batches of 500 per transaction, `source_import_id`, result summary) handlers for catalog imports in `src/workers/handlers/import-analyze.ts` and `src/workers/handlers/import-apply.ts`
-- [ ] T114 [US7] Build the import wizard (upload, column mapping, preview with per-row errors, duplicate policy, summary) behind `ProRoute` in `src/app/(app)/catalog/import/page.tsx` and `src/components/catalog/import-wizard.tsx`
+- [X] T108 [US7] Use `search_text LIKE '%' || immutable_unaccent(lower(:q)) || '%'` for `q` in `GET /api/v1/clients` and `GET /api/v1/catalog-items`, and accept `postal_code`/`city` in client create/update, in `src/app/api/v1/clients/route.ts`, `src/app/api/v1/clients/[id]/route.ts` and `src/app/api/v1/catalog-items/route.ts`
+- [X] T109 [US7] Add "Archivar"/"Restaurar" row actions and an "Archivados" filter to `src/components/clients/client-list.tsx`, the same action and logo upload to `src/components/clients/client-detail.tsx`, and show postal code and city columns
+- [X] T110 [US7] Add the unit `Combobox` (predefined + custom, "Crear unidad") to the product form in `src/components/catalog/catalog-list.tsx`
+- [X] T111 [P] [US7] Create `src/lib/csv/` (`decode.ts`, `detect.ts`, `map-columns.ts`, `validate-catalog-row.ts`) reusing the catalog item Zod schema
+- [X] T112 [US7] Implement `POST /api/v1/imports` (multipart to R2, 5 MB limit, `requireFeature('catalog_import')` for `kind=catalog`), `GET /api/v1/imports/:id`, `POST /api/v1/imports/:id/confirm` and the static template `GET /api/v1/imports/templates/catalog.csv`, in `src/services/imports/index.ts`, `src/app/api/v1/imports/route.ts`, `src/app/api/v1/imports/[id]/route.ts`, `src/app/api/v1/imports/[id]/confirm/route.ts` and `src/app/api/v1/imports/templates/catalog.csv/route.ts`
+- [X] T113 [US7] Implement the `import.analyze` (preview only) and `import.apply` (batches of 500 per transaction, `source_import_id`, result summary) handlers for catalog imports in `src/workers/handlers/import-analyze.ts` and `src/workers/handlers/import-apply.ts`
+- [X] T114 [US7] Build the import wizard (upload, column mapping, preview with per-row errors, duplicate policy, summary) behind `ProRoute` in `src/app/(app)/catalog/import/page.tsx` and `src/components/catalog/import-wizard.tsx`
 
 **Checkpoint**: V7 completa; SC-005 < 5 min.
 

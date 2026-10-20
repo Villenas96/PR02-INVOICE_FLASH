@@ -1,18 +1,19 @@
-import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase } from "@/db/index";
 import { catalogItems } from "@/db/schema/catalog-item";
+import { matchesSearchText } from "@/db/search";
 import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parsePagination } from "@/lib/api/pagination";
 import { parseJson, validate } from "@/lib/api/validate";
+import { createCatalogItemSchema } from "@/lib/catalog/schema";
 import { createUuidV7 } from "@/lib/ids";
 import { logSafe } from "@/lib/log";
 import { resolveCatalogTax } from "@/services/catalog-tax";
 import { resolveCompanyContext } from "@/services/context";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
-const MAX_POSTGRES_INTEGER = 2_147_483_647;
 
 const paginationQuerySchema = z
   .object({
@@ -28,27 +29,6 @@ const cursorSchema = z
     id: z.string().uuid(),
   })
   .strict();
-const createCatalogItemSchema = z
-  .object({
-    description: z
-      .string()
-      .trim()
-      .min(1, "Indica una descripción para el concepto.")
-      .max(1_000, "La descripción no puede superar 1.000 caracteres."),
-    unit_price_cents: z
-      .number()
-      .int("El precio debe ser un entero en céntimos.")
-      .min(0, "El precio no puede ser negativo.")
-      .max(MAX_POSTGRES_INTEGER),
-    tax_rate: z
-      .union([z.string(), z.number()])
-      .transform((value) => String(value))
-      .optional(),
-    tax_rate_id: z.string().uuid().nullable().optional(),
-    unit: z.string().trim().max(20).nullable().optional(),
-  })
-  .strict();
-
 type CatalogItemRow = typeof catalogItems.$inferSelect;
 
 function requestIdFrom(request: Request): {
@@ -152,7 +132,6 @@ export async function GET(request: Request): Promise<Response> {
     const cursorId = decodeCursor(pagination.cursor);
     const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
-    const searchTerm = query.q ? `%${query.q}%` : undefined;
 
     const rows = await database
       .select()
@@ -163,8 +142,8 @@ export async function GET(request: Request): Promise<Response> {
           query.archived === "true"
             ? isNotNull(catalogItems.archivedAt)
             : isNull(catalogItems.archivedAt),
-          searchTerm
-            ? sql`${catalogItems.description} ILIKE ${searchTerm}`
+          query.q
+            ? matchesSearchText(catalogItems.searchText, query.q)
             : undefined,
           cursorId ? gt(catalogItems.id, cursorId) : undefined,
         ),

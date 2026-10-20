@@ -1,8 +1,8 @@
-import { and, asc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import { z } from "zod";
-
 import { createDatabase } from "@/db/index";
 import { clients } from "@/db/schema/client";
+import { matchesSearchText } from "@/db/search";
 import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parsePagination } from "@/lib/api/pagination";
 import { parseJson, validate } from "@/lib/api/validate";
@@ -109,6 +109,8 @@ const createClientSchema = z
     email: emailSchema,
     phone: phoneSchema,
     address: optionalTextSchema("La dirección", 500),
+    postal_code: optionalTextSchema("El código postal", 20),
+    city: optionalTextSchema("La población", 120),
     notes: optionalTextSchema("Las notas", 5_000),
   })
   .strict();
@@ -139,7 +141,11 @@ function clientResponse(client: ClientRow) {
     address: client.address,
     email: client.email,
     phone: client.phone,
+    postal_code: client.postalCode,
+    city: client.city,
     notes: client.notes,
+    logo_key: client.logoKey,
+    archived_at: client.archivedAt,
   };
 }
 
@@ -216,7 +222,6 @@ export async function GET(request: Request): Promise<Response> {
     const cursorId = decodeCursor(pagination.cursor);
     const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
-    const searchTerm = query.q ? `%${query.q}%` : undefined;
 
     const rows = await database
       .select()
@@ -227,12 +232,7 @@ export async function GET(request: Request): Promise<Response> {
           query.archived === "true"
             ? isNotNull(clients.archivedAt)
             : isNull(clients.archivedAt),
-          searchTerm
-            ? or(
-                sql`${clients.name} ILIKE ${searchTerm}`,
-                sql`${clients.taxId} ILIKE ${searchTerm}`,
-              )
-            : undefined,
+          query.q ? matchesSearchText(clients.searchText, query.q) : undefined,
           cursorId ? gt(clients.id, cursorId) : undefined,
         ),
       )
@@ -272,6 +272,8 @@ export async function POST(request: Request): Promise<Response> {
         address: input.address,
         email: input.email,
         phone: input.phone,
+        postalCode: input.postal_code,
+        city: input.city,
         notes: input.notes,
       })
       .returning();

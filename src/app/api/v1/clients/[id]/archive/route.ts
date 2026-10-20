@@ -70,7 +70,10 @@ function clientResponse(client: ClientRow) {
     address: client.address,
     email: client.email,
     phone: client.phone,
+    postal_code: client.postalCode,
+    city: client.city,
     notes: client.notes,
+    logo_key: client.logoKey,
     archived_at: client.archivedAt,
   };
 }

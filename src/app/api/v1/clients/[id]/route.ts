@@ -104,6 +104,8 @@ const updateClientSchema = z
     email: emailSchema,
     phone: phoneSchema,
     address: optionalTextSchema("La dirección", 500),
+    postal_code: optionalTextSchema("El código postal", 20),
+    city: optionalTextSchema("La población", 120),
     notes: optionalTextSchema("Las notas", 5_000),
   })
   .strict()
@@ -166,6 +168,8 @@ function clientResponse(
     address: client.address,
     email: client.email,
     phone: client.phone,
+    postal_code: client.postalCode,
+    city: client.city,
     notes: client.notes,
     logo_key: client.logoKey,
     archived_at: client.archivedAt,
@@ -299,6 +303,10 @@ export async function PATCH(
         ...(input.address === undefined ? {} : { address: input.address }),
         ...(input.email === undefined ? {} : { email: input.email }),
         ...(input.phone === undefined ? {} : { phone: input.phone }),
+        ...(input.postal_code === undefined
+          ? {}
+          : { postalCode: input.postal_code }),
+        ...(input.city === undefined ? {} : { city: input.city }),
         ...(input.notes === undefined ? {} : { notes: input.notes }),
         updatedAt: new Date(),
       })

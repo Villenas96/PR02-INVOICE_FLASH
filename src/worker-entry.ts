@@ -8,6 +8,8 @@ import {
   createResendEmailProvider,
   type TransactionalEmailProvider,
 } from "@/workers/handlers/email-send";
+import { handleImportAnalyze } from "@/workers/handlers/import-analyze";
+import { handleImportApply } from "@/workers/handlers/import-apply";
 import { createNoticeEmailHandler } from "@/workers/handlers/notice-email";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
 import { dispatchJob } from "@/workers/jobs";
@@ -118,6 +120,14 @@ async function runJob(message: JobMessage, env: QueueEnv): Promise<void> {
   await dispatchJob(message, {
     "billing.grace": (job) =>
       handleBillingGrace(job, { emailQueue: producer(env.EMAIL_SEND_QUEUE) }),
+    "import.analyze": (job) =>
+      handleImportAnalyze(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+      }),
+    "import.apply": (job) =>
+      handleImportApply(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+      }),
   });
 }
 

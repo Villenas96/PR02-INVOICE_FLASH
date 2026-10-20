@@ -37,6 +37,8 @@ interface ClientDetailData {
   address: string | null;
   email: string | null;
   phone: string | null;
+  postal_code: string | null;
+  city: string | null;
   notes: string | null;
   logo_key: string | null;
   archived_at: string | null;
@@ -88,6 +90,8 @@ function EditClientDialog({
   const [address, setAddress] = useState(client.address ?? "");
   const [email, setEmail] = useState(client.email ?? "");
   const [phone, setPhone] = useState(client.phone ?? "");
+  const [postalCode, setPostalCode] = useState(client.postal_code ?? "");
+  const [city, setCity] = useState(client.city ?? "");
   const action = useMutation<ClientDetailData>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -101,6 +105,8 @@ function EditClientDialog({
           address: address.trim() || null,
           email: email.trim() || null,
           phone: phone.trim() || null,
+          postal_code: postalCode.trim() || null,
+          city: city.trim() || null,
         }),
       ),
     );
@@ -181,6 +187,29 @@ function EditClientDialog({
               >
                 Necesario para emitir facturas.
               </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-postal-code">Código postal</Label>
+                <Input
+                  id="edit-client-postal-code"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={20}
+                  value={postalCode}
+                  onChange={(event) => setPostalCode(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-city">Población</Label>
+                <Input
+                  id="edit-client-city"
+                  autoComplete="address-level2"
+                  maxLength={120}
+                  value={city}
+                  onChange={(event) => setCity(event.target.value)}
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-client-phone">Teléfono</Label>
@@ -357,6 +386,11 @@ export function ClientDetail({ clientId }: { clientId: string }) {
           <address className="mt-2 space-y-1 text-sm not-italic text-muted-foreground">
             <p>{client.tax_id ?? "Sin NIF"}</p>
             <p>{client.address ?? "Sin dirección"}</p>
+            {client.postal_code || client.city ? (
+              <p>
+                {[client.postal_code, client.city].filter(Boolean).join(" ")}
+              </p>
+            ) : null}
             <p>{client.email ?? "Sin correo"}</p>
             <p>{client.phone ?? "Sin teléfono"}</p>
           </address>
