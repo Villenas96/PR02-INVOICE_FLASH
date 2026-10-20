@@ -1,3 +1,4 @@
+import type { DocumentType } from "@/lib/plan";
 export type CompanyReadinessField = "legalName" | "taxId" | "address";
 
 export interface CompanyFiscalDetails {
@@ -91,7 +92,7 @@ export interface ClientFiscalDetails {
 
 export interface IssueValidationInput {
   /** Invoices need the client's tax id and address; proformas do not. */
-  documentType?: "invoice" | "proforma";
+  documentType?: DocumentType;
   company: CompanyFiscalDetails;
   clientId?: string | null;
   /** Fiscal data of the selected client, when one is selected. */

@@ -1,8 +1,11 @@
+import { and, asc, eq, isNull } from "drizzle-orm";
+
 import type { Database } from "@/db";
 import {
   clients,
   companies,
   documentLines,
+  documentLinks,
   documentSeries,
   documents,
   users,
@@ -190,4 +193,23 @@ export function recordingQueue() {
       return Promise.resolve();
     },
   };
+}
+
+/** Targets of the live `converted` links of a document, oldest first. */
+export async function convertedTargetIds(
+  database: Database,
+  sourceDocumentId: string,
+): Promise<string[]> {
+  const rows = await database
+    .select({ id: documentLinks.targetDocumentId })
+    .from(documentLinks)
+    .where(
+      and(
+        eq(documentLinks.sourceDocumentId, sourceDocumentId),
+        eq(documentLinks.kind, "converted"),
+        isNull(documentLinks.releasedAt),
+      ),
+    )
+    .orderBy(asc(documentLinks.createdAt));
+  return rows.map((row) => row.id);
 }

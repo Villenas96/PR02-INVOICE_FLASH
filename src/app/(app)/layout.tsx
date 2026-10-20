@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { AppNav } from "@/components/navigation/app-nav";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { OnboardingGuard } from "@/components/onboarding-guard";
 import { PlanIndicator } from "@/components/plan/plan-indicator";
 import { auth } from "@/lib/auth";
@@ -47,7 +48,10 @@ export default async function AppLayout({
           <Link href="/dashboard" className="font-semibold tracking-tight">
             Invoice Flash
           </Link>
-          <PlanIndicator planLabel={planLabel(plan)} usage={usage} />
+          <div className="flex items-center gap-2">
+            <PlanIndicator planLabel={planLabel(plan)} usage={usage} />
+            <NotificationBell />
+          </div>
         </div>
         <Suspense>
           <AppNav navigation={navigation} />

@@ -19,6 +19,7 @@ import { clients } from "./client";
 import { collectionMethods } from "./collection-method";
 import { companies } from "./company";
 import { documentSeries, documentTypeEnum } from "./document-series";
+import { recurringCycles } from "./recurring-cycle";
 import { taxRates } from "./tax-rate";
 
 export const documentStatusEnum = pgEnum("document_status", [
@@ -30,6 +31,11 @@ export const pdfStatusEnum = pgEnum("pdf_status", [
   "pending",
   "ready",
   "failed",
+]);
+
+export const quoteDecisionEnum = pgEnum("quote_decision", [
+  "accepted",
+  "rejected",
 ]);
 
 export const documents = pgTable(
@@ -69,8 +75,16 @@ export const documents = pgTable(
     totalCents: integer("total_cents").notNull().default(0),
     issuerSnapshot: jsonb("issuer_snapshot"),
     clientSnapshot: jsonb("client_snapshot"),
-    convertedFromId: uuid("converted_from_id"),
-    convertedToId: uuid("converted_to_id"),
+    /** Quotes only (FR-035): `>= issue_date`. */
+    validUntil: date("valid_until", { mode: "string" }),
+    /** Operational, not fiscal: the derived quote state reads it. */
+    quoteDecision: quoteDecisionEnum("quote_decision"),
+    quoteDecidedAt: timestamp("quote_decided_at", { withTimezone: true }),
+    /** Cycle that generated this document (one document per cycle). */
+    recurringCycleId: uuid("recurring_cycle_id").references(
+      () => recurringCycles.id,
+      { onDelete: "restrict" },
+    ),
     invoiceId: uuid("invoice_id"),
     paymentId: uuid("payment_id"),
     pdfStatus: pdfStatusEnum("pdf_status"),
@@ -93,6 +107,19 @@ export const documents = pgTable(
       table.issueDate,
     ),
     index("document_company_client_idx").on(table.companyId, table.clientId),
+    // Not partial on `document_type = 'quote'`: that value is added with
+    // `ADD VALUE` in the same migration run, where it cannot be used yet.
+    index("document_company_type_quote_decision_idx").on(
+      table.companyId,
+      table.documentType,
+      table.quoteDecision,
+    ),
+    index("document_company_client_type_status_idx").on(
+      table.companyId,
+      table.clientId,
+      table.documentType,
+      table.status,
+    ),
     index("document_company_issued_at_idx").on(table.companyId, table.issuedAt),
     // Orphan-logo purge: a logo key still frozen in any snapshot is kept.
     index("document_issuer_logo_key_idx").on(
@@ -113,6 +140,7 @@ export const documents = pgTable(
     uniqueIndex("document_company_full_number_issued_unique")
       .on(table.companyId, table.fullNumber)
       .where(sql`${table.status} IN ('issued', 'voided')`),
+    uniqueIndex("document_recurring_cycle_unique").on(table.recurringCycleId),
     uniqueIndex("document_payment_receipt_unique")
       .on(table.paymentId)
       .where(sql`${table.documentType} = 'receipt'`),
@@ -148,6 +176,8 @@ export const documentLines = pgTable(
     catalogItemId: uuid("catalog_item_id").references(() => catalogItems.id, {
       onDelete: "set null",
     }),
+    /** Groups lines by delivery note when invoicing several (US9-AC4). */
+    sectionLabel: text("section_label"),
     lineSubtotalCents: integer("line_subtotal_cents").notNull().default(0),
     lineTaxCents: integer("line_tax_cents").notNull().default(0),
     lineTotalCents: integer("line_total_cents").notNull().default(0),

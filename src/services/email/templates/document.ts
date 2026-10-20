@@ -1,3 +1,4 @@
+import type { DocumentType } from "@/lib/plan";
 import {
   paragraph,
   type RenderedEmail,
@@ -7,16 +8,18 @@ import {
 export type DocumentEmailTemplate = RenderedEmail;
 
 const TYPE_LABELS: Record<
-  "invoice" | "proforma" | "receipt",
+  DocumentType,
   { noun: string; article: "la" | "el" }
 > = {
   invoice: { noun: "factura", article: "la" },
   proforma: { noun: "proforma", article: "la" },
   receipt: { noun: "recibo", article: "el" },
+  quote: { noun: "presupuesto", article: "el" },
+  delivery_note: { noun: "albarán", article: "el" },
 };
 
 export function renderDocumentEmailTemplate(input: {
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   fullNumber: string;
   totalFormatted: string;
   issuerLegalName: string;

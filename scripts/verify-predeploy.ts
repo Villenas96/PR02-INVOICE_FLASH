@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { neon } from "@neondatabase/serverless";
 import { z } from "zod";
 
+import { lifecycleRuleProblems, lifecycleRuleSchema } from "./r2-lifecycle";
+
 const MAX_EVIDENCE_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
 const EVENT_ID_PATTERN = /^[a-f0-9]{32}$/i;
@@ -62,6 +64,14 @@ const evidenceSchema = z.object({
     customDomainsDisabled: z.literal(true),
     httpsOnly: z.literal(true),
     encryptionAtRest: z.literal("AES-256-GCM"),
+    // `pnpm exec wrangler r2 bucket lifecycle list <bucket>` (T192).
+    lifecycleRules: z
+      .array(lifecycleRuleSchema)
+      .superRefine((rules, context) => {
+        for (const problem of lifecycleRuleProblems(rules)) {
+          context.addIssue({ code: "custom", message: problem });
+        }
+      }),
     verifiedAt: timestampSchema,
     evidenceUrl: evidenceReferenceSchema,
   }),

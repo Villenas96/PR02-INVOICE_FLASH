@@ -1,4 +1,5 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
@@ -9,12 +10,14 @@ import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
+import { documentLinks } from "@/db/schema/document-link";
 import { taxRates } from "@/db/schema/tax-rate";
 import { ApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { type BillingResult, calculateBilling } from "@/lib/billing";
 import { createUuidV7 } from "@/lib/ids";
 import { createCents } from "@/lib/money";
+import type { DocumentType } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
 import { seriesArchivedError } from "@/services/document-errors";
 import { ensureDefaultSeries, findSelectableSeries } from "@/services/series";
@@ -100,7 +103,7 @@ export type UpdateDraftDocumentInput = z.input<typeof updateDraftSchema>;
 export type SoftDeleteDraftDocumentInput = z.input<typeof deleteDraftSchema>;
 
 export interface DocumentDetailProjection {
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   fullNumber: string | null;
   issueDate: string;
   dueDate: string | null;
@@ -178,8 +181,21 @@ export async function loadDocumentClient(
   return row ?? null;
 }
 
+export interface DocumentLinkRef {
+  id: string;
+  kind: "converted" | "invoiced";
+  documentType: DocumentType;
+  fullNumber: string | null;
+  status: "draft" | "issued" | "voided";
+}
+
 export type DocumentDetail = typeof documents.$inferSelect & {
   lines: Array<typeof documentLines.$inferSelect>;
+  /** Live links (not released, other end not deleted), both directions. */
+  links?: { from: DocumentLinkRef[]; to: DocumentLinkRef[] };
+  /** v1 compatibility: derived from the `converted` links. */
+  convertedFromId?: string | null;
+  convertedToId?: string | null;
   /** Set when saving this draft created the type's first series. */
   seriesCreated?: { prefix: string; renamed: boolean };
 };
@@ -446,6 +462,63 @@ async function throwCreateFailure(
   );
 }
 
+/**
+ * Live links of a document: `from` are its sources (e.g. the proforma it was
+ * converted from), `to` its targets, oldest first.
+ */
+export async function loadDocumentLinks(
+  database: Database,
+  companyId: string,
+  documentId: string,
+): Promise<{ from: DocumentLinkRef[]; to: DocumentLinkRef[] }> {
+  const other = alias(documents, "linked_document");
+  const rows = await database
+    .select({
+      sourceId: documentLinks.sourceDocumentId,
+      targetId: documentLinks.targetDocumentId,
+      kind: documentLinks.kind,
+      id: other.id,
+      documentType: other.documentType,
+      fullNumber: other.fullNumber,
+      status: other.status,
+    })
+    .from(documentLinks)
+    .innerJoin(
+      other,
+      and(
+        isNull(other.deletedAt),
+        or(
+          and(
+            eq(documentLinks.sourceDocumentId, documentId),
+            eq(other.id, documentLinks.targetDocumentId),
+          ),
+          and(
+            eq(documentLinks.targetDocumentId, documentId),
+            eq(other.id, documentLinks.sourceDocumentId),
+          ),
+        ),
+      ),
+    )
+    .where(
+      and(
+        eq(documentLinks.companyId, companyId),
+        isNull(documentLinks.releasedAt),
+      ),
+    )
+    .orderBy(asc(documentLinks.createdAt));
+  const ref = (row: (typeof rows)[number]): DocumentLinkRef => ({
+    id: row.id,
+    kind: row.kind,
+    documentType: row.documentType,
+    fullNumber: row.fullNumber,
+    status: row.status,
+  });
+  return {
+    from: rows.filter((row) => row.targetId === documentId).map(ref),
+    to: rows.filter((row) => row.sourceId === documentId).map(ref),
+  };
+}
+
 export async function getDocumentDetail<
   TDetail extends DocumentDetailProjection,
 >({
@@ -479,8 +552,17 @@ export async function getDocumentDetail<
   }
 
   const lines = rows.flatMap((row) => (row.line ? [row.line] : []));
+  const links = await loadDocumentLinks(database, companyId, document.id);
+  const latestConverted = (refs: DocumentLinkRef[]) =>
+    refs.filter((ref) => ref.kind === "converted").at(-1)?.id ?? null;
 
-  return { ...document, lines } as unknown as TDetail;
+  return {
+    ...document,
+    lines,
+    links,
+    convertedFromId: latestConverted(links.from),
+    convertedToId: latestConverted(links.to),
+  } as unknown as TDetail;
 }
 
 export async function createDraftDocument(

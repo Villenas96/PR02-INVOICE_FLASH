@@ -1,3 +1,5 @@
+import type { DocumentType } from "@/lib/plan";
+
 export interface ReceiptTotals {
   subtotalCents: number;
   taxBreakdown: [];
@@ -18,7 +20,7 @@ export function buildReceiptTotals(paymentAmountCents: number): ReceiptTotals {
 }
 
 export interface ReceiptSourceInvoice {
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   status: "draft" | "issued" | "voided";
 }
 

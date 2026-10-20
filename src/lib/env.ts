@@ -12,13 +12,15 @@ export type RequiredEnvName =
   | "STRIPE_SECRET_KEY"
   | "STRIPE_WEBHOOK_SECRET"
   | "EMAIL_FROM"
-  | "APP_BASE_URL";
+  | "APP_BASE_URL"
+  | "BETTER_AUTH_SECRET";
 
 const DESCRIPTIONS: Record<RequiredEnvName, string> = {
   STRIPE_SECRET_KEY: "la clave secreta de Stripe",
   STRIPE_WEBHOOK_SECRET: "el secreto de firma del webhook de Stripe",
   EMAIL_FROM: "el remitente de los correos (Factum <no-reply@…>)",
   APP_BASE_URL: "la URL pública de la aplicación",
+  BETTER_AUTH_SECRET: "el secreto de sesiones y enlaces de descarga",
 };
 
 export class MissingEnvError extends Error {
@@ -111,4 +113,11 @@ export function getStripeTaxRateId(
   source: EnvSource = defaultSource(),
 ): string | undefined {
   return readText(source, "STRIPE_TAX_RATE_ID");
+}
+
+/** Signs public download tokens (`/x/:token`); reuses the auth secret. */
+export function getDownloadTokenSecret(
+  source: EnvSource = defaultSource(),
+): string {
+  return requireEnv("BETTER_AUTH_SECRET", source);
 }

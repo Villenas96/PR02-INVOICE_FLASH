@@ -16,8 +16,8 @@ import { convertProformaAndIssue } from "@/services/document-conversion";
 import { issueDocument } from "@/services/document-issuance";
 import { createReceiptFromPayment } from "@/services/document-receipts";
 import { pdfRenderMessageSchema } from "@/workers/messages";
-
 import { createIntegrationDatabase } from "./database";
+import { convertedTargetIds } from "./fixtures";
 
 const database = createIntegrationDatabase();
 const queuedMessages: unknown[] = [];
@@ -301,15 +301,7 @@ describe("concurrent mixed-route document issue with per-type quotas", () => {
         .from(documents)
         .where(eq(documents.id, conventionalDraftId))
     )[0];
-    const proformaRow = (
-      await database
-        .select({
-          status: documents.status,
-          convertedToId: documents.convertedToId,
-        })
-        .from(documents)
-        .where(eq(documents.id, proformaId))
-    )[0];
+    const [convertedToId] = await convertedTargetIds(database, proformaId);
     const receiptRows = await database
       .select({ id: documents.id, status: documents.status })
       .from(documents)
@@ -324,12 +316,12 @@ describe("concurrent mixed-route document issue with per-type quotas", () => {
     // Draft-mode conversion never touches plan quota, so the conversion
     // candidate always links the proforma to a new invoice draft regardless
     // of whether it goes on to win the shared issuance slot.
-    expect(proformaRow?.convertedToId).toBeTruthy();
+    expect(convertedToId).toBeTruthy();
     const linkedDraft = (
       await database
         .select({ status: documents.status, number: documents.number })
         .from(documents)
-        .where(eq(documents.id, proformaRow?.convertedToId as string))
+        .where(eq(documents.id, convertedToId as string))
     )[0];
 
     expect(receiptRow.status).toBe("issued");

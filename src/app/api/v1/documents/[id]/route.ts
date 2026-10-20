@@ -13,6 +13,7 @@ import { resolveCompanyContext } from "@/services/context";
 import {
   clientDisplayFor,
   type DocumentDetail,
+  type DocumentLinkRef,
   getDocumentDetail,
   loadDocumentClient,
   softDeleteDraftDocument,
@@ -60,7 +61,7 @@ const updateDraftSchema = z
     },
   );
 
-type DocumentRow = typeof documents.$inferSelect;
+type DocumentRow = DocumentDetail;
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
@@ -101,6 +102,17 @@ function routeErrorResponse(
   );
 }
 
+function linksResponse(links: NonNullable<DocumentDetail["links"]>) {
+  const ref = (link: DocumentLinkRef) => ({
+    id: link.id,
+    kind: link.kind,
+    doc_type: link.documentType,
+    full_number: link.fullNumber,
+    status: link.status,
+  });
+  return { from: links.from.map(ref), to: links.to.map(ref) };
+}
+
 function documentResponse(document: DocumentRow) {
   return {
     id: document.id,
@@ -120,8 +132,9 @@ function documentResponse(document: DocumentRow) {
     total_cents: document.totalCents,
     issuer_snapshot: document.issuerSnapshot,
     client_snapshot: document.clientSnapshot,
-    converted_from_id: document.convertedFromId,
-    converted_to_id: document.convertedToId,
+    converted_from_id: document.convertedFromId ?? null,
+    converted_to_id: document.convertedToId ?? null,
+    links: document.links ? linksResponse(document.links) : undefined,
     invoice_id: document.invoiceId,
     payment_id: document.paymentId,
     pdf_status: document.pdfStatus,

@@ -1,5 +1,7 @@
+import type { DocumentType } from "@/lib/plan";
+
 export interface ConversionSourceDocument {
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   status: "draft" | "issued" | "voided";
   convertedToId: string | null;
 }

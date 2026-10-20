@@ -30,6 +30,8 @@ export const sessions = pgTable("session", {
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
+  /** Company the session acts on (own or advised); revalidated per request. */
+  activeCompanyId: uuid("active_company_id"),
 });
 
 export const accounts = pgTable(

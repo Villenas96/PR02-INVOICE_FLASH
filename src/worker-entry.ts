@@ -10,6 +10,7 @@ import {
 } from "@/workers/handlers/email-send";
 import { createNoticeEmailHandler } from "@/workers/handlers/notice-email";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
+import { dispatchJob } from "@/workers/jobs";
 import type {
   EmailSendMessage,
   JobMessage,
@@ -114,13 +115,10 @@ function producer(queue: { send(message: unknown): Promise<unknown> }) {
 }
 
 async function runJob(message: JobMessage, env: QueueEnv): Promise<void> {
-  switch (message.type) {
-    case "billing.grace":
-      await handleBillingGrace(message, {
-        emailQueue: producer(env.EMAIL_SEND_QUEUE),
-      });
-      return;
-  }
+  await dispatchJob(message, {
+    "billing.grace": (job) =>
+      handleBillingGrace(job, { emailQueue: producer(env.EMAIL_SEND_QUEUE) }),
+  });
 }
 
 async function scheduled(

@@ -12,8 +12,8 @@ import {
 } from "@/db/schema";
 import { convertProformaAndIssue } from "@/services/document-conversion";
 import { pdfRenderMessageSchema } from "@/workers/messages";
-
 import { createIntegrationDatabase } from "./database";
+import { convertedTargetIds } from "./fixtures";
 
 const database = createIntegrationDatabase();
 const queuedMessages: unknown[] = [];
@@ -175,18 +175,10 @@ describe("concurrent proforma conversion", () => {
     );
     expect(resolvedInvoiceIds.size).toBe(1);
 
-    const [linkedProforma] = await database
-      .select({ convertedToId: documents.convertedToId })
-      .from(documents)
-      .where(eq(documents.id, proformaId));
-    const invoiceId = linkedProforma?.convertedToId;
+    const linkedInvoices = await convertedTargetIds(database, proformaId);
+    const invoiceId = linkedInvoices[0];
     expect(invoiceId).toBeTruthy();
     expect(resolvedInvoiceIds.has(invoiceId as string)).toBe(true);
-
-    const linkedInvoices = await database
-      .select({ id: documents.id, convertedFromId: documents.convertedFromId })
-      .from(documents)
-      .where(eq(documents.convertedFromId, proformaId));
     expect(linkedInvoices).toHaveLength(1);
 
     const [issuedInvoice] = await database

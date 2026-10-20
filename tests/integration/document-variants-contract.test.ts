@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clients, companies, documents, payments, users } from "@/db/schema";
-
 import { createIntegrationDatabase } from "./database";
+import { convertedTargetIds } from "./fixtures";
 
 const appBaseUrl = "http://localhost:3000";
 process.env.BETTER_AUTH_SECRET =
@@ -392,16 +392,13 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
 
     // Draft-mode conversion is free of charge (no plan quota); the linked
     // invoice draft is created, but it must stay unissued and numberless.
-    const [proforma] = await database
-      .select({ convertedToId: documents.convertedToId })
-      .from(documents)
-      .where(eq(documents.id, proformaId));
-    expect(proforma?.convertedToId).toBeTruthy();
+    const [convertedToId] = await convertedTargetIds(database, proformaId);
+    expect(convertedToId).toBeTruthy();
 
     const [linkedDraft] = await database
       .select({ status: documents.status, number: documents.number })
       .from(documents)
-      .where(eq(documents.id, proforma?.convertedToId as string));
+      .where(eq(documents.id, convertedToId as string));
     expect(linkedDraft).toMatchObject({ status: "draft", number: null });
   });
 

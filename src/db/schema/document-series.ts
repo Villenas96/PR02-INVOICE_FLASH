@@ -17,6 +17,8 @@ export const documentTypeEnum = pgEnum("document_type", [
   "invoice",
   "proforma",
   "receipt",
+  "quote",
+  "delivery_note",
 ]);
 
 export const documentSeries = pgTable(

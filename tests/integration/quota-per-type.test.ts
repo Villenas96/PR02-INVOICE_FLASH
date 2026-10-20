@@ -1,7 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { documentEvents, documentSeries, documents } from "@/db/schema";
+import {
+  documentEvents,
+  documentLinks,
+  documentSeries,
+  documents,
+} from "@/db/schema";
 import { ApiError, toApiError } from "@/lib/api/errors";
 import { issueDocument } from "@/services/document-issuance";
 import { pdfRenderMessageSchema } from "@/workers/messages";
@@ -220,10 +225,13 @@ describe("per-document-type quota in the issuance guard", () => {
     if (!source || !existingInvoice) {
       throw new Error("fixture incomplete");
     }
-    await database
-      .update(documents)
-      .set({ convertedFromId: source.id })
-      .where(eq(documents.id, existingInvoice.id));
+    await database.insert(documentLinks).values({
+      id: crypto.randomUUID(),
+      companyId: owner.companyId,
+      sourceDocumentId: source.id,
+      targetDocumentId: existingInvoice.id,
+      kind: "converted",
+    });
 
     const repeatDraft = await createDraft(database, owner);
     const queue = recordingQueue();

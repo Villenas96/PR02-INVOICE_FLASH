@@ -169,3 +169,23 @@ Hazla al final, con T122, T123, T129 y T130 cerradas.
 4. Confirma que `main` está protegida (repository-governance.md) y que el PR final
    tiene al menos una aprobación. Puedo ejecutar el paso 1 y preparar el borrador
    del informe cuando me lo pidas.
+
+---
+
+# v2 (`specs/002-factum-improvements`) — pasos que dependen del titular
+
+## T192 — Reglas de ciclo de vida de R2
+
+El código y el verificador están listos; falta aplicar las reglas en Cloudflare
+(no se ejecutan desde el repositorio porque modifican la cuenta). En cada bucket
+(`invoice-flash-storage-staging` e `invoice-flash-storage`):
+
+```bash
+pnpm exec wrangler r2 bucket lifecycle add <bucket> expire-exports exports/ --expire-days 8
+pnpm exec wrangler r2 bucket lifecycle add <bucket> expire-imports imports/ --expire-days 8
+pnpm exec wrangler r2 bucket lifecycle list <bucket>
+```
+
+Copia el resultado a `r2.lifecycleRules` del fichero de evidencia
+([cloud-cost-controls.md](./cloud-cost-controls.md)); `pnpm verify:predeploy`
+falla mientras falten.

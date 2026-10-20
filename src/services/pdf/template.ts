@@ -1,4 +1,6 @@
+import { documentTypeLabel } from "@/lib/documents/labels";
 import { createCents, formatEur } from "@/lib/money";
+import type { DocumentType } from "@/lib/plan";
 
 export const PDF_PAGE_SIZE = {
   width: 595.28,
@@ -72,7 +74,7 @@ export interface DocumentPdfReceiptDetails {
 }
 
 export interface DocumentPdfInput {
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   fullNumber: string;
   issueDate: string;
   dueDate?: string | null;
@@ -357,13 +359,7 @@ function totalsText(input: DocumentPdfInput): string {
 export function documentTitle(
   documentType: DocumentPdfInput["documentType"],
 ): string {
-  if (documentType === "invoice") {
-    return "Factura";
-  }
-  if (documentType === "proforma") {
-    return "Proforma";
-  }
-  return "Recibo";
+  return documentTypeLabel(documentType);
 }
 
 function buildReceiptPdfLayout(input: DocumentPdfInput): DocumentPdfLayout {

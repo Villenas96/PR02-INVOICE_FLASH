@@ -7,6 +7,7 @@ import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
+import { documentLinks } from "@/db/schema/document-link";
 import { documentSeries } from "@/db/schema/document-series";
 import { ApiError } from "@/lib/api/errors";
 import { type BillingResult, calculateBilling } from "@/lib/billing";
@@ -71,7 +72,7 @@ export interface IssueDocumentDependencies {
 
 export interface IssuedDocumentResult {
   id: string;
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   status: "issued" | "voided";
   seriesId: string;
   number: number;
@@ -106,7 +107,7 @@ interface IssuePreparation {
   };
   document: {
     id: string;
-    documentType: "invoice" | "proforma" | "receipt";
+    documentType: DocumentType;
     status: "draft" | "issued" | "voided";
     clientId: string | null;
     /** Series chosen in the editor; `null` → the type's default series. */
@@ -593,7 +594,13 @@ async function resolveExistingIdempotentDocument(
         idempotency.kind === "converted_from"
           ? and(
               eq(documents.documentType, "invoice"),
-              eq(documents.convertedFromId, idempotency.sourceDocumentId),
+              sql`EXISTS (
+                SELECT 1 FROM ${documentLinks}
+                WHERE ${documentLinks.targetDocumentId} = ${documents.id}
+                  AND ${documentLinks.sourceDocumentId} = ${idempotency.sourceDocumentId}
+                  AND ${documentLinks.kind} = 'converted'
+                  AND ${documentLinks.releasedAt} IS NULL
+              )`,
             )
           : and(
               eq(documents.documentType, "receipt"),
@@ -697,8 +704,14 @@ async function executeAtomicIssue(
           (
             ${idempotencyKind}::text = 'converted_from'
             AND existing_document.document_type = 'invoice'::document_type
-            AND existing_document.converted_from_id =
-              ${idempotencyReference}::uuid
+            AND EXISTS (
+              SELECT 1 FROM ${documentLinks} existing_link
+              WHERE existing_link.target_document_id = existing_document.id
+                AND existing_link.source_document_id =
+                  ${idempotencyReference}::uuid
+                AND existing_link.kind = 'converted'::document_link_kind
+                AND existing_link.released_at IS NULL
+            )
           )
           OR (
             ${idempotencyKind}::text = 'receipt_for_payment'

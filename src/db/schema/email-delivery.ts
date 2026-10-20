@@ -13,12 +13,16 @@ import {
 import { users, verifications } from "./auth";
 import { companies } from "./company";
 import { documents } from "./document";
+import { exportJobs } from "./export-job";
 
 export const emailPurposeEnum = pgEnum("email_purpose", [
   "document",
   "verify_email",
   "reset_password",
   "billing_notice",
+  "advisor_export",
+  "advisor_invite",
+  "user_notice",
 ]);
 export const emailDeliveryStatusEnum = pgEnum("email_delivery_status", [
   "queued",
@@ -36,6 +40,9 @@ export const emailDeliveries = pgTable(
       onDelete: "restrict",
     }),
     documentId: uuid("document_id").references(() => documents.id, {
+      onDelete: "restrict",
+    }),
+    exportJobId: uuid("export_job_id").references(() => exportJobs.id, {
       onDelete: "restrict",
     }),
     userId: uuid("user_id").references(() => users.id, {

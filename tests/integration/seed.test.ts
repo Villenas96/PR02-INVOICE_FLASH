@@ -6,6 +6,7 @@ import {
   clients,
   companies,
   documentEvents,
+  documentLinks,
   documents,
   emailDeliveries,
   payments,
@@ -86,7 +87,6 @@ describe("deterministic demo seed", () => {
         documentType: documents.documentType,
         status: documents.status,
         pdfStatus: documents.pdfStatus,
-        convertedFromId: documents.convertedFromId,
       })
       .from(documents)
       .where(eq(documents.companyId, companyId));
@@ -99,9 +99,17 @@ describe("deterministic demo seed", () => {
     expect(
       companyDocuments.some((document) => document.documentType === "receipt"),
     ).toBe(true);
-    expect(
-      companyDocuments.some((document) => document.convertedFromId !== null),
-    ).toBe(true);
+    const [conversionLink] = await database
+      .select({ id: documentLinks.id })
+      .from(documentLinks)
+      .where(
+        and(
+          eq(documentLinks.companyId, companyId),
+          eq(documentLinks.kind, "converted"),
+        ),
+      )
+      .limit(1);
+    expect(conversionLink).toBeDefined();
     expect(
       companyDocuments.some((document) => document.pdfStatus === "ready"),
     ).toBe(true);

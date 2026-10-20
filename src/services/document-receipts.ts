@@ -11,6 +11,7 @@ import {
   validateReceiptSource,
 } from "@/lib/documents/receipts";
 import { createUuidV7 } from "@/lib/ids";
+import type { DocumentType } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
 import {
   type IssueDocumentDependencies,
@@ -32,7 +33,7 @@ function receiptConflictError(
 
 interface InvoiceRow {
   id: string;
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   status: "draft" | "issued" | "voided";
   clientId: string | null;
 }

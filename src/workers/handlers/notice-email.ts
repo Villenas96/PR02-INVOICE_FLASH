@@ -2,13 +2,21 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 
 import { createDatabase, type Database } from "@/db";
 import { emailDeliveries } from "@/db/schema/email-delivery";
+import {
+  type NotificationPayload,
+  renderNotification,
+} from "@/lib/notifications";
 import { planLabel, type StoredPlan } from "@/lib/plan";
 import {
   BILLING_NOTICE_TEMPLATES,
   type BillingNoticeTemplate,
   renderBillingNotice,
 } from "@/services/email/templates/billing";
-import type { RenderedEmail } from "@/services/email/templates/layout";
+import {
+  paragraph,
+  type RenderedEmail,
+  renderEmailLayout,
+} from "@/services/email/templates/layout";
 import type { TransactionalEmailProvider } from "@/workers/handlers/email-send";
 import {
   EMAIL_RETRY_WINDOW_MS,
@@ -16,7 +24,10 @@ import {
 } from "@/workers/messages";
 import { RetryableQueueError } from "@/workers/queue-consumer";
 
-export const NOTICE_PURPOSES = ["billing_notice"] as const;
+export const NOTICE_PURPOSES = ["billing_notice", "user_notice"] as const;
+
+/** Template of `user_notice` deliveries: the in-app notice by email. */
+export const USER_NOTIFICATION_TEMPLATE = "user_notification";
 export type NoticeDeliveryPurpose = (typeof NOTICE_PURPOSES)[number];
 
 export interface NoticeEmailDependencies {
@@ -53,6 +64,26 @@ export function renderNotice(
       graceUntil: graceUntil ? new Date(graceUntil) : null,
       billingUrl: new URL("/billing", appBaseUrl).toString(),
     });
+  }
+  if (template === USER_NOTIFICATION_TEMPLATE) {
+    const kind = stringField(payload, "kind");
+    if (!kind) {
+      return null;
+    }
+    const notice = renderNotification(
+      kind,
+      (payload ?? {}) as NotificationPayload,
+    );
+    const url = new URL(notice.href ?? "/dashboard", appBaseUrl).toString();
+    return {
+      subject: notice.title,
+      text: `${notice.body}\n\nAbrir Invoice Flash: ${url}`,
+      html: renderEmailLayout({
+        title: notice.title,
+        bodyHtml: paragraph(notice.body),
+        action: { label: "Abrir Invoice Flash", url },
+      }),
+    };
   }
   return null;
 }

@@ -10,7 +10,7 @@ import { createEmailSendMessage } from "@/workers/messages";
 
 export type NoticePurpose = Extract<
   (typeof emailDeliveries.$inferInsert)["purpose"],
-  "billing_notice"
+  "billing_notice" | "user_notice"
 >;
 
 async function sha256(value: string): Promise<string> {

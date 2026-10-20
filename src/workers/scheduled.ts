@@ -122,9 +122,11 @@ export async function planBillingGrace(
  * Daily planner (`0 5 * * *`, research R11): it only selects pending work,
  * inserts idempotent claims and enqueues jobs; it never does the work itself.
  */
+export type PlannerSummary = Record<string, number | "failed">;
+
 export async function runDailyPlanner(
   dependencies: PlannerDependencies,
-): Promise<void> {
+): Promise<PlannerSummary> {
   const database = dependencies.database ?? createDatabase();
   const now = dependencies.now ?? new Date();
   const steps: Array<[string, () => Promise<number>]> = [
@@ -133,16 +135,20 @@ export async function runDailyPlanner(
       () => planBillingGrace({ ...dependencies, database, now }),
     ],
   ];
+  const summary: PlannerSummary = {};
   for (const [step, run] of steps) {
     // Each step is independent: one failing step must not starve the rest.
     try {
       const planned = await run();
+      summary[step] = planned;
       logSafe("info", "planner.step_completed", { step, planned });
     } catch (error) {
+      summary[step] = "failed";
       logSafe("error", "planner.step_failed", {
         step,
         error_type: error instanceof Error ? error.name : "UnknownError",
       });
     }
   }
+  return summary;
 }

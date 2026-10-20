@@ -425,7 +425,10 @@ export function createEmailSendHandler(
       return;
     }
 
-    if (delivery.purpose === "billing_notice") {
+    if (
+      delivery.purpose === "billing_notice" ||
+      delivery.purpose === "user_notice"
+    ) {
       if (!dependencies.noticeHandler) {
         throw new Error("El consumidor de avisos no está configurado.");
       }

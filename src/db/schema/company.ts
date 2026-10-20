@@ -40,6 +40,8 @@ export const companies = pgTable(
     plan: planEnum("plan").notNull().default("basic"),
     /** `null` = plan default (simple for Basic/Essential, full for Pro). */
     uiMode: uiModeEnum("ui_mode"),
+    /** Destination of manual and scheduled advisor sends (FR-032, FR-034). */
+    advisorEmail: text("advisor_email"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
