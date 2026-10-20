@@ -4,6 +4,12 @@ import { createDatabase } from "@/db";
 import { documents, exportJobs } from "@/db/schema";
 import { createCollectionMethod } from "@/services/collection-methods";
 import { loadCompanySummary } from "@/services/company-summary";
+import {
+  invoicedFigures,
+  monthlySeries,
+  topClients,
+  treasury,
+} from "@/services/dashboard";
 import { buildExport } from "@/services/exports";
 import { ensureDefaultSeries } from "@/services/series";
 import {
@@ -99,5 +105,29 @@ describe("raw SQL services over the neon-http driver", () => {
     expect(stored?.fileKeys).toEqual([
       expect.objectContaining({ filename: expect.stringMatching(/\.xlsx$/) }),
     ]);
+  });
+
+  it("runs the Pro dashboard aggregates", async () => {
+    const owner = await createOwner(createIntegrationDatabase(), {
+      plan: "pro",
+    });
+    const database = createDatabase();
+    const period = { from: "2026-01-01", to: "2026-12-31" };
+    expect(
+      (await invoicedFigures(owner.companyId, period, database)).invoiceCount,
+    ).toBe(0);
+    expect(await invoicedFigures(owner.companyId, {}, database)).toMatchObject({
+      invoiceCount: 0,
+    });
+    expect(
+      await monthlySeries(owner.companyId, "2026-10-20", 12, database),
+    ).toHaveLength(12);
+    expect(await topClients(owner.companyId, period, 5, database)).toEqual([]);
+    expect(
+      await treasury(owner.companyId, "2026-10-20", database),
+    ).toMatchObject({
+      balanceCents: null,
+      expected30DaysCents: 0,
+    });
   });
 });

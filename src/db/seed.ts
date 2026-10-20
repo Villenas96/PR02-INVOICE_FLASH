@@ -20,8 +20,11 @@ import { and, eq } from "drizzle-orm";
 
 import { createDatabase, type Database } from "@/db";
 import { users } from "@/db/schema/auth";
+import { bankStatements } from "@/db/schema/bank-statement";
+import { bankTransactions } from "@/db/schema/bank-transaction";
 import { catalogItems } from "@/db/schema/catalog-item";
 import { clients } from "@/db/schema/client";
+import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
@@ -48,6 +51,7 @@ const BASIC_INVOICE_LIMIT = documentLimit("basic", "invoice");
 const ESSENTIAL_INVOICE_LIMIT = documentLimit("essential", "invoice");
 const BASIC_EMAIL = "demo-basic@invoiceflash.test";
 const ESSENTIAL_EMAIL = "demo-essential@invoiceflash.test";
+const PRO_EMAIL = "demo-pro@invoiceflash.test";
 
 const noopQueue: IssueDocumentDependencies["queue"] = {
   send: () => Promise.resolve(),
@@ -569,6 +573,145 @@ async function fillRemainingSlots(
   }
 }
 
+/**
+ * Pro demo history: one invoice per client and month for the last 12
+ * months (most paid, the latest ones pending or overdue), the matching
+ * payments and a bank statement with a closing balance, so the Pro
+ * dashboard shows every block with data.
+ */
+async function seedProHistory(
+  database: Database,
+  now: Date,
+  company: DemoCompany,
+): Promise<void> {
+  const [series] = await database
+    .select({ id: documentSeries.id })
+    .from(documentSeries)
+    .where(
+      and(
+        eq(documentSeries.companyId, company.companyId),
+        eq(documentSeries.documentType, "invoice"),
+        eq(documentSeries.isDefault, true),
+      ),
+    );
+  if (!series) {
+    throw new Error("Falta la serie de facturas del demo Pro.");
+  }
+  const activeClients = company.clientIds.slice(0, 4);
+  const issuedDocuments: Array<typeof documents.$inferInsert> = [];
+  const paymentRows: Array<typeof payments.$inferInsert> = [];
+  let number = 1;
+  for (let back = 11; back >= 0; back--) {
+    const month = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 10, 9),
+    );
+    const year = month.getUTCFullYear();
+    for (const [index, clientId] of activeClients.entries()) {
+      const base = 80_000 + ((back * 7 + index * 13) % 9) * 15_000;
+      const tax = Math.round(base * 0.21);
+      const documentId = crypto.randomUUID();
+      const issueDate = month.toISOString().slice(0, 10);
+      const dueDate = new Date(month.getTime() + 30 * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      issuedDocuments.push({
+        id: documentId,
+        companyId: company.companyId,
+        documentType: "invoice",
+        status: "issued",
+        seriesId: series.id,
+        number,
+        fullNumber: `${year}-${number.toString().padStart(4, "0")}`,
+        clientId,
+        issueDate,
+        dueDate,
+        subtotalCents: base,
+        taxBreakdown: [{ rate: "21.00", baseCents: base, taxCents: tax }],
+        retentionRate: "0.00",
+        retentionCents: 0,
+        totalCents: base + tax,
+        issuerSnapshot: { legalName: "Estudio Demo Pro, S.L." },
+        clientSnapshot: { name: `Cliente ${index + 1}` },
+        pdfStatus: "ready",
+        pdfReadyAt: month,
+        issuedAt: month,
+        createdAt: month,
+        updatedAt: month,
+      });
+      number += 1;
+      // The two most recent months stay unpaid (pending / overdue).
+      if (back >= 2 || (back === 1 && index % 2 === 0)) {
+        const paidAt = new Date(month.getTime() + 20 * 86_400_000);
+        paymentRows.push({
+          id: crypto.randomUUID(),
+          companyId: company.companyId,
+          documentId,
+          amountCents: base + tax,
+          paidOn: paidAt.toISOString().slice(0, 10),
+          method: "transfer",
+          createdAt: paidAt,
+          updatedAt: paidAt,
+        });
+      }
+    }
+  }
+  await database.insert(documents).values(issuedDocuments);
+  await database.insert(documentEvents).values(
+    issuedDocuments.map((document) => ({
+      id: createUuidV7((document.issuedAt as Date).getTime()),
+      companyId: company.companyId,
+      documentId: document.id as string,
+      actor: "system",
+      event: "issued" as const,
+      createdAt: document.issuedAt as Date,
+    })),
+  );
+  await database.insert(payments).values(paymentRows);
+  await database
+    .update(documentSeries)
+    .set({ nextNumber: number })
+    .where(eq(documentSeries.id, series.id));
+
+  const methodId = crypto.randomUUID();
+  await database.insert(collectionMethods).values({
+    id: methodId,
+    companyId: company.companyId,
+    kind: "bank_account",
+    label: "Cuenta principal",
+    holderName: "Estudio Demo Pro, S.L.",
+    iban: "ES9121000418450200051332",
+    isDefault: true,
+  });
+  const statementId = crypto.randomUUID();
+  const lastPayments = paymentRows.slice(-8);
+  const closingOn = now.toISOString().slice(0, 10);
+  await database.insert(bankStatements).values({
+    id: statementId,
+    companyId: company.companyId,
+    collectionMethodId: methodId,
+    format: "csv",
+    fileKey: `seed/${company.companyId}/statement.csv`,
+    periodStart: lastPayments[0]?.paidOn ?? closingOn,
+    periodEnd: closingOn,
+    closingBalanceCents: 1_850_000,
+    closingBalanceOn: closingOn,
+    importedAt: now,
+  });
+  await database.insert(bankTransactions).values(
+    lastPayments.map((payment, index) => ({
+      id: crypto.randomUUID(),
+      companyId: company.companyId,
+      collectionMethodId: methodId,
+      statementId,
+      operationOn: payment.paidOn as string,
+      amountCents: payment.amountCents as number,
+      concept: `TRANSFERENCIA CLIENTE ${index + 1}`,
+      fingerprint: `seed-${index}`,
+      occurrence: 1,
+    })),
+  );
+}
+
 export interface SeedOptions {
   database?: Database;
   now?: Date;
@@ -638,9 +781,21 @@ export async function seedDemoData(options: SeedOptions = {}): Promise<void> {
     `Empresa Esencial lista con ${ESSENTIAL_INVOICE_LIMIT}/${ESSENTIAL_INVOICE_LIMIT} facturas emitidas este mes.`,
   );
 
+  const proCompany = await seedCompanyBase(database, now, {
+    userName: "Demo Plan Pro",
+    email: PRO_EMAIL,
+    legalName: "Estudio Demo Pro, S.L.",
+    taxId: "B90000003",
+    address: "Calle de la Demostración 3, 46001 Valencia",
+    plan: "pro",
+  });
+  await seedProHistory(database, now, proCompany);
+  console.info("Empresa Pro lista con 12 meses de historial y un extracto.");
+
   console.info("Datos de demostración creados correctamente.");
   console.info(`  Básico:   ${BASIC_EMAIL} / ${DEMO_PASSWORD}`);
   console.info(`  Esencial: ${ESSENTIAL_EMAIL} / ${DEMO_PASSWORD}`);
+  console.info(`  Pro:      ${PRO_EMAIL} / ${DEMO_PASSWORD}`);
 }
 
 const isMainModule =

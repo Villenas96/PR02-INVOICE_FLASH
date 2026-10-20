@@ -443,14 +443,14 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 13
 
-- [ ] T164 [P] [US13] Write integration tests comparing each dashboard figure (paid, pending, overdue, invoiced base/total, tax collected by name/rate, 12-month series, top 5, treasury balance and expected 30 days) against independent control queries over seeded data, excluding voided documents, and `403` for full endpoints outside Pro, in `tests/integration/dashboard-pro.test.ts`
-- [ ] T165 [P] [US13] Write a performance test for the Pro dashboard (< 500 ms p95 with 12 months) in `tests/performance/dashboard.test.ts`
+- [X] T164 [P] [US13] Write integration tests comparing each dashboard figure (paid, pending, overdue, invoiced base/total, tax collected by name/rate, 12-month series, top 5, treasury balance and expected 30 days) against independent control queries over seeded data, excluding voided documents, and `403` for full endpoints outside Pro, in `tests/integration/dashboard-pro.test.ts`
+- [X] T165 [P] [US13] Write a performance test for the Pro dashboard (< 500 ms p95 with 12 months) in `tests/performance/dashboard.test.ts`
 
 ### Implementation for User Story 13
 
-- [ ] T166 [US13] Extend `GET /api/v1/dashboard` with `dashboard_full` fields and implement `GET /api/v1/dashboard/monthly`, `/top-clients` and `/treasury` with SQL aggregates in `Europe/Madrid`, in `src/services/dashboard.ts`, `src/app/api/v1/dashboard/route.ts`, `src/app/api/v1/dashboard/monthly/route.ts`, `src/app/api/v1/dashboard/top-clients/route.ts` and `src/app/api/v1/dashboard/treasury/route.ts`
-- [ ] T167 [US13] Build the Pro dashboard (period picker incl. custom, metric tiles, invoiced vs collected chart, top 5 clients, treasury block) with shadcn charts in `src/components/dashboard/dashboard-view.tsx` and `src/components/dashboard/pro-charts.tsx`, keeping `simple-home.tsx` for Basic/Essential
-- [ ] T168 [US13] Extend `src/db/seed.ts` with 12 months of documents, payments and a bank statement for the Pro demo account
+- [X] T166 [US13] Extend `GET /api/v1/dashboard` with `dashboard_full` fields and implement `GET /api/v1/dashboard/monthly`, `/top-clients` and `/treasury` with SQL aggregates in `Europe/Madrid`, in `src/services/dashboard.ts`, `src/app/api/v1/dashboard/route.ts`, `src/app/api/v1/dashboard/monthly/route.ts`, `src/app/api/v1/dashboard/top-clients/route.ts` and `src/app/api/v1/dashboard/treasury/route.ts`
+- [X] T167 [US13] Build the Pro dashboard (period picker incl. custom, metric tiles, invoiced vs collected chart, top 5 clients, treasury block) with shadcn charts in `src/components/dashboard/dashboard-view.tsx` and `src/components/dashboard/pro-charts.tsx`, keeping `simple-home.tsx` for Basic/Essential
+- [X] T168 [US13] Extend `src/db/seed.ts` with 12 months of documents, payments and a bank statement for the Pro demo account
 
 **Checkpoint**: V13 completa; SC-007 y SC-013 verificados.
 

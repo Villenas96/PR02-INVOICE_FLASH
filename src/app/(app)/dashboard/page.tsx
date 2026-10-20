@@ -2,8 +2,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { ProDashboard } from "@/components/dashboard/pro-dashboard";
 import { SimpleHome } from "@/components/dashboard/simple-home";
 import { auth } from "@/lib/auth";
+import { hasFeature } from "@/lib/plan";
 import { getLayoutData } from "@/services/layout-data";
 
 export default async function DashboardPage({
@@ -38,6 +40,9 @@ export default async function DashboardPage({
           pendientes o vencidas.
         </p>
       </div>
+      {summary && hasFeature(summary.plan, "dashboard_full") ? (
+        <ProDashboard />
+      ) : null}
       <DashboardView />
     </div>
   );
