@@ -1,4 +1,5 @@
 import {
+  degrees,
   PDFDocument,
   type PDFFont,
   type PDFImage,
@@ -188,6 +189,24 @@ function drawTable(
   });
 }
 
+function drawWatermark(page: PDFPage, text: string, font: PDFFont): void {
+  const size = 44;
+  const label = normalizePdfText(text);
+  const width = font.widthOfTextAtSize(label, size);
+  const { width: pageWidth, height: pageHeight } = page.getSize();
+  // Centred on the page, rotated 45° around its own midpoint.
+  const angle = Math.PI / 4;
+  page.drawText(label, {
+    x: pageWidth / 2 - (width / 2) * Math.cos(angle),
+    y: pageHeight / 2 - (width / 2) * Math.sin(angle),
+    font,
+    size,
+    rotate: degrees(45),
+    color: rgb(0.85, 0.2, 0.2),
+    opacity: 0.25,
+  });
+}
+
 export interface PdfLogoAsset {
   bytes: Uint8Array;
   format: "png" | "jpg";
@@ -276,6 +295,9 @@ export async function renderDocumentPdf(
       } else {
         drawTextElement(page, element, regular, bold, colors);
       }
+    }
+    if (input.watermark) {
+      drawWatermark(page, input.watermark, bold);
     }
   }
 

@@ -7,8 +7,10 @@ import { emailDeliveries } from "@/db/schema/email-delivery";
 import { subscriptions } from "@/db/schema/subscription";
 import { logSafe } from "@/lib/log";
 import { planAdvisorExports } from "@/services/advisor-schedule";
+import { purgeExpiredSamples } from "@/services/onboarding";
 import { planRecurringCycles } from "@/services/recurring/planner";
 import { planPaymentReminders } from "@/services/reminder-planner";
+import type { PrivateBucket } from "@/services/storage";
 import {
   type ListableBucket,
   purgeOrphanLogos,
@@ -84,7 +86,7 @@ export async function runScheduledPurge(
   dependencies: {
     database?: Database;
     now?: Date;
-    bucket?: ListableBucket;
+    bucket?: ListableBucket & Partial<PrivateBucket>;
   } = {},
 ): Promise<void> {
   const database = dependencies.database ?? createDatabase();
@@ -93,6 +95,12 @@ export async function runScheduledPurge(
   await purgeExpiredAuthVerifications(database, now);
   if (dependencies.bucket) {
     await purgeOrphanLogos({ database, bucket: dependencies.bucket, now });
+    // Wizard samples live 7 days (FR-049).
+    await purgeExpiredSamples({
+      database,
+      bucket: dependencies.bucket as unknown as PrivateBucket,
+      now,
+    });
   }
 }
 

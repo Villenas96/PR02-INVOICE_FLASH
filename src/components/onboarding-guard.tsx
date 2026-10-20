@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { OnboardingBanner } from "@/components/onboarding-banner";
 import { Button } from "@/components/ui/button";
+import type { OnboardingProgress } from "@/lib/onboarding";
 
 type FiscalField = "address" | "legal_name" | "tax_id";
 
@@ -13,11 +15,13 @@ const fieldLabels: Record<FiscalField, string> = {
 interface OnboardingGuardProps {
   children: React.ReactNode;
   missingFields: FiscalField[];
+  onboarding?: OnboardingProgress | null;
 }
 
 export function OnboardingGuard({
   children,
   missingFields,
+  onboarding = null,
 }: OnboardingGuardProps) {
   const missingLabels = missingFields.map((field) => fieldLabels[field]);
 
@@ -44,12 +48,19 @@ export function OnboardingGuard({
               . Puedes preparar borradores mientras tanto.
             </p>
           </div>
-          <Button asChild className="shrink-0">
-            <Link href="/settings#company-profile-title">
-              Completar configuración
-            </Link>
-          </Button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/settings#company-profile-title">
+                Completar configuración
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/onboarding">Abrir el asistente</Link>
+            </Button>
+          </div>
         </aside>
+      ) : onboarding ? (
+        <OnboardingBanner progress={onboarding} />
       ) : null}
       {children}
     </>

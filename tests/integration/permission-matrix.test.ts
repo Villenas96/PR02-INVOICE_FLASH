@@ -14,6 +14,7 @@ import {
   payments,
   reconciliations,
   recurringTemplates,
+  sampleRenders,
   taxRates,
   userNotifications,
 } from "@/db/schema";
@@ -483,6 +484,10 @@ async function foreignResources(): Promise<{
       startOn: "2026-12-01",
     })
     .returning({ id: recurringTemplates.id });
+  const [sample] = await database
+    .insert(sampleRenders)
+    .values({ id: crypto.randomUUID(), companyId })
+    .returning({ id: sampleRenders.id });
   const invite = await inviteAdvisor(
     authenticatedRequest(foreign, "/api/v1/advisor-access", {
       method: "POST",
@@ -495,6 +500,7 @@ async function foreignResources(): Promise<{
     ids: {
       "advisor-access": accessId,
       "catalog-items": catalogItem?.id as string,
+      company: sample?.id as string,
       clients: foreign.clientId,
       "collection-methods": method?.id as string,
       documents: documentId,

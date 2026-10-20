@@ -78,7 +78,10 @@ export default async function AppLayout({
               </p>
             </section>
           ) : (
-            <OnboardingGuard missingFields={readOnly ? [] : missingFields}>
+            <OnboardingGuard
+              missingFields={readOnly ? [] : missingFields}
+              onboarding={readOnly ? null : (summary?.onboarding ?? null)}
+            >
               {children}
             </OnboardingGuard>
           )}

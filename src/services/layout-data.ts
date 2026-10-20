@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { createDatabase } from "@/db";
+import type { OnboardingProgress } from "@/lib/onboarding";
 import {
   type CompanyRole,
   resolveActiveCompany,
@@ -9,11 +10,13 @@ import {
   type CompanySummary,
   loadCompanySummary,
 } from "@/services/company-summary";
+import { onboardingProgressFor } from "@/services/onboarding";
 
 export interface LayoutData extends CompanySummary {
   role: CompanyRole;
   /** Advisor on a company without Pro (FR-051): show the pause notice. */
   suspended: boolean;
+  onboarding: OnboardingProgress;
 }
 
 /**
@@ -31,8 +34,14 @@ export const getLayoutData = cache(
       return null;
     }
     const summary = await loadCompanySummary(database, active.companyId);
-    return summary
-      ? { ...summary, role: active.role, suspended: active.suspended }
-      : null;
+    if (!summary) {
+      return null;
+    }
+    return {
+      ...summary,
+      role: active.role,
+      suspended: active.suspended,
+      onboarding: await onboardingProgressFor(database, summary.company),
+    };
   },
 );

@@ -464,16 +464,16 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 14
 
-- [ ] T169 [P] [US14] Write unit tests for onboarding step derivation (`currentStep`, progress "paso X de N", skipped/completed, what is missing to issue) in `tests/unit/onboarding.test.ts`
-- [ ] T170 [P] [US14] Write integration tests: sample render via queue produces a watermarked PDF, no `document` row, quota and series counters unchanged, absent from lists, exports and dashboard; sample cleanup after 7 days, in `tests/integration/onboarding-sample.test.ts`
-- [ ] T171 [P] [US14] Write an E2E test for the wizard (complete, skip, close mid-way, resume) in `tests/e2e/onboarding.spec.ts`
+- [X] T169 [P] [US14] Write unit tests for onboarding step derivation (`currentStep`, progress "paso X de N", skipped/completed, what is missing to issue) in `tests/unit/onboarding.test.ts`
+- [X] T170 [P] [US14] Write integration tests: sample render via queue produces a watermarked PDF, no `document` row, quota and series counters unchanged, absent from lists, exports and dashboard; sample cleanup after 7 days, in `tests/integration/onboarding-sample.test.ts`
+- [X] T171 [P] [US14] Write an E2E test for the wizard (complete, skip, close mid-way, resume) in `tests/e2e/onboarding.spec.ts`
 
 ### Implementation for User Story 14
 
-- [ ] T172 [P] [US14] Create `src/lib/onboarding.ts` (steps, derivation, progress)
-- [ ] T173 [US14] Implement `PATCH /api/v1/company/onboarding`, `POST /api/v1/company/onboarding/sample` and `GET /api/v1/company/onboarding/sample/:id` in `src/services/onboarding.ts` and the corresponding `src/app/api/v1/company/onboarding/**/route.ts` files
-- [ ] T174 [US14] Implement the `pdf.sample` handler on the PDF queue (same template with "EJEMPLO – sin validez" watermark, stored in `samples/{company_id}/{id}.pdf`) and the 7-day cleanup in the planner, in `src/workers/handlers/pdf-sample.ts`, `src/services/pdf/template.ts` and `src/workers/scheduled.ts`
-- [ ] T175 [US14] Build the wizard (fiscal data, logo, collection method, series, sample invoice) reusing settings components, shown on first login and resumable from a banner that lists what is missing, in `src/app/(app)/onboarding/page.tsx`, `src/components/onboarding/onboarding-wizard.tsx` and `src/components/onboarding-guard.tsx`
+- [X] T172 [P] [US14] Create `src/lib/onboarding.ts` (steps, derivation, progress)
+- [X] T173 [US14] Implement `PATCH /api/v1/company/onboarding`, `POST /api/v1/company/onboarding/sample` and `GET /api/v1/company/onboarding/sample/:id` in `src/services/onboarding.ts` and the corresponding `src/app/api/v1/company/onboarding/**/route.ts` files
+- [X] T174 [US14] Implement the `pdf.sample` handler on the PDF queue (same template with "EJEMPLO – sin validez" watermark, stored in `samples/{company_id}/{id}.pdf`) and the 7-day cleanup in the planner, in `src/workers/handlers/pdf-sample.ts`, `src/services/pdf/template.ts` and `src/workers/scheduled.ts` (Nota: el handler `pdf.sample` va en la cola de trabajos `invoice-flash-jobs`; la limpieza a 7 días se ejecuta en `runScheduledPurge` (cron `0 3`), que es quien tiene el bucket.)
+- [X] T175 [US14] Build the wizard (fiscal data, logo, collection method, series, sample invoice) reusing settings components, shown on first login and resumable from a banner that lists what is missing, in `src/app/(app)/onboarding/page.tsx`, `src/components/onboarding/onboarding-wizard.tsx` and `src/components/onboarding-guard.tsx`
 
 **Checkpoint**: Incremento 4 completo (V11–V14). Desplegable.
 

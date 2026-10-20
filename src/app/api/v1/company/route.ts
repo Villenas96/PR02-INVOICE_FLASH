@@ -6,6 +6,7 @@ import { companies } from "@/db/schema/company";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseJson } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
+import type { OnboardingProgress } from "@/lib/onboarding";
 import { planLabel } from "@/lib/plan";
 import { reminderPolicySchema } from "@/lib/reminders";
 import {
@@ -19,6 +20,7 @@ import {
   resolveCompanyContext,
 } from "@/services/context";
 import { requireFeature } from "@/services/entitlements";
+import { onboardingProgressFor } from "@/services/onboarding";
 import { setDefaultIvaRate } from "@/services/tax-rates";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -151,7 +153,11 @@ function withRequestId(response: Response, requestId: string): Response {
   return response;
 }
 
-function companyResponse(summary: CompanySummary, context: CompanyContext) {
+function companyResponse(
+  summary: CompanySummary,
+  context: CompanyContext,
+  onboarding: OnboardingProgress,
+) {
   const { company } = summary;
 
   return {
@@ -179,6 +185,7 @@ function companyResponse(summary: CompanySummary, context: CompanyContext) {
     is_ready_to_issue: summary.missingFields.length === 0,
     missing_fields: summary.missingFields,
     missing_to_issue: summary.missingToIssue,
+    onboarding,
   };
 }
 
@@ -259,10 +266,17 @@ export async function GET(request: Request): Promise<Response> {
 
   try {
     const context = await resolveCompanyContext(request, { access: "read" });
-    const summary = await loadSummary(createDatabase(), context);
+    const database = createDatabase();
+    const summary = await loadSummary(database, context);
 
     return withRequestId(
-      Response.json(companyResponse(summary, context)),
+      Response.json(
+        companyResponse(
+          summary,
+          context,
+          await onboardingProgressFor(database, summary.company),
+        ),
+      ),
       requestId,
     );
   } catch (error) {
@@ -308,7 +322,13 @@ export async function PUT(request: Request): Promise<Response> {
 
     const summary = await loadSummary(database, context);
     return withRequestId(
-      Response.json(companyResponse(summary, context)),
+      Response.json(
+        companyResponse(
+          summary,
+          context,
+          await onboardingProgressFor(database, summary.company),
+        ),
+      ),
       requestId,
     );
   } catch (error) {

@@ -105,6 +105,8 @@ export interface DocumentPdfInput {
   payment?: DocumentPdfPayment | null;
   /** Only present (and only used) for receipts. */
   receipt?: DocumentPdfReceiptDetails;
+  /** Diagonal mark on every page; only the wizard's sample sets it (FR-049). */
+  watermark?: string | null;
 }
 
 export interface PdfTextElement {

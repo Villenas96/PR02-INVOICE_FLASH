@@ -18,6 +18,7 @@ import { handleImportAnalyze } from "@/workers/handlers/import-analyze";
 import { handleImportApply } from "@/workers/handlers/import-apply";
 import { createNoticeEmailHandler } from "@/workers/handlers/notice-email";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
+import { handlePdfSample } from "@/workers/handlers/pdf-sample";
 import { handleRecurringRun } from "@/workers/handlers/recurring-run";
 import { handleReminderSend } from "@/workers/handlers/reminder-send";
 import { dispatchJob } from "@/workers/jobs";
@@ -149,6 +150,10 @@ async function runJob(message: JobMessage, env: QueueEnv): Promise<void> {
       handleRecurringRun(job, {
         pdfQueue: producer(env.PDF_RENDER_QUEUE),
         emailQueue: producer(env.EMAIL_SEND_QUEUE),
+      }),
+    "pdf.sample": (job) =>
+      handlePdfSample(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
       }),
     "import.apply": (job) =>
       handleImportApply(job, {

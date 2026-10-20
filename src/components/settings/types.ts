@@ -1,4 +1,5 @@
 import type { CompanyPlanData } from "@/components/plan/types";
+import type { OnboardingProgress } from "@/lib/onboarding";
 import type { ReminderPolicy } from "@/lib/reminders";
 
 export type DocumentType = "invoice" | "proforma" | "receipt";
@@ -19,6 +20,7 @@ export interface CompanySettings extends CompanyPlanData {
   is_ready_to_issue: boolean;
   missing_fields: string[];
   missing_to_issue: string[];
+  onboarding?: OnboardingProgress;
 }
 
 export interface DocumentSeries {
