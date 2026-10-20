@@ -6,6 +6,10 @@ import { verifications } from "@/db/schema/auth";
 import { emailDeliveries } from "@/db/schema/email-delivery";
 import { subscriptions } from "@/db/schema/subscription";
 import { logSafe } from "@/lib/log";
+import {
+  type ListableBucket,
+  purgeOrphanLogos,
+} from "@/services/storage-purge";
 import { createBillingGraceMessage } from "@/workers/messages";
 
 export const PURGE_CRON = "0 3 * * *";
@@ -74,12 +78,19 @@ export async function purgeExpiredAuthVerifications(
 }
 
 export async function runScheduledPurge(
-  dependencies: { database?: Database; now?: Date } = {},
+  dependencies: {
+    database?: Database;
+    now?: Date;
+    bucket?: ListableBucket;
+  } = {},
 ): Promise<void> {
   const database = dependencies.database ?? createDatabase();
   const now = dependencies.now ?? new Date();
   await purgeTerminalEmailDeliveryPii(database, now);
   await purgeExpiredAuthVerifications(database, now);
+  if (dependencies.bucket) {
+    await purgeOrphanLogos({ database, bucket: dependencies.bucket, now });
+  }
 }
 
 /**

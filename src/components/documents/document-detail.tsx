@@ -44,6 +44,7 @@ type DocumentStatus = "draft" | "issued" | "voided";
 type PdfStatus = "failed" | "pending" | "ready";
 
 interface TaxEntry {
+  name?: string;
   rate: string;
   baseCents: number;
   taxCents: number;
@@ -473,9 +474,13 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
               <span>{formatEur(createCents(document.subtotal_cents))}</span>
             </div>
             {document.tax_breakdown.map((tax) => (
-              <div key={tax.rate} className="flex justify-between gap-4">
+              <div
+                key={`${tax.name ?? "IVA"}-${tax.rate}`}
+                className="flex justify-between gap-4"
+              >
                 <span className="text-muted-foreground">
-                  IVA {Number(tax.rate).toLocaleString("es-ES")} %
+                  {tax.name ?? "IVA"} {Number(tax.rate).toLocaleString("es-ES")}{" "}
+                  %
                 </span>
                 <span>{formatEur(createCents(tax.taxCents))}</span>
               </div>

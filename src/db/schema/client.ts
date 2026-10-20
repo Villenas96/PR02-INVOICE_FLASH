@@ -15,6 +15,8 @@ export const clients = pgTable(
     email: text("email"),
     phone: text("phone"),
     notes: text("notes"),
+    /** Content-addressed R2 key, frozen into the client snapshot at issue. */
+    logoKey: text("logo_key"),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

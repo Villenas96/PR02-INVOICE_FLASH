@@ -63,7 +63,10 @@ export interface DocumentPdfInput {
   client: DocumentPdfParty;
   lines: DocumentPdfLine[];
   subtotalCents: number;
+  /** `name` is missing on documents issued before tax types existed:
+   * they were all IVA. */
   taxBreakdown: Array<{
+    name?: string;
     rate: string;
     baseCents: number;
     taxCents: number;
@@ -224,7 +227,7 @@ function taxBreakdownText(input: DocumentPdfInput): string {
   return input.taxBreakdown
     .map(
       (entry) =>
-        `IVA ${formatPercentage(entry.rate)} %    ${formatMoney(entry.taxCents)}`,
+        `${entry.name ?? "IVA"} ${formatPercentage(entry.rate)} %    ${formatMoney(entry.taxCents)}`,
     )
     .join("\n");
 }

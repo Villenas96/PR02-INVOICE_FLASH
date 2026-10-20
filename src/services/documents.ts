@@ -3,10 +3,12 @@ import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
 import { executionRows } from "@/db/result";
+import { catalogItems } from "@/db/schema/catalog-item";
 import { clients } from "@/db/schema/client";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
+import { taxRates } from "@/db/schema/tax-rate";
 import { ApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { type BillingResult, calculateBilling } from "@/lib/billing";
@@ -28,6 +30,11 @@ const draftLineSchema = z
     unitPriceCents: z.number().int().min(0).max(MAX_POSTGRES_INTEGER),
     taxRate: decimalSchema,
     discountPercentage: decimalSchema.default("0"),
+    /** Frozen tax name shown on the document (FR-023). */
+    taxName: z.string().trim().min(1).max(30).default("IVA"),
+    unit: z.string().trim().max(20).nullable().default(null),
+    taxRateId: z.string().uuid().nullable().default(null),
+    catalogItemId: z.string().uuid().nullable().default(null),
   })
   .strict();
 const draftFieldsSchema = z.object({
@@ -175,6 +182,10 @@ interface PreparedLine {
   quantity: string;
   unit_price_cents: number;
   tax_rate: string;
+  tax_name: string;
+  unit: string | null;
+  tax_rate_id: string | null;
+  catalog_item_id: string | null;
   discount_percentage: string;
   line_subtotal_cents: number;
   line_tax_cents: number;
@@ -228,6 +239,7 @@ function calculateDraftBilling(
         quantity: line.quantity,
         unitPriceCents: createCents(line.unitPriceCents),
         taxRate: line.taxRate,
+        taxName: line.taxName,
         discountPercentage: line.discountPercentage,
       })),
       retentionRate,
@@ -255,6 +267,10 @@ function prepareLines(
       quantity: line.quantity,
       unit_price_cents: line.unitPriceCents,
       tax_rate: line.taxRate,
+      tax_name: line.taxName,
+      unit: line.unit ? line.unit.replace(/\s+/g, " ") : null,
+      tax_rate_id: line.taxRateId,
+      catalog_item_id: line.catalogItemId,
       discount_percentage: line.discountPercentage,
       line_subtotal_cents: calculatedLine.subtotalCents,
       line_tax_cents: calculatedLine.taxCents,
@@ -486,6 +502,10 @@ export async function createDraftDocument(
         quantity numeric(12, 3),
         unit_price_cents integer,
         tax_rate numeric(5, 2),
+        tax_name text,
+        unit text,
+        tax_rate_id uuid,
+        catalog_item_id uuid,
         discount_percentage numeric(5, 2),
         line_subtotal_cents integer,
         line_tax_cents integer,
@@ -502,6 +522,10 @@ export async function createDraftDocument(
         ${sql.identifier(documentLines.unitPriceCents.name)},
         ${sql.identifier(documentLines.taxRate.name)},
         ${sql.identifier(documentLines.discountPercentage.name)},
+        ${sql.identifier(documentLines.taxName.name)},
+        ${sql.identifier(documentLines.unit.name)},
+        ${sql.identifier(documentLines.taxRateId.name)},
+        ${sql.identifier(documentLines.catalogItemId.name)},
         ${sql.identifier(documentLines.lineSubtotalCents.name)},
         ${sql.identifier(documentLines.lineTaxCents.name)},
         ${sql.identifier(documentLines.lineTotalCents.name)}
@@ -515,6 +539,19 @@ export async function createDraftDocument(
         line_input.unit_price_cents,
         line_input.tax_rate,
         line_input.discount_percentage,
+        coalesce(line_input.tax_name, 'IVA'),
+        line_input.unit,
+        -- References outside the company are dropped, never stored.
+        (
+          SELECT scoped_tax.id FROM ${taxRates} scoped_tax
+          WHERE scoped_tax.id = line_input.tax_rate_id
+            AND scoped_tax.company_id = ${input.companyId}
+        ),
+        (
+          SELECT scoped_item.id FROM ${catalogItems} scoped_item
+          WHERE scoped_item.id = line_input.catalog_item_id
+            AND scoped_item.company_id = ${input.companyId}
+        ),
         line_input.line_subtotal_cents,
         line_input.line_tax_cents,
         line_input.line_total_cents
@@ -697,6 +734,10 @@ export async function updateDraftDocument(
         quantity numeric(12, 3),
         unit_price_cents integer,
         tax_rate numeric(5, 2),
+        tax_name text,
+        unit text,
+        tax_rate_id uuid,
+        catalog_item_id uuid,
         discount_percentage numeric(5, 2),
         line_subtotal_cents integer,
         line_tax_cents integer,
@@ -713,6 +754,10 @@ export async function updateDraftDocument(
         ${sql.identifier(documentLines.unitPriceCents.name)},
         ${sql.identifier(documentLines.taxRate.name)},
         ${sql.identifier(documentLines.discountPercentage.name)},
+        ${sql.identifier(documentLines.taxName.name)},
+        ${sql.identifier(documentLines.unit.name)},
+        ${sql.identifier(documentLines.taxRateId.name)},
+        ${sql.identifier(documentLines.catalogItemId.name)},
         ${sql.identifier(documentLines.lineSubtotalCents.name)},
         ${sql.identifier(documentLines.lineTaxCents.name)},
         ${sql.identifier(documentLines.lineTotalCents.name)}
@@ -726,6 +771,19 @@ export async function updateDraftDocument(
         line_input.unit_price_cents,
         line_input.tax_rate,
         line_input.discount_percentage,
+        coalesce(line_input.tax_name, 'IVA'),
+        line_input.unit,
+        -- References outside the company are dropped, never stored.
+        (
+          SELECT scoped_tax.id FROM ${taxRates} scoped_tax
+          WHERE scoped_tax.id = line_input.tax_rate_id
+            AND scoped_tax.company_id = ${input.companyId}
+        ),
+        (
+          SELECT scoped_item.id FROM ${catalogItems} scoped_item
+          WHERE scoped_item.id = line_input.catalog_item_id
+            AND scoped_item.company_id = ${input.companyId}
+        ),
         line_input.line_subtotal_cents,
         line_input.line_tax_cents,
         line_input.line_total_cents

@@ -134,6 +134,7 @@ interface IssuePreparation {
     quantity: string;
     unitPriceCents: number;
     taxRate: string;
+    taxName: string;
     discountPercentage: string;
   }>;
 }
@@ -145,6 +146,7 @@ interface PreparedLine {
   quantity: string;
   unit_price_cents: number;
   tax_rate: string;
+  tax_name: string;
   discount_percentage: string;
   line_subtotal_cents: number;
   line_tax_cents: number;
@@ -327,6 +329,7 @@ async function loadIssuePreparation(
         quantity: documentLines.quantity,
         unitPriceCents: documentLines.unitPriceCents,
         taxRate: documentLines.taxRate,
+        taxName: documentLines.taxName,
         discountPercentage: documentLines.discountPercentage,
       },
     })
@@ -468,6 +471,7 @@ function calculateIssueBilling(preparation: IssuePreparation): {
         quantity: line.quantity,
         unitPriceCents: createCents(line.unitPriceCents),
         taxRate: line.taxRate,
+        taxName: line.taxName,
         discountPercentage: line.discountPercentage,
       })),
       retentionRate: preparation.company.retentionRate,
@@ -486,6 +490,7 @@ function calculateIssueBilling(preparation: IssuePreparation): {
           quantity: line.quantity,
           unit_price_cents: line.unitPriceCents,
           tax_rate: line.taxRate,
+          tax_name: line.taxName,
           discount_percentage: line.discountPercentage,
           line_subtotal_cents: calculated.subtotalCents,
           line_tax_cents: calculated.taxCents,
@@ -762,6 +767,7 @@ async function executeAtomicIssue(
         quantity numeric(12, 3),
         unit_price_cents integer,
         tax_rate numeric(5, 2),
+        tax_name text,
         discount_percentage numeric(5, 2),
         line_subtotal_cents integer,
         line_tax_cents integer,
@@ -812,6 +818,7 @@ async function executeAtomicIssue(
               OR current_line.unit_price_cents IS DISTINCT FROM
                 line_input.unit_price_cents
               OR current_line.tax_rate IS DISTINCT FROM line_input.tax_rate
+              OR current_line.tax_name IS DISTINCT FROM line_input.tax_name
               OR current_line.discount_pct IS DISTINCT FROM
                 line_input.discount_percentage
             )

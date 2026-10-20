@@ -55,6 +55,10 @@ const draftLineSchema = z
     unit_price_cents: z.number().int().min(0).max(MAX_POSTGRES_INTEGER),
     tax_rate: decimalSchema,
     discount_pct: decimalSchema.optional(),
+    tax_name: z.string().trim().min(1).max(30).optional(),
+    unit: z.string().trim().max(20).nullable().optional(),
+    tax_rate_id: z.string().uuid().nullable().optional(),
+    catalog_item_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 const createDraftSchema = z
@@ -205,6 +209,10 @@ function draftResponse(document: DocumentDetail) {
       quantity: line.quantity,
       unit_price_cents: line.unitPriceCents,
       tax_rate: line.taxRate,
+      tax_name: line.taxName,
+      unit: line.unit,
+      tax_rate_id: line.taxRateId,
+      catalog_item_id: line.catalogItemId,
       discount_pct: line.discountPercentage,
       line_subtotal_cents: line.lineSubtotalCents,
       line_tax_cents: line.lineTaxCents,
@@ -368,6 +376,10 @@ export async function POST(request: Request): Promise<Response> {
         unitPriceCents: line.unit_price_cents,
         taxRate: line.tax_rate,
         discountPercentage: line.discount_pct ?? "0",
+        taxName: line.tax_name ?? "IVA",
+        unit: line.unit?.trim() ? line.unit.trim() : null,
+        taxRateId: line.tax_rate_id ?? null,
+        catalogItemId: line.catalog_item_id ?? null,
       })),
     });
 

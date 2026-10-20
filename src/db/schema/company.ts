@@ -33,9 +33,6 @@ export const companies = pgTable(
     phone: text("phone"),
     logoKey: text("logo_key"),
     defaultDueDays: integer("default_due_days").notNull().default(30),
-    defaultTaxRate: numeric("default_tax_rate", { precision: 5, scale: 2 })
-      .notNull()
-      .default("21.00"),
     retentionRate: numeric("retention_rate", { precision: 5, scale: 2 })
       .notNull()
       .default("0"),

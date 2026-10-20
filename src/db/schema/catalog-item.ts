@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { companies } from "./company";
+import { taxRates } from "./tax-rate";
 
 export const catalogItems = pgTable(
   "catalog_item",
@@ -22,6 +23,10 @@ export const catalogItems = pgTable(
     description: text("description").notNull(),
     unitPriceCents: integer("unit_price_cents").notNull(),
     taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull(),
+    unit: text("unit"),
+    taxRateId: uuid("tax_rate_id").references(() => taxRates.id, {
+      onDelete: "set null",
+    }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

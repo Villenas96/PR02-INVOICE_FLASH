@@ -3,13 +3,13 @@ import { z } from "zod";
 
 import { createDatabase } from "@/db/index";
 import { catalogItems } from "@/db/schema/catalog-item";
-import { companies } from "@/db/schema/company";
 import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parsePagination } from "@/lib/api/pagination";
 import { parseJson, validate } from "@/lib/api/validate";
 import { createUuidV7 } from "@/lib/ids";
 import { logSafe } from "@/lib/log";
 import { resolveCompanyContext } from "@/services/context";
+import { getDefaultTaxRate } from "@/services/tax-rates";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -191,12 +191,8 @@ export async function POST(request: Request): Promise<Response> {
     const database = createDatabase();
     let taxRate: string | undefined = input.tax_rate;
     if (!taxRate) {
-      const [company] = await database
-        .select({ defaultTaxRate: companies.defaultTaxRate })
-        .from(companies)
-        .where(eq(companies.id, context.companyId))
-        .limit(1);
-      taxRate = company?.defaultTaxRate ?? "21.00";
+      const defaultRate = await getDefaultTaxRate(database, context.companyId);
+      taxRate = defaultRate?.rate ?? "21.00";
     }
     const [createdItem] = await database
       .insert(catalogItems)

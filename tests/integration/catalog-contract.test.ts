@@ -122,7 +122,6 @@ async function createTenant(): Promise<TenantFixture> {
     taxId: "B12345678",
     address: "Calle del Catálogo 1, Madrid",
     email,
-    defaultTaxRate: "21.00",
     createdAt: now,
     updatedAt: now,
   });

@@ -18,6 +18,7 @@ import {
   type UiMode,
   usageFor,
 } from "@/lib/plan";
+import { getDefaultTaxRate } from "@/services/tax-rates";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type MissingCompanyField = "legal_name" | "tax_id" | "address";
@@ -33,6 +34,8 @@ export interface CompanySummary {
   /** Types with at least one (non-deleted) document, for the simple UI. */
   usedDocumentTypes: DocumentType[];
   missingFields: MissingCompanyField[];
+  /** Rate of the default tax type (v1 `default_tax_rate`). */
+  defaultTaxRate: string;
   /** What is still needed before the first issue (FR-048 «qué falta»). */
   missingToIssue: MissingCompanyField[];
 }
@@ -108,6 +111,7 @@ export function summarizeCompany(
   company: CompanyRow,
   usageByType: Map<DocumentType, number>,
   usedTypes: DocumentType[],
+  defaultTaxRate = "21.00",
 ): CompanySummary {
   const plan = normalizePlan(company.plan);
   const readiness = getCompanyReadiness(company);
@@ -124,6 +128,7 @@ export function summarizeCompany(
     effectiveUi: effectiveUiMode(plan, company.uiMode),
     usedDocumentTypes: usedTypes,
     missingFields,
+    defaultTaxRate,
     missingToIssue: missingFields,
   };
 }
@@ -134,7 +139,7 @@ export async function loadCompanySummary(
   companyId: string,
   now = new Date(),
 ): Promise<CompanySummary | null> {
-  const [companyRows, usageByType, usedTypes] = await Promise.all([
+  const [companyRows, usageByType, usedTypes, defaultTax] = await Promise.all([
     database
       .select()
       .from(companies)
@@ -142,9 +147,12 @@ export async function loadCompanySummary(
       .limit(1),
     monthlyUsageByType(database, companyId, now),
     usedDocumentTypes(database, companyId),
+    getDefaultTaxRate(database, companyId),
   ]);
   const company = companyRows[0];
-  return company ? summarizeCompany(company, usageByType, usedTypes) : null;
+  return company
+    ? summarizeCompany(company, usageByType, usedTypes, defaultTax?.rate)
+    : null;
 }
 
 export function usageResponse(usage: TypeUsage) {

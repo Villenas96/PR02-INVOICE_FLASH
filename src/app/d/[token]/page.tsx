@@ -68,6 +68,7 @@ export default async function SharedDocumentPage({
   const issuer = document.issuerSnapshot as IssuerSnapshot | null;
   const client = document.clientSnapshot as ClientSnapshot | null;
   const taxBreakdown = document.taxBreakdown as Array<{
+    name?: string;
     rate: string;
     baseCents: number;
     taxCents: number;
@@ -159,9 +160,13 @@ export default async function SharedDocumentPage({
               <span>{formatEur(createCents(document.subtotalCents))}</span>
             </div>
             {taxBreakdown?.map((tax) => (
-              <div key={tax.rate} className="flex justify-between gap-4">
+              <div
+                key={`${tax.name ?? "IVA"}-${tax.rate}`}
+                className="flex justify-between gap-4"
+              >
                 <span className="text-muted-foreground">
-                  IVA {Number(tax.rate).toLocaleString("es-ES")} %
+                  {tax.name ?? "IVA"} {Number(tax.rate).toLocaleString("es-ES")}{" "}
+                  %
                 </span>
                 <span>{formatEur(createCents(tax.taxCents))}</span>
               </div>

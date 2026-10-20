@@ -18,6 +18,7 @@ import {
   resolveCompanyContext,
 } from "@/services/context";
 import { requireFeature } from "@/services/entitlements";
+import { setDefaultIvaRate } from "@/services/tax-rates";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const SPANISH_TAX_ID_PATTERN =
@@ -108,7 +109,6 @@ type CompanyUpdate = {
   email?: string;
   phone?: string | null;
   defaultDueDays?: number;
-  defaultTaxRate?: string;
   retentionRate?: string;
   currency?: string;
   uiMode?: "simple" | "full" | null;
@@ -143,7 +143,7 @@ function companyResponse(summary: CompanySummary, context: CompanyContext) {
     phone: company.phone,
     logo_key: company.logoKey,
     default_due_days: company.defaultDueDays,
-    default_tax_rate: company.defaultTaxRate,
+    default_tax_rate: summary.defaultTaxRate,
     retention_rate: company.retentionRate,
     currency: company.currency,
     role: context.role,
@@ -193,9 +193,6 @@ function updatesFrom(
   }
   if (input.default_due_days !== undefined) {
     updates.defaultDueDays = input.default_due_days;
-  }
-  if (input.default_tax_rate !== undefined) {
-    updates.defaultTaxRate = input.default_tax_rate;
   }
   if (input.retention_rate !== undefined) {
     updates.retentionRate = input.retention_rate;
@@ -269,6 +266,13 @@ export async function PUT(request: Request): Promise<Response> {
 
     if (!updatedCompany) {
       throw new ResourceNotFoundError();
+    }
+    if (input.default_tax_rate !== undefined) {
+      await setDefaultIvaRate(
+        database,
+        context.companyId,
+        input.default_tax_rate,
+      );
     }
 
     const summary = await loadSummary(database, context);

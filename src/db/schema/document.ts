@@ -14,9 +14,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { catalogItems } from "./catalog-item";
 import { clients } from "./client";
+import { collectionMethods } from "./collection-method";
 import { companies } from "./company";
 import { documentSeries, documentTypeEnum } from "./document-series";
+import { taxRates } from "./tax-rate";
 
 export const documentStatusEnum = pgEnum("document_status", [
   "draft",
@@ -49,6 +52,14 @@ export const documents = pgTable(
     issueDate: date("issue_date", { mode: "string" }).notNull(),
     dueDate: date("due_date", { mode: "string" }),
     notes: text("notes"),
+    /** Draft reference; preselected with the default method (FR-022). */
+    collectionMethodId: uuid("collection_method_id").references(
+      () => collectionMethods.id,
+      { onDelete: "restrict" },
+    ),
+    /** Frozen at issue: `{kind, label, holder?, iban?, bic?, phone?,
+     * email_or_url?, instructions?}`. */
+    collectionMethodSnapshot: jsonb("collection_method_snapshot"),
     subtotalCents: integer("subtotal_cents").notNull().default(0),
     taxBreakdown: jsonb("tax_breakdown").notNull().default(sql`'[]'::jsonb`),
     retentionRate: numeric("retention_rate", { precision: 5, scale: 2 })
@@ -83,6 +94,13 @@ export const documents = pgTable(
     ),
     index("document_company_client_idx").on(table.companyId, table.clientId),
     index("document_company_issued_at_idx").on(table.companyId, table.issuedAt),
+    // Orphan-logo purge: a logo key still frozen in any snapshot is kept.
+    index("document_issuer_logo_key_idx").on(
+      sql`(${table.issuerSnapshot} ->> 'logoKey')`,
+    ),
+    index("document_client_logo_key_idx").on(
+      sql`(${table.clientSnapshot} ->> 'logoKey')`,
+    ),
     index("document_company_deleted_at_idx").on(
       table.companyId,
       table.deletedAt,
@@ -120,6 +138,16 @@ export const documentLines = pgTable(
     discountPercentage: numeric("discount_pct", { precision: 5, scale: 2 })
       .notNull()
       .default("0"),
+    /** Unit text, frozen like the description (FR-030). */
+    unit: text("unit"),
+    /** Draft-only reference; the name and rate below are what is frozen. */
+    taxRateId: uuid("tax_rate_id").references(() => taxRates.id, {
+      onDelete: "set null",
+    }),
+    taxName: text("tax_name").notNull().default("IVA"),
+    catalogItemId: uuid("catalog_item_id").references(() => catalogItems.id, {
+      onDelete: "set null",
+    }),
     lineSubtotalCents: integer("line_subtotal_cents").notNull().default(0),
     lineTaxCents: integer("line_tax_cents").notNull().default(0),
     lineTotalCents: integer("line_total_cents").notNull().default(0),

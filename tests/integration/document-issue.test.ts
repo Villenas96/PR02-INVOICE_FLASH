@@ -206,8 +206,8 @@ describe("atomic document issue", () => {
     });
     expect(document.taxBreakdown).toEqual(
       expect.arrayContaining([
-        { rate: "10.00", baseCents: 500, taxCents: 50 },
-        { rate: "21.00", baseCents: 1_800, taxCents: 378 },
+        { name: "IVA", rate: "10.00", baseCents: 500, taxCents: 50 },
+        { name: "IVA", rate: "21.00", baseCents: 1_800, taxCents: 378 },
       ]),
     );
     expect(lines).toEqual([

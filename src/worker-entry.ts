@@ -1,5 +1,6 @@
 import { getEmailFrom, getEmailReplyTo, optionalEnv } from "@/lib/env";
 import type { PrivateBucket } from "@/services/storage";
+import type { ListableBucket } from "@/services/storage-purge";
 import { handleBillingGrace } from "@/workers/handlers/billing-grace";
 import {
   createDocumentEmailHandler,
@@ -130,7 +131,9 @@ async function scheduled(
     await runDailyPlanner({ queue: producer(env.JOBS_QUEUE) });
     return;
   }
-  await runScheduledPurge();
+  await runScheduledPurge({
+    bucket: env.STORAGE_BUCKET as unknown as ListableBucket,
+  });
 }
 
 export default {

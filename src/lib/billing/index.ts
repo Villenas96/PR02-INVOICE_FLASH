@@ -4,10 +4,14 @@ const QUANTITY_SCALE = 1_000n;
 const PERCENTAGE_SCALE = 10_000n;
 const MAX_PERCENTAGE = 10_000n;
 
+export const DEFAULT_TAX_NAME = "IVA";
+
 export interface BillingLineInput {
   quantity: string;
   unitPriceCents: Cents;
   taxRate: string;
+  /** Frozen tax name (IVA, IGIC, IGI…); defaults to «IVA». */
+  taxName?: string;
   discountPercentage?: string;
 }
 
@@ -23,6 +27,7 @@ export interface BillingLineResult {
 }
 
 export interface TaxBreakdownEntry {
+  name: string;
   rate: string;
   baseCents: Cents;
   taxCents: Cents;
@@ -37,6 +42,7 @@ export interface BillingResult {
 }
 
 interface AccumulatedTax {
+  name: string;
   rateBasisPoints: bigint;
   baseCents: bigint;
   taxCents: bigint;
@@ -171,8 +177,11 @@ export function calculateBilling(input: BillingInput): BillingResult {
     const calculation = calculateLine(line);
     const lineSubtotal = BigInt(calculation.result.subtotalCents);
     const lineTax = BigInt(calculation.result.taxCents);
-    const rateKey = calculation.taxBasisPoints.toString();
+    const name = line.taxName?.trim() || DEFAULT_TAX_NAME;
+    // Group by (name, rate): an IGI 4,5 % and an IVA 4,5 % never merge.
+    const rateKey = `${name}\u0000${calculation.taxBasisPoints.toString()}`;
     const accumulated = taxByRate.get(rateKey) ?? {
+      name,
       rateBasisPoints: calculation.taxBasisPoints,
       baseCents: 0n,
       taxCents: 0n,
@@ -192,10 +201,15 @@ export function calculateBilling(input: BillingInput): BillingResult {
   );
   const taxBreakdown = Array.from(taxByRate.values())
     .sort((left, right) =>
-      left.rateBasisPoints < right.rateBasisPoints ? -1 : 1,
+      left.rateBasisPoints === right.rateBasisPoints
+        ? left.name.localeCompare(right.name)
+        : left.rateBasisPoints < right.rateBasisPoints
+          ? -1
+          : 1,
     )
     .map(
       (entry): TaxBreakdownEntry => ({
+        name: entry.name,
         rate: formatPercentage(entry.rateBasisPoints),
         baseCents: centsFromBigInt(entry.baseCents),
         taxCents: centsFromBigInt(entry.taxCents),
