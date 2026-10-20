@@ -17,7 +17,7 @@ import { users } from "./auth";
 // Superset during the expand/contract plan migration (data-model, «Migración
 // del plan»): v1 code still writes `free`/`pro` until `0005_billing` maps
 // them to `basic`/`essential`; `free` is dropped in the Polish contract step.
-export const planEnum = pgEnum("plan", ["free", "pro", "basic", "essential"]);
+export const planEnum = pgEnum("plan", ["basic", "essential", "pro"]);
 export const uiModeEnum = pgEnum("ui_mode", ["simple", "full"]);
 
 export const companies = pgTable(

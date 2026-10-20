@@ -7,12 +7,6 @@
 export const PLANS = ["basic", "essential", "pro"] as const;
 export type Plan = (typeof PLANS)[number];
 
-/**
- * Values the `plan` enum can still hold. `free` disappears in the Polish
- * contract migration; until then it is read as `basic`.
- */
-export type StoredPlan = Plan | "free";
-
 export const DOCUMENT_TYPES = [
   "invoice",
   "proforma",
@@ -66,23 +60,16 @@ const PLAN_DEFINITIONS: Record<Plan, PlanDefinition> = {
 
 export const WARNING_RATIO = 0.8;
 
-export function normalizePlan(plan: StoredPlan): Plan {
-  return plan === "free" ? "basic" : plan;
+export function planLabel(plan: Plan): string {
+  return PLAN_DEFINITIONS[plan].label;
 }
 
-export function planLabel(plan: StoredPlan): string {
-  return PLAN_DEFINITIONS[normalizePlan(plan)].label;
-}
-
-export function documentLimit(
-  plan: StoredPlan,
-  _documentType: DocumentType,
-): number {
-  return PLAN_DEFINITIONS[normalizePlan(plan)].limitPerType;
+export function documentLimit(plan: Plan, _documentType: DocumentType): number {
+  return PLAN_DEFINITIONS[plan].limitPerType;
 }
 
 export function warningThreshold(
-  plan: StoredPlan,
+  plan: Plan,
   documentType: DocumentType,
 ): number {
   return Math.ceil(documentLimit(plan, documentType) * WARNING_RATIO);
@@ -99,7 +86,7 @@ export interface TypeUsage {
 }
 
 export function usageFor(
-  plan: StoredPlan,
+  plan: Plan,
   documentType: DocumentType,
   used: number,
 ): TypeUsage {
@@ -113,11 +100,11 @@ export function usageFor(
   };
 }
 
-export function hasFeature(plan: StoredPlan, feature: Feature): boolean {
-  return PLAN_DEFINITIONS[normalizePlan(plan)].features.includes(feature);
+export function hasFeature(plan: Plan, feature: Feature): boolean {
+  return PLAN_DEFINITIONS[plan].features.includes(feature);
 }
 
-export function featuresFor(plan: StoredPlan): Feature[] {
+export function featuresFor(plan: Plan): Feature[] {
   return FEATURES.filter((feature) => hasFeature(plan, feature));
 }
 
@@ -130,7 +117,7 @@ export function requiredPlanFor(feature: Feature): Plan {
   return plan;
 }
 
-export function defaultUiMode(plan: StoredPlan): UiMode {
+export function defaultUiMode(plan: Plan): UiMode {
   return hasFeature(plan, "full_ui") ? "full" : "simple";
 }
 
@@ -138,10 +125,7 @@ export function defaultUiMode(plan: StoredPlan): UiMode {
  * Interface actually shown. A stored `full` preference is ignored (never
  * deleted) after a downgrade, so it applies again on upgrade.
  */
-export function effectiveUiMode(
-  plan: StoredPlan,
-  preference: UiMode | null,
-): UiMode {
+export function effectiveUiMode(plan: Plan, preference: UiMode | null): UiMode {
   if (!hasFeature(plan, "full_ui")) {
     return "simple";
   }

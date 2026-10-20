@@ -11,7 +11,7 @@ import {
   type NotificationPayload,
   renderNotification,
 } from "@/lib/notifications";
-import { planLabel, type StoredPlan } from "@/lib/plan";
+import { type Plan, planLabel } from "@/lib/plan";
 import {
   renderAdvisorExport,
   renderAdvisorInvite,
@@ -83,7 +83,7 @@ export async function renderNotice(
     template &&
     (BILLING_NOTICE_TEMPLATES as readonly string[]).includes(template)
   ) {
-    const plan = stringField(payload, "plan") as StoredPlan | null;
+    const plan = stringField(payload, "plan") as Plan | null;
     const graceUntil = stringField(payload, "grace_until");
     return renderBillingNotice(template as BillingNoticeTemplate, {
       planLabel: plan ? planLabel(plan) : "de pago",

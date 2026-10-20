@@ -2,6 +2,12 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
 
+import {
+  registerVerifyAndSignIn,
+  saveFiscalData,
+  setCompanyPlan,
+} from "./helpers";
+
 const FEEDBACK_DEADLINE_MS = 100;
 
 function e2eDatabaseUrl(): string {
@@ -190,4 +196,145 @@ test("login, documents, settings and client detail pages are accessible, respons
   // settle before judging contrast, or axe can catch a mid-transition frame.
   await page.waitForTimeout(300);
   await expectAccessible(page);
+});
+
+/** Every page added by v2 (US1–US15), reachable by a Pro account. */
+const V2_PAGES = [
+  "/dashboard",
+  "/documents",
+  "/documents/new?type=quote",
+  "/clients",
+  "/catalog",
+  "/catalog/import",
+  "/exports",
+  "/recurring",
+  "/recurring/new",
+  "/reconciliation",
+  "/onboarding",
+  "/billing",
+  "/settings",
+];
+
+test("every v2 page is accessible and responsive", async ({ page }) => {
+  const email = await registerVerifyAndSignIn(page);
+  await page.goto("/settings");
+  await saveFiscalData(page, email);
+  await setCompanyPlan(email, "pro");
+
+  for (const path of V2_PAGES) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
+    await page.addStyleTag({
+      content:
+        "*, *::before, *::after { transition: none !important; animation: none !important; }",
+    });
+    await expectAccessible(page);
+    await expectResponsive(page);
+  }
+
+  // Settings sections that only exist as tabs of the full interface.
+  await page.goto("/settings");
+  for (const tab of [
+    "Cobros e impuestos",
+    "Gestoría",
+    "Asistentes de IA",
+    "Suscripción",
+  ]) {
+    await page.getByRole("tab", { name: tab }).click();
+    await expectAccessible(page);
+    await expectResponsive(page);
+  }
+});
+
+test("v2 mutations give visible feedback within 100 ms under a delayed network", async ({
+  page,
+}) => {
+  const email = await registerVerifyAndSignIn(page);
+  await page.goto("/settings");
+  await saveFiscalData(page, email);
+  await setCompanyPlan(email, "pro");
+  const slow = (pattern: string) =>
+    page.route(pattern, async (route) => {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
+      // The page may have moved on (and handled the route) meanwhile.
+      await route.continue().catch(() => undefined);
+    });
+
+  // Export.
+  await page.goto("/exports");
+  await slow("**/api/v1/exports");
+  const exportButton = page.getByRole("button", { name: "Descargar Excel" });
+  await expectFeedbackWithin(
+    () => exportButton.click(),
+    () => expect(exportButton).toBeDisabled({ timeout: 90 }),
+  );
+  await page.unroute("**/api/v1/exports");
+
+  // Import (catalog CSV upload).
+  await page.goto("/catalog/import");
+  await page
+    .getByLabel("Archivo CSV")
+    .setInputFiles("tests/fixtures/csv/catalog-500.csv");
+  await slow("**/api/v1/imports");
+  const analyze = page
+    .getByRole("button")
+    .filter({ hasText: /^(Analizar archivo|Subiendo…)$/ });
+  await expectFeedbackWithin(
+    () => analyze.click(),
+    () => expect(analyze).toHaveText("Subiendo…", { timeout: 90 }),
+  );
+  await page.unroute("**/api/v1/imports");
+
+  // Advisor invitation.
+  await page.goto("/settings");
+  await page.getByRole("tab", { name: "Gestoría" }).click();
+  await page.getByLabel("Email de la gestoría").fill("gestoria@example.test");
+  await slow("**/api/v1/advisor-access");
+  const invite = page
+    .getByRole("button")
+    .filter({ hasText: /^(Enviar invitación|Enviando…)$/ });
+  await expectFeedbackWithin(
+    () => invite.click(),
+    () => expect(invite).toHaveText("Enviando…", { timeout: 90 }),
+  );
+  await page.unroute("**/api/v1/advisor-access");
+
+  // Quote → delivery note conversion.
+  const client = await page.request.post("/api/v1/clients", {
+    data: {
+      name: "Cliente Feedback, S.L.",
+      tax_id: "A87654321",
+      address: "Calle del Cliente 2, 46001 Valencia",
+    },
+  });
+  const { id: clientId } = (await client.json()) as { id: string };
+  const draft = await page.request.post("/api/v1/documents", {
+    data: {
+      doc_type: "quote",
+      client_id: clientId,
+      lines: [
+        {
+          description: "Servicio",
+          quantity: 1,
+          unit_price_cents: 10_000,
+          tax_rate: 21,
+        },
+      ],
+    },
+  });
+  const { id: quoteId } = (await draft.json()) as { id: string };
+  expect(
+    (await page.request.post(`/api/v1/documents/${quoteId}/issue`)).ok(),
+  ).toBe(true);
+  await page.goto(`/documents/${quoteId}`);
+  await page.getByRole("button", { name: "Aceptado" }).click();
+  await expect(page.getByText("Aceptado").first()).toBeVisible();
+  await slow("**/api/v1/documents/*/convert");
+  const convert = page
+    .getByRole("button")
+    .filter({ hasText: /^(Convertir en albarán|Convirtiendo…)$/ });
+  await expectFeedbackWithin(
+    () => convert.click(),
+    () => expect(convert).toHaveText("Convirtiendo…", { timeout: 90 }),
+  );
 });

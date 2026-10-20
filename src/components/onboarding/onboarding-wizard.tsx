@@ -333,10 +333,8 @@ export function OnboardingWizard() {
             </Button>
           ) : null}
           <Button asChild variant="ghost">
-            {/* No prefetch: the shell (banner progress) must be read fresh. */}
-            <Link href="/dashboard" prefetch={false}>
-              Cerrar y seguir luego
-            </Link>
+            {/* Full navigation: the shell (banner progress) must be read fresh. */}
+            <a href="/dashboard">Cerrar y seguir luego</a>
           </Button>
         </div>
       </section>

@@ -11,7 +11,6 @@ import {
   getMadridMonthBounds,
   hasFeature,
   isIssuedDocumentCountable,
-  normalizePlan,
   type Plan,
   planLabel,
   requiredPlanFor,
@@ -60,12 +59,10 @@ describe("plans and per-document-type limits", () => {
     });
   });
 
-  it("names plans in Spanish and maps the legacy free value to basic", () => {
+  it("names plans in Spanish", () => {
     expect(planLabel("basic")).toBe("Básico");
     expect(planLabel("essential")).toBe("Esencial");
     expect(planLabel("pro")).toBe("Pro");
-    expect(normalizePlan("free")).toBe("basic");
-    expect(normalizePlan("essential")).toBe("essential");
   });
 });
 

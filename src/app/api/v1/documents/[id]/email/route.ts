@@ -9,7 +9,6 @@ import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseIdempotencyKey } from "@/lib/api/idempotency";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { normalizePlan } from "@/lib/plan";
 import {
   ResourceNotFoundError,
   resolveCompanyContext,
@@ -159,7 +158,7 @@ export async function POST(
     }
     // Gate on the plan read with the document, not the context's: both come
     // from `company.plan`, this one in the same query as the status check.
-    requireFeature({ plan: normalizePlan(row.plan) }, "email");
+    requireFeature({ plan: row.plan }, "email");
 
     const delivery = await createOrReuseDocumentEmailDelivery({
       database,

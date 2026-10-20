@@ -53,9 +53,12 @@ const QUERY_BUDGET = {
   listClients: 4,
   readClient: 5,
   updateClient: 5,
-  createDraft: 7,
+  // v2 (reviewed, 7 -> 10): active-company resolution on every request
+  // (FR-052), default collection-method lookup and the document_link read of
+  // the returned detail (FR-037).
+  createDraft: 10,
   listDocuments: 4,
-  readDocument: 8,
+  readDocument: 10,
 } as const;
 
 let queryCounts: number[] = [];

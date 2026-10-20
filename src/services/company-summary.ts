@@ -12,7 +12,6 @@ import {
   type Feature,
   featuresFor,
   getMadridMonthBounds,
-  normalizePlan,
   type Plan,
   type TypeUsage,
   type UiMode,
@@ -113,7 +112,7 @@ export function summarizeCompany(
   usedTypes: DocumentType[],
   defaultTaxRate = "21.00",
 ): CompanySummary {
-  const plan = normalizePlan(company.plan);
+  const plan = company.plan;
   const readiness = getCompanyReadiness(company);
   const missingFields = readiness.missingFields.map(missingFieldName);
 

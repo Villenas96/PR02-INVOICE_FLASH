@@ -89,7 +89,8 @@
       "postcss": "^8.5.28",
       "source-map-js": "^1.2.2",
       "sharp": "^0.35.5",
-      "@modelcontextprotocol/sdk": "^1.32.1"
+      "@modelcontextprotocol/sdk": "^1.32.1",
+      "hono": "^4.13.11"
     },
     "auditConfig": {
       "ignoreGhsas": [

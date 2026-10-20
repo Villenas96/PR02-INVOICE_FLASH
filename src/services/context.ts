@@ -9,7 +9,7 @@ import {
 } from "@/lib/api/errors";
 import { auth } from "@/lib/auth";
 import { createUuidV7 } from "@/lib/ids";
-import { normalizePlan, type Plan } from "@/lib/plan";
+import type { Plan } from "@/lib/plan";
 import {
   type CompanyRole,
   recordAdvisorSession,
@@ -177,13 +177,13 @@ export async function resolveCompanyContext(
 
 function ownerContext(
   userId: string,
-  company: { id: string; plan: Parameters<typeof normalizePlan>[0] },
+  company: { id: string; plan: Plan },
 ): CompanyContext {
   return {
     userId,
     companyId: company.id,
     role: "owner",
-    plan: normalizePlan(company.plan),
+    plan: company.plan,
   };
 }
 

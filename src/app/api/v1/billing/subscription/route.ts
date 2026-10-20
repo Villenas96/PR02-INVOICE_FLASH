@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { createDatabase } from "@/db";
 import { subscriptions } from "@/db/schema/subscription";
 import { runRoute } from "@/lib/api/route";
-import { normalizePlan } from "@/lib/plan";
 import { requireOwner, resolveCompanyContext } from "@/services/context";
 
 export async function GET(request: Request): Promise<Response> {
@@ -17,7 +16,7 @@ export async function GET(request: Request): Promise<Response> {
       .limit(1);
 
     return Response.json({
-      plan: row ? normalizePlan(row.plan) : "basic",
+      plan: row ? row.plan : "basic",
       effective_plan: context.plan,
       interval: row?.interval ?? null,
       status: row && row.status !== "incomplete" ? row.status : null,

@@ -17,7 +17,6 @@ import {
   isSignedDownloadToken,
 } from "@/lib/download-tokens";
 import { createUuidV7 } from "@/lib/ids";
-import { normalizePlan } from "@/lib/plan";
 import {
   type CompanyContext,
   ResourceNotFoundError,
@@ -400,7 +399,7 @@ export async function listMyCompanies(input: {
       companyId: company.id,
       legalName: company.legalName,
       role: "advisor" as const,
-      suspended: normalizePlan(company.plan) !== "pro",
+      suspended: company.plan !== "pro",
     })),
   ];
 }

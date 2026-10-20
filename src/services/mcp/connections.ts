@@ -11,7 +11,7 @@ import {
 } from "@/db/schema/oauth";
 import { ApiError } from "@/lib/api/errors";
 import { createUuidV7 } from "@/lib/ids";
-import { hasFeature, normalizePlan, type Plan } from "@/lib/plan";
+import { hasFeature, type Plan } from "@/lib/plan";
 import { type CompanyContext, ResourceNotFoundError } from "@/services/context";
 import { requireFeature } from "@/services/entitlements";
 
@@ -228,7 +228,7 @@ export async function resolveMcpPrincipal(input: {
   if (!row) {
     throw new McpAccessError("unknown_connection");
   }
-  const plan = normalizePlan(row.plan);
+  const plan = row.plan;
   if (!hasFeature(plan, "ai_assistant")) {
     throw new McpAccessError("plan_not_available");
   }

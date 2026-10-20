@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { Database } from "@/db";
 import { firstExecutionRow } from "@/db/result";
-import { normalizePlan, type Plan } from "@/lib/plan";
+import type { Plan } from "@/lib/plan";
 
 export type CompanyRole = "owner" | "advisor";
 
@@ -17,12 +17,12 @@ export interface ActiveCompany {
 interface SessionRow extends Record<string, unknown> {
   active_company_id: string | null;
   own_id: string | null;
-  own_plan: string | null;
+  own_plan: Plan | null;
   target_id: string | null;
-  target_plan: string | null;
+  target_plan: Plan | null;
   access_active: boolean | null;
   first_access_company_id: string | null;
-  first_access_plan: string | null;
+  first_access_plan: Plan | null;
 }
 
 /**
@@ -99,17 +99,16 @@ export async function resolveActiveCompany(
   return null;
 }
 
-function owner(companyId: string, plan: string): ActiveCompany {
+function owner(companyId: string, plan: Plan): ActiveCompany {
   return {
     companyId,
     role: "owner",
-    plan: normalizePlan(plan as Parameters<typeof normalizePlan>[0]),
+    plan,
     suspended: false,
   };
 }
 
-function advisor(companyId: string, rawPlan: string): ActiveCompany {
-  const plan = normalizePlan(rawPlan as Parameters<typeof normalizePlan>[0]);
+function advisor(companyId: string, plan: Plan): ActiveCompany {
   return { companyId, role: "advisor", plan, suspended: plan !== "pro" };
 }
 

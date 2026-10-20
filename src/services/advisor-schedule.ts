@@ -6,7 +6,7 @@ import { advisorSchedules } from "@/db/schema/advisor-schedule";
 import { companies } from "@/db/schema/company";
 import { ApiError } from "@/lib/api/errors";
 import { closedPeriodOn } from "@/lib/exports/period";
-import { hasFeature, normalizePlan } from "@/lib/plan";
+import { hasFeature } from "@/lib/plan";
 import { type CompanyContext, requireOwner } from "@/services/context";
 import { requireFeature } from "@/services/entitlements";
 import { createScheduledExport, type JobsQueue } from "@/services/exports";
@@ -101,7 +101,7 @@ export async function planAdvisorExports(dependencies: {
     );
   let planned = 0;
   for (const schedule of due) {
-    if (!hasFeature(normalizePlan(schedule.plan), "advisor_schedule")) {
+    if (!hasFeature(schedule.plan, "advisor_schedule")) {
       continue;
     }
     const period = closedPeriodOn(schedule.frequency, now);

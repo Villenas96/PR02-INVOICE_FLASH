@@ -17,7 +17,7 @@ import {
 } from "@/lib/billing-plan";
 import { createUuidV7 } from "@/lib/ids";
 import { logSafe } from "@/lib/log";
-import { normalizePlan, type Plan, type StoredPlan } from "@/lib/plan";
+import type { Plan } from "@/lib/plan";
 import { getStripeClient, type StripeClient } from "@/services/billing/stripe";
 
 export type PlanChangeReason = (typeof planChanges.$inferInsert)["reason"];
@@ -52,7 +52,7 @@ export interface ReconciledSubscription {
 
 export interface ReconcileResult {
   companyId: string;
-  previousPlan: StoredPlan;
+  previousPlan: Plan;
   effectivePlan: Plan;
   changed: boolean;
   planChangeId: string | null;
@@ -131,7 +131,7 @@ function changeReason(
 }
 
 interface ApplyRow extends Record<string, unknown> {
-  previous_plan: StoredPlan | null;
+  previous_plan: Plan | null;
   plan_change_id: string | null;
 }
 
@@ -240,7 +240,6 @@ export async function reconcileSubscription(
       FROM locked_company
       WHERE target.id = locked_company.id
         AND locked_company.plan <> ${effective}::plan
-        AND NOT (locked_company.plan = 'free'::plan AND ${effective}::plan = 'basic'::plan)
       RETURNING locked_company.plan AS from_plan
     ),
     inserted_change AS (
@@ -274,7 +273,7 @@ export async function reconcileSubscription(
   };
 }
 
-export function isUpgrade(from: StoredPlan, to: Plan): boolean {
+export function isUpgrade(from: Plan, to: Plan): boolean {
   const order: Plan[] = ["basic", "essential", "pro"];
-  return order.indexOf(to) > order.indexOf(normalizePlan(from));
+  return order.indexOf(to) > order.indexOf(from);
 }

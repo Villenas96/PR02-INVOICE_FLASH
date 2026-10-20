@@ -6,7 +6,7 @@ import { planChanges } from "@/db/schema/plan-change";
 import { recurringCycles } from "@/db/schema/recurring-cycle";
 import { recurringTemplates } from "@/db/schema/recurring-template";
 import { createUuidV7 } from "@/lib/ids";
-import { hasFeature, madridDate, normalizePlan } from "@/lib/plan";
+import { hasFeature, madridDate } from "@/lib/plan";
 import { pendingCycles } from "@/lib/recurrence";
 import { createNotification } from "@/services/notifications";
 import { createRecurringRunMessage } from "@/workers/messages";
@@ -48,7 +48,7 @@ export async function planRecurringCycles(dependencies: {
   let enqueued = 0;
   for (const { template, plan } of due) {
     const rule = ruleOf(template);
-    const entitled = hasFeature(normalizePlan(plan), "recurring");
+    const entitled = hasFeature(plan, "recurring");
     let generated = await generatedCycles(database, template.id);
     let skipped = 0;
 

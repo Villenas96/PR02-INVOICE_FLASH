@@ -8,7 +8,7 @@ import { payments } from "@/db/schema/payment";
 import { paymentReminders } from "@/db/schema/payment-reminder";
 import { addCalendarDays } from "@/lib/dates";
 import { createUuidV7 } from "@/lib/ids";
-import { hasFeature, madridDate, normalizePlan } from "@/lib/plan";
+import { hasFeature, madridDate } from "@/lib/plan";
 import {
   parseReminderPolicy,
   reminderDueOn,
@@ -49,10 +49,7 @@ export async function planPaymentReminders(dependencies: {
   let enqueued = 0;
   for (const company of enabled) {
     const policy = parseReminderPolicy(company.policy);
-    if (
-      !policy.enabled ||
-      !hasFeature(normalizePlan(company.plan), "reminders")
-    ) {
+    if (!policy.enabled || !hasFeature(company.plan, "reminders")) {
       continue;
     }
     const horizon = reminderHorizonDays(policy);

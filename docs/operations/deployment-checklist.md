@@ -41,7 +41,7 @@ propios:
   `pnpm exec wrangler queues create <cola>`.
 - [ ] Secretos cargados con `pnpm exec wrangler secret put <NOMBRE> --env $ENV`:
   `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `RESEND_API_KEY`,
-  `RESEND_FROM_EMAIL`, `SENTRY_DSN`. Nunca se reutiliza un secreto entre entornos.
+  `EMAIL_FROM`, `SENTRY_DSN`. Nunca se reutiliza un secreto entre entornos.
 - [ ] Alerta de presupuesto de la cuenta activa y probada (cloud-cost-controls.md
   § Cloudflare).
 
@@ -52,7 +52,7 @@ propios:
 
 **Resend y Sentry**
 
-- [ ] Dominio remitente de `RESEND_FROM_EMAIL` verificado en Resend.
+- [ ] Dominio remitente de `EMAIL_FROM` verificado en Resend.
 - [ ] Proyecto Sentry creado y token de solo lectura de eventos para
   `verify:postdeploy`.
 

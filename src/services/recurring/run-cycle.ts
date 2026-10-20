@@ -11,7 +11,7 @@ import { ApiError } from "@/lib/api/errors";
 import { addCalendarDays } from "@/lib/dates";
 import { createUuidV7 } from "@/lib/ids";
 import { logSafe } from "@/lib/log";
-import { hasFeature, normalizePlan } from "@/lib/plan";
+import { hasFeature } from "@/lib/plan";
 import {
   type IssueDocumentDependencies,
   issueDocument,
@@ -125,7 +125,7 @@ export async function runRecurringCycle(
       now,
     });
 
-  if (!hasFeature(normalizePlan(company.plan), "recurring")) {
+  if (!hasFeature(company.plan, "recurring")) {
     await setOutcome("skipped_plan", "plan");
     return;
   }
@@ -228,7 +228,7 @@ export async function runRecurringCycle(
   }
 
   if (template.action === "issue_and_send" && client?.email) {
-    if (hasFeature(normalizePlan(company.plan), "email")) {
+    if (hasFeature(company.plan, "email")) {
       const delivery = await createOrReuseDocumentEmailDelivery({
         database,
         companyId: cycle.companyId,

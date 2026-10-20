@@ -3,7 +3,7 @@ import {
   effectiveUiMode,
   type Feature,
   hasFeature,
-  type StoredPlan,
+  type Plan,
   type UiMode,
 } from "@/lib/plan";
 
@@ -90,7 +90,7 @@ const PRO_ITEMS: NavItem[] = [
 ];
 
 export function buildNavigation(input: {
-  plan: StoredPlan;
+  plan: Plan;
   uiMode: UiMode | null;
   usedDocumentTypes: readonly DocumentType[];
   creatableTypes: readonly DocumentType[];

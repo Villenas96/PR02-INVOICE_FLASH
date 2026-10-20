@@ -53,7 +53,6 @@ describe("plan tier migration (expand/contract)", () => {
   });
 
   it.each<[FixturePlan, number]>([
-    ["free", 5],
     ["basic", 5],
     ["essential", 100],
     ["pro", 1_000],

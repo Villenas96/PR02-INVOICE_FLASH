@@ -24,10 +24,9 @@ import {
   type DocumentType,
   documentLimit,
   getMadridMonthBounds,
-  normalizePlan,
   PLANS,
+  type Plan,
   planLabel,
-  type StoredPlan,
 } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
 import { seriesArchivedError } from "@/services/document-errors";
@@ -110,7 +109,7 @@ interface IssuePreparation {
     logoKey: string | null;
     defaultDueDays: number;
     retentionRate: string;
-    plan: StoredPlan;
+    plan: Plan;
   };
   document: {
     id: string;
@@ -173,7 +172,7 @@ interface AtomicIssueRow extends Record<string, unknown> {
   company_locked: boolean;
   series_locked: boolean;
   /** Only for `plan_limit`: plan and same-type usage read under the lock. */
-  locked_plan: StoredPlan | null;
+  locked_plan: Plan | null;
   used_count: number | null;
 }
 
@@ -253,7 +252,7 @@ function documentStateConflict(
 export const UPGRADE_URL = "/billing";
 
 function planLimitError(
-  plan: StoredPlan,
+  plan: Plan,
   documentType: DocumentType,
   used: number,
 ): ApiError {
@@ -267,7 +266,7 @@ function planLimitError(
       document_type: documentType,
       limit,
       used,
-      plan: normalizePlan(plan),
+      plan: plan,
       upgrade_url: UPGRADE_URL,
     },
   );
@@ -279,11 +278,10 @@ function planLimitError(
  * company lock rather than the one seen during preparation.
  */
 function limitCaseSql(documentType: DocumentType): SQL {
-  const storedPlans: StoredPlan[] = [...PLANS, "free"];
   return sql.join(
     [
       sql`CASE locked_company.plan`,
-      ...storedPlans.map(
+      ...PLANS.map(
         (plan) =>
           sql`WHEN ${plan}::plan THEN ${documentLimit(plan, documentType)}::integer`,
       ),
