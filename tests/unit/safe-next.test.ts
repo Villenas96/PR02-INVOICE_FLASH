@@ -22,6 +22,10 @@ describe("safeNextPath", () => {
     "/\tevil",
     "https://evil.example/",
     "javascript:alert(1)",
+    "/.//evil.example",
+    "/..//evil.example",
+    "/%2e//evil.example",
+    "/./%2e//evil.example",
   ])("rejects %j", (value) => {
     expect(safeNextPath(value, ORIGIN)).toBeNull();
   });

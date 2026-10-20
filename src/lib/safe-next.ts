@@ -19,8 +19,15 @@ export function safeNextPath(
   }
   try {
     const url = new URL(value, origin);
-    return url.origin === origin
-      ? `${url.pathname}${url.search}${url.hash}`
+    if (url.origin !== origin) {
+      return null;
+    }
+    // Normalization can turn `/.//host` into `//host`: check the output too.
+    const path = `${url.pathname}${url.search}${url.hash}`;
+    return path.startsWith("/") &&
+      !path.startsWith("//") &&
+      !path.startsWith("/\\")
+      ? path
       : null;
   } catch {
     return null;
