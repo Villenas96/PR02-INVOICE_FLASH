@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-
+import { WriteOnly } from "@/components/access/read-only";
 import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -603,10 +603,14 @@ export function CatalogList() {
             Mostrar archivados
           </label>
         </div>
-        <CreateCatalogItemDialog
-          options={options}
-          onCreated={(created) => setItems((current) => [created, ...current])}
-        />
+        <WriteOnly>
+          <CreateCatalogItemDialog
+            options={options}
+            onCreated={(created) =>
+              setItems((current) => [created, ...current])
+            }
+          />
+        </WriteOnly>
       </div>
 
       {error ? (
@@ -667,14 +671,16 @@ export function CatalogList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <EditCatalogItemDialog
-                        item={item}
-                        options={options}
-                        onSaved={replaceItem}
-                      />
-                      <ArchiveToggle item={item} onChanged={replaceItem} />
-                    </div>
+                    <WriteOnly>
+                      <div className="flex justify-end gap-1">
+                        <EditCatalogItemDialog
+                          item={item}
+                          options={options}
+                          onSaved={replaceItem}
+                        />
+                        <ArchiveToggle item={item} onChanged={replaceItem} />
+                      </div>
+                    </WriteOnly>
                   </TableCell>
                 </TableRow>
               ))}

@@ -22,12 +22,13 @@ const checkoutSchema = z
 
 export async function POST(request: Request): Promise<Response> {
   return runRoute(request, "billing.checkout_failed", async () => {
-    const idempotencyKey = parseIdempotencyKey(request, true) as string;
     const [context, input] = await Promise.all([
       resolveCompanyContext(request, { access: "write" }),
       parseJson(request, checkoutSchema),
     ]);
     requireOwner(context);
+    // After the access check: a read-only role is denied before anything else.
+    const idempotencyKey = parseIdempotencyKey(request, true) as string;
     const session = await createCheckoutSession(
       {
         companyId: context.companyId,

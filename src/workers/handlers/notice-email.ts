@@ -3,10 +3,19 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDatabase, type Database } from "@/db";
 import { emailDeliveries } from "@/db/schema/email-delivery";
 import {
+  advisorInviteSeed,
+  deriveSignedToken,
+  exportTokenSeed,
+} from "@/lib/download-tokens";
+import {
   type NotificationPayload,
   renderNotification,
 } from "@/lib/notifications";
 import { planLabel, type StoredPlan } from "@/lib/plan";
+import {
+  renderAdvisorExport,
+  renderAdvisorInvite,
+} from "@/services/email/templates/advisor";
 import {
   BILLING_NOTICE_TEMPLATES,
   type BillingNoticeTemplate,
@@ -24,7 +33,12 @@ import {
 } from "@/workers/messages";
 import { RetryableQueueError } from "@/workers/queue-consumer";
 
-export const NOTICE_PURPOSES = ["billing_notice", "user_notice"] as const;
+export const NOTICE_PURPOSES = [
+  "billing_notice",
+  "user_notice",
+  "advisor_invite",
+  "advisor_export",
+] as const;
 
 /** Template of `user_notice` deliveries: the in-app notice by email. */
 export const USER_NOTIFICATION_TEMPLATE = "user_notification";
@@ -34,7 +48,14 @@ export interface NoticeEmailDependencies {
   database?: Database;
   provider: TransactionalEmailProvider;
   appBaseUrl: string;
+  /** Rebuilds signed links (exports, invitations) from opaque ids. */
+  tokenSecret?: () => string;
   now?: () => Date;
+}
+
+export interface RenderNoticeContext {
+  appBaseUrl: string;
+  tokenSecret?: () => string;
 }
 
 type Payload = Record<string, unknown> | null;
@@ -48,11 +69,12 @@ function stringField(payload: Payload, key: string): string | null {
  * Renders a notice from its stored template name and non-sensitive
  * payload. Unknown templates are a programming error, never a retry.
  */
-export function renderNotice(
+export async function renderNotice(
   template: string | null,
   payload: Payload,
-  appBaseUrl: string,
-): RenderedEmail | null {
+  context: RenderNoticeContext,
+): Promise<RenderedEmail | null> {
+  const { appBaseUrl } = context;
   if (
     template &&
     (BILLING_NOTICE_TEMPLATES as readonly string[]).includes(template)
@@ -85,7 +107,53 @@ export function renderNotice(
       }),
     };
   }
+  if (template === "advisor_invite" || template === "advisor_export") {
+    return renderAdvisorNotice(template, payload, context);
+  }
   return null;
+}
+
+async function renderAdvisorNotice(
+  template: "advisor_invite" | "advisor_export",
+  payload: Payload,
+  context: RenderNoticeContext,
+): Promise<RenderedEmail | null> {
+  const companyName = stringField(payload, "company_name") ?? "Tu cliente";
+  const expiresAt = stringField(payload, "expires_at");
+  if (!context.tokenSecret || !expiresAt) {
+    return null;
+  }
+  if (template === "advisor_invite") {
+    const accessId = stringField(payload, "access_id");
+    if (!accessId) {
+      return null;
+    }
+    const { token } = await deriveSignedToken(
+      context.tokenSecret(),
+      advisorInviteSeed(accessId),
+    );
+    const acceptUrl = new URL("/advisor/accept", context.appBaseUrl);
+    acceptUrl.searchParams.set("token", token);
+    return renderAdvisorInvite({
+      companyName,
+      acceptUrl: acceptUrl.toString(),
+      expiresAt: new Date(expiresAt),
+    });
+  }
+  const exportId = stringField(payload, "export_id");
+  if (!exportId) {
+    return null;
+  }
+  const { token } = await deriveSignedToken(
+    context.tokenSecret(),
+    exportTokenSeed(exportId),
+  );
+  return renderAdvisorExport({
+    companyName,
+    periodLabel: stringField(payload, "period_label"),
+    downloadUrl: new URL(`/x/${token}`, context.appBaseUrl).toString(),
+    expiresAt: new Date(expiresAt),
+  });
 }
 
 async function markNotice(
@@ -137,10 +205,10 @@ export function createNoticeEmailHandler(
     if (!claimed) {
       return;
     }
-    const rendered = renderNotice(
+    const rendered = await renderNotice(
       claimed.template,
       claimed.payload as Payload,
-      dependencies.appBaseUrl,
+      dependencies,
     );
     if (!claimed.recipientEmail || !rendered) {
       await markNotice(database, claimed.id, {

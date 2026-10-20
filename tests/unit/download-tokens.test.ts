@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDownloadToken,
   DOWNLOAD_TOKEN_TTL_MS,
+  deriveSignedToken,
   hashDownloadToken,
   isSignedDownloadToken,
 } from "@/lib/download-tokens";
@@ -44,5 +45,20 @@ describe("download tokens", () => {
     expect(await isSignedDownloadToken(SECRET, random)).toBe(false);
     expect(await isSignedDownloadToken(SECRET, "../etc/passwd")).toBe(false);
     expect(await isSignedDownloadToken(SECRET, "")).toBe(false);
+  });
+
+  it("derives the same verifiable token from a seed, never from another", async () => {
+    const first = await deriveSignedToken(SECRET, "export:abc");
+    const again = await deriveSignedToken(SECRET, "export:abc");
+    const other = await deriveSignedToken(SECRET, "export:abd");
+    const otherSecret = await deriveSignedToken(
+      "another-secret-of-enough-length!",
+      "export:abc",
+    );
+    expect(again).toEqual(first);
+    expect(other.token).not.toBe(first.token);
+    expect(otherSecret.token).not.toBe(first.token);
+    expect(await isSignedDownloadToken(SECRET, first.token)).toBe(true);
+    expect(first.hash).toBe(await hashDownloadToken(first.token));
   });
 });

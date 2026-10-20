@@ -16,7 +16,7 @@ export default async function DashboardPage({
     redirect("/login");
   }
   const [summary, query] = await Promise.all([
-    getLayoutData(session.user.id),
+    getLayoutData(session.user.id, session.session.id),
     searchParams,
   ]);
   const showFull =

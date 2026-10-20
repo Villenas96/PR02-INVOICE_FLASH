@@ -46,6 +46,11 @@ function errorFromResponse(response: { error?: { message?: string } | null }) {
   }
 }
 
+/** Only same-origin relative paths (e.g. an advisor invitation link). */
+function safeNextPath(value: string | null): string | null {
+  return value?.startsWith("/") && !value.startsWith("//") ? value : null;
+}
+
 export function AuthForm({ mode }: { mode: AuthMode }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -110,7 +115,10 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     }
 
     if (mode === "login") {
-      router.replace("/documents");
+      router.replace(
+        safeNextPath(new URLSearchParams(window.location.search).get("next")) ??
+          "/documents",
+      );
       router.refresh();
       return;
     }

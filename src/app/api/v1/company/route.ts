@@ -93,6 +93,21 @@ const updateCompanySchema = z
     currency: currencySchema.optional(),
     // `null` returns to the plan default; `full` needs Pro (checked below).
     ui_mode: z.enum(["simple", "full"]).nullable().optional(),
+    // Destination of advisor sends (FR-032, FR-034); `null` removes it.
+    advisor_email: z
+      .union([
+        z.null(),
+        z.literal(""),
+        z
+          .string()
+          .trim()
+          .max(320)
+          .email("Introduce un correo válido para tu asesoría."),
+      ])
+      .transform((value) =>
+        value === "" ? null : (value?.toLowerCase() ?? null),
+      )
+      .optional(),
   })
   .strict()
   .refine(
@@ -112,6 +127,7 @@ type CompanyUpdate = {
   retentionRate?: string;
   currency?: string;
   uiMode?: "simple" | "full" | null;
+  advisorEmail?: string | null;
   updatedAt: Date;
 };
 
@@ -146,6 +162,7 @@ function companyResponse(summary: CompanySummary, context: CompanyContext) {
     default_tax_rate: summary.defaultTaxRate,
     retention_rate: company.retentionRate,
     currency: company.currency,
+    advisor_email: company.advisorEmail,
     role: context.role,
     plan: summary.plan,
     plan_label: planLabel(summary.plan),
@@ -202,6 +219,9 @@ function updatesFrom(
   }
   if (input.ui_mode !== undefined) {
     updates.uiMode = input.ui_mode;
+  }
+  if (input.advisor_email !== undefined) {
+    updates.advisorEmail = input.advisor_email;
   }
 
   return updates;

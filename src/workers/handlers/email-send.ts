@@ -17,6 +17,7 @@ import {
 import { renderAuthEmailTemplate } from "@/services/email/templates/auth";
 import { renderDocumentEmailTemplate } from "@/services/email/templates/document";
 import { createOrReactivateShareLink } from "@/services/share-links";
+import { NOTICE_PURPOSES } from "@/workers/handlers/notice-email";
 import {
   EMAIL_RETRY_WINDOW_MS,
   type EmailSendMessage,
@@ -425,10 +426,7 @@ export function createEmailSendHandler(
       return;
     }
 
-    if (
-      delivery.purpose === "billing_notice" ||
-      delivery.purpose === "user_notice"
-    ) {
+    if ((NOTICE_PURPOSES as readonly string[]).includes(delivery.purpose)) {
       if (!dependencies.noticeHandler) {
         throw new Error("El consumidor de avisos no está configurado.");
       }

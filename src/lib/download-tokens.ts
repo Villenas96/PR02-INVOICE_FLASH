@@ -75,6 +75,34 @@ export async function createDownloadToken(
   };
 }
 
+async function hmac(secret: string, label: string, value: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(`${label}:${secret}`),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return new Uint8Array(
+    await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value)),
+  );
+}
+
+/**
+ * Deterministic variant for links sent by email or shown again later
+ * (export downloads, advisor invitations): the token is an HMAC of an
+ * opaque seed such as `export:{id}`, so it is never stored or queued in
+ * clear and can be rebuilt by the server only.
+ */
+export async function deriveSignedToken(
+  secret: string,
+  seed: string,
+): Promise<{ token: string; hash: string }> {
+  const random = base64Url(await hmac(secret, "token-seed", seed));
+  const token = `${random}.${await tagFor(secret, random)}`;
+  return { token, hash: await hashDownloadToken(token) };
+}
+
 /** Shape and signature only; expiry and existence are checked in the DB. */
 export async function isSignedDownloadToken(
   secret: string,
@@ -85,4 +113,12 @@ export async function isSignedDownloadToken(
   }
   const [random = "", tag = ""] = token.split(".");
   return constantTimeEqual(tag, await tagFor(secret, random));
+}
+
+export function exportTokenSeed(exportId: string): string {
+  return `export:${exportId}`;
+}
+
+export function advisorInviteSeed(accessId: string): string {
+  return `advisor-invite:${accessId}`;
 }

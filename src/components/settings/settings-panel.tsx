@@ -7,6 +7,7 @@ import { companyHasFeature } from "@/components/plan/types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api/client";
+import { AdvisorSettings } from "./advisor-settings";
 import { CollectionMethodSettings } from "./collection-method-settings";
 import {
   CompanyProfileForm,
@@ -216,6 +217,15 @@ export function SettingsPanel() {
       : []),
     ...(company.role === "owner"
       ? [
+          {
+            id: "advisor",
+            label: "Gestoría",
+            content: (
+              <AdvisorSettings
+                enabled={companyHasFeature(company, "advisor_access")}
+              />
+            ),
+          },
           {
             id: "subscription-section",
             label: "Suscripción",

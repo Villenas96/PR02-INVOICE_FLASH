@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
+import { WriteOnly } from "@/components/access/read-only";
 import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -396,8 +396,10 @@ export function ClientDetail({ clientId }: { clientId: string }) {
           </address>
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          <EditClientDialog client={client} onSaved={setClient} />
-          <ArchiveAction client={client} onChanged={setClient} />
+          <WriteOnly>
+            <EditClientDialog client={client} onSaved={setClient} />
+            <ArchiveAction client={client} onChanged={setClient} />
+          </WriteOnly>
         </div>
       </section>
 
@@ -407,28 +409,30 @@ export function ClientDetail({ clientId }: { clientId: string }) {
         </p>
       ) : null}
 
-      <section
-        aria-labelledby="client-logo-title"
-        className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"
-      >
-        <h2 id="client-logo-title" className="font-semibold">
-          Logotipo del cliente
-        </h2>
-        <p className="mt-1 mb-4 text-sm text-muted-foreground">
-          Opcional. Aparece junto a sus datos en los documentos que emitas a
-          partir de ahora.
-        </p>
-        <LogoUpload
-          endpoint={`/api/v1/clients/${client.id}/logo`}
-          inputId="client-logo"
-          logoKey={client.logo_key}
-          onChange={(logoKey) =>
-            setClient((current) =>
-              current ? { ...current, logo_key: logoKey } : current,
-            )
-          }
-        />
-      </section>
+      <WriteOnly>
+        <section
+          aria-labelledby="client-logo-title"
+          className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"
+        >
+          <h2 id="client-logo-title" className="font-semibold">
+            Logotipo del cliente
+          </h2>
+          <p className="mt-1 mb-4 text-sm text-muted-foreground">
+            Opcional. Aparece junto a sus datos en los documentos que emitas a
+            partir de ahora.
+          </p>
+          <LogoUpload
+            endpoint={`/api/v1/clients/${client.id}/logo`}
+            inputId="client-logo"
+            logoKey={client.logo_key}
+            onChange={(logoKey) =>
+              setClient((current) =>
+                current ? { ...current, logo_key: logoKey } : current,
+              )
+            }
+          />
+        </section>
+      </WriteOnly>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border bg-card p-5 shadow-sm">

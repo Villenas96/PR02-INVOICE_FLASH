@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
+import { useReadOnly } from "@/components/access/read-only";
 import { DocumentActions } from "@/components/documents/document-actions";
 import { DeleteDraftButton } from "@/components/documents/draft-actions";
 import { IssueAction } from "@/components/documents/editor/issue-action";
@@ -223,6 +223,7 @@ function VoidAction({
 }
 
 export function DocumentDetail({ documentId }: { documentId: string }) {
+  const readOnly = useReadOnly();
   const [document, setDocument] = useState<DocumentDetailData>();
   const [company, setCompany] = useState<CompanyCapabilityData>();
   const [isLoading, setIsLoading] = useState(true);
@@ -309,21 +310,21 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          {document.status === "draft" ? (
+          {document.status === "draft" && !readOnly ? (
             <>
               <Button asChild variant="outline">
                 <Link href={`/documents/${document.id}/edit`}>Editar</Link>
               </Button>
               <DeleteDraftButton documentId={document.id} />
             </>
-          ) : (
+          ) : document.status === "draft" ? null : (
             <Button asChild variant="outline">
               <Link href={`/documents/${document.id}/print`} target="_blank">
                 Imprimir
               </Link>
             </Button>
           )}
-          {document.status === "draft" && company ? (
+          {document.status === "draft" && company && !readOnly ? (
             <IssueAction
               documentId={document.id}
               documentType={
@@ -344,7 +345,9 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
                   pdfStatus={document.pdf_status}
                 />
               ) : null}
-              <VoidAction documentId={document.id} onVoided={loadDocument} />
+              {readOnly ? null : (
+                <VoidAction documentId={document.id} onVoided={loadDocument} />
+              )}
             </>
           ) : null}
           {document.status === "voided" && document.pdf_status ? (
@@ -533,11 +536,13 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
             document.status !== "draft" &&
             companyHasFeature(company, "document_xlsx")
           }
+          readOnly={readOnly}
         />
       ) : null}
 
       {(document.status === "issued" || document.status === "voided") &&
-      company ? (
+      company &&
+      !readOnly ? (
         <SharePanel
           documentId={document.id}
           canSendEmail={companyHasFeature(company, "email")}

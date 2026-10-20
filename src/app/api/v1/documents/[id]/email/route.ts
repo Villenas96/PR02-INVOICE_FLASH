@@ -109,14 +109,6 @@ export async function POST(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const idempotencyKey = parseIdempotencyKey(request, true);
-    if (!idempotencyKey) {
-      throw new ApiError(
-        "idempotency_key_invalid",
-        400,
-        "La cabecera Idempotency-Key es obligatoria.",
-      );
-    }
     const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
@@ -129,6 +121,15 @@ export async function POST(
       inputPromise,
       queuePromise,
     ]);
+    // After the access check: a read-only role is denied before anything else.
+    const idempotencyKey = parseIdempotencyKey(request, true);
+    if (!idempotencyKey) {
+      throw new ApiError(
+        "idempotency_key_invalid",
+        400,
+        "La cabecera Idempotency-Key es obligatoria.",
+      );
+    }
     const database = createDatabase();
     const [row] = await database
       .select({

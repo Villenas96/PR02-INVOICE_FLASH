@@ -4,7 +4,7 @@ import { MoreHorizontalIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-
+import { useReadOnly } from "@/components/access/read-only";
 import {
   DeleteDraftDialog,
   useDuplicateDocument,
@@ -167,6 +167,7 @@ export function DocumentList({
   initialType?: string;
   showFilters?: boolean;
 } = {}) {
+  const readOnly = useReadOnly();
   const [documentType, setDocumentType] = useState(initialType);
   const [documentStatus, setDocumentStatus] = useState("");
   const [items, setItems] = useState<DocumentListItem[]>([]);
@@ -398,14 +399,16 @@ export function DocumentList({
                     {formatEur(createCents(document.total_cents))}
                   </TableCell>
                   <TableCell className="text-right">
-                    <DocumentRowActions
-                      document={document}
-                      onDeleted={() =>
-                        setItems((current) =>
-                          current.filter((item) => item.id !== document.id),
-                        )
-                      }
-                    />
+                    {readOnly ? null : (
+                      <DocumentRowActions
+                        document={document}
+                        onDeleted={() =>
+                          setItems((current) =>
+                            current.filter((item) => item.id !== document.id),
+                          )
+                        }
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

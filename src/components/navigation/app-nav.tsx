@@ -27,7 +27,14 @@ function isActive(item: NavItem, pathname: string, type: string | null) {
 }
 
 /** Header navigation built by `buildNavigation` (FR-057–FR-060). */
-export function AppNav({ navigation }: { navigation: Navigation }) {
+export function AppNav({
+  navigation,
+  readOnly = false,
+}: {
+  navigation: Navigation;
+  /** Advisors only read: no upgrade entry and no «Nuevo». */
+  readOnly?: boolean;
+}) {
   const pathname = usePathname();
   const type = useSearchParams().get("type");
 
@@ -74,7 +81,7 @@ export function AppNav({ navigation }: { navigation: Navigation }) {
         ) : null}
       </div>
       <div className="flex items-center gap-2">
-        {navigation.upgrade ? (
+        {navigation.upgrade && !readOnly ? (
           <Link
             href={navigation.upgrade.href}
             className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -83,24 +90,26 @@ export function AppNav({ navigation }: { navigation: Navigation }) {
             {navigation.upgrade.label}
           </Link>
         ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm">
-              <PlusIcon aria-hidden="true" />
-              Nuevo
-              <ChevronDownIcon aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {navigation.newDocumentTypes.map((documentType) => (
-              <DropdownMenuItem key={documentType} asChild>
-                <Link href={`/documents/new?type=${documentType}`}>
-                  {documentTypeLabel(documentType)}
-                </Link>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {readOnly ? null : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm">
+                <PlusIcon aria-hidden="true" />
+                Nuevo
+                <ChevronDownIcon aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {navigation.newDocumentTypes.map((documentType) => (
+                <DropdownMenuItem key={documentType} asChild>
+                  <Link href={`/documents/new?type=${documentType}`}>
+                    {documentTypeLabel(documentType)}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </nav>
   );

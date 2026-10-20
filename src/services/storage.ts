@@ -11,6 +11,22 @@ export interface PrivateBucket {
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>;
   delete(key: string): Promise<void>;
+  /** R2 multipart upload (large exports); absent in some test doubles. */
+  createMultipartUpload?(
+    key: string,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<MultipartUpload>;
+}
+
+export interface MultipartUpload {
+  uploadPart(
+    partNumber: number,
+    value: Uint8Array,
+  ): Promise<{ partNumber: number; etag: string }>;
+  complete(
+    parts: Array<{ partNumber: number; etag: string }>,
+  ): Promise<unknown>;
+  abort(): Promise<void>;
 }
 
 export function pdfObjectKey(documentId: string): string {

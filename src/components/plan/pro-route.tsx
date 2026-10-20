@@ -22,7 +22,7 @@ export async function ProRoute({
   if (!session) {
     redirect("/login");
   }
-  const summary = await getLayoutData(session.user.id);
+  const summary = await getLayoutData(session.user.id, session.session.id);
   if (!summary || !hasFeature(summary.plan, feature)) {
     return <FeatureUpsell feature={feature} />;
   }

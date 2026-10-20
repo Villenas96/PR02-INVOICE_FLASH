@@ -6,6 +6,7 @@ import { verifications } from "@/db/schema/auth";
 import { emailDeliveries } from "@/db/schema/email-delivery";
 import { subscriptions } from "@/db/schema/subscription";
 import { logSafe } from "@/lib/log";
+import { planAdvisorExports } from "@/services/advisor-schedule";
 import {
   type ListableBucket,
   purgeOrphanLogos,
@@ -133,6 +134,10 @@ export async function runDailyPlanner(
     [
       "billing_grace",
       () => planBillingGrace({ ...dependencies, database, now }),
+    ],
+    [
+      "advisor_exports",
+      () => planAdvisorExports({ ...dependencies, database, now }),
     ],
   ];
   const summary: PlannerSummary = {};

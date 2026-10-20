@@ -1,4 +1,9 @@
-import { getEmailFrom, getEmailReplyTo, optionalEnv } from "@/lib/env";
+import {
+  getDownloadTokenSecret,
+  getEmailFrom,
+  getEmailReplyTo,
+  optionalEnv,
+} from "@/lib/env";
 import type { PrivateBucket } from "@/services/storage";
 import type { ListableBucket } from "@/services/storage-purge";
 import { handleBillingGrace } from "@/workers/handlers/billing-grace";
@@ -8,6 +13,7 @@ import {
   createResendEmailProvider,
   type TransactionalEmailProvider,
 } from "@/workers/handlers/email-send";
+import { handleExportBuild } from "@/workers/handlers/export-build";
 import { handleImportAnalyze } from "@/workers/handlers/import-analyze";
 import { handleImportApply } from "@/workers/handlers/import-apply";
 import { createNoticeEmailHandler } from "@/workers/handlers/notice-email";
@@ -40,6 +46,7 @@ type QueueEnv = CloudflareEnv & {
   EMAIL_REPLY_TO?: string;
   APP_BASE_URL?: string;
   BETTER_AUTH_URL?: string;
+  BETTER_AUTH_SECRET?: string;
 };
 
 interface CloudflareQueueMessage {
@@ -97,6 +104,7 @@ async function queue(
     noticeHandler: createNoticeEmailHandler({
       provider: emailProvider,
       appBaseUrl,
+      tokenSecret: () => getDownloadTokenSecret(env),
     }),
   });
 
@@ -123,6 +131,13 @@ async function runJob(message: JobMessage, env: QueueEnv): Promise<void> {
     "import.analyze": (job) =>
       handleImportAnalyze(job, {
         bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+      }),
+    "export.build": (job) =>
+      handleExportBuild(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+        pdfQueue: producer(env.PDF_RENDER_QUEUE),
+        emailQueue: producer(env.EMAIL_SEND_QUEUE),
+        secret: getDownloadTokenSecret(env),
       }),
     "import.apply": (job) =>
       handleImportApply(job, {

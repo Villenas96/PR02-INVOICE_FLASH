@@ -60,6 +60,14 @@ const SETTINGS: NavItem = {
   href: "/settings",
 };
 
+/** Essential's period export for the advisor (FR-032) in the simple UI. */
+const ADVISOR_EXPORT: NavItem = {
+  key: "exports",
+  label: "Gestoría",
+  href: "/exports",
+  feature: "period_export",
+};
+
 const PRO_ITEMS: NavItem[] = [
   {
     key: "recurring",
@@ -128,6 +136,10 @@ export function buildNavigation(input: {
       ...usedOptional,
       CLIENTS,
       CATALOG,
+      // Pro reaches exports under «Más»; Essential gets the period export.
+      ...(!isPro && hasFeature(input.plan, "period_export")
+        ? [ADVISOR_EXPORT]
+        : []),
       SETTINGS,
     ],
     newDocumentTypes,

@@ -19,6 +19,8 @@ interface DocumentActionsProps {
   payments: DocumentPayment[];
   /** Pro (FR-033): the issued document as a spreadsheet. */
   canDownloadXlsx: boolean;
+  /** Advisor (FR-051): only the spreadsheet download remains. */
+  readOnly?: boolean;
 }
 
 function formattedDate(date: string): string {
@@ -173,10 +175,11 @@ export function DocumentActions({
   documentLimit,
   payments,
   canDownloadXlsx,
+  readOnly = false,
 }: DocumentActionsProps) {
-  const canConvert = documentType === "proforma" && !convertedToId;
-  const canDuplicate = documentType !== "receipt";
-  const canGenerateReceipts = documentType === "invoice";
+  const canConvert = !readOnly && documentType === "proforma" && !convertedToId;
+  const canDuplicate = !readOnly && documentType !== "receipt";
+  const canGenerateReceipts = !readOnly && documentType === "invoice";
 
   if (
     !canConvert &&

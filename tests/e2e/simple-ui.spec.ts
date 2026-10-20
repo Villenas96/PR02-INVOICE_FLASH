@@ -158,10 +158,12 @@ test("Pro tiene interfaz completa, puede pasar a la sencilla con «Más» y al b
   });
   await setCompanyPlan(email, "essential");
   await page.goto("/dashboard");
+  // Essential keeps its period export for the advisor (FR-032).
   expect((await navLabels(page)).map((label) => label.trim())).toEqual([
     "Facturas",
     "Clientes",
     "Productos",
+    "Gestoría",
     "Ajustes",
     "Mejorar a Pro",
   ]);

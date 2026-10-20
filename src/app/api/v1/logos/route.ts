@@ -17,11 +17,11 @@ const querySchema = z.object({ key: z.string().min(1).max(300) }).strict();
  */
 export async function GET(request: Request): Promise<Response> {
   return runRoute(request, "logos.read_failed", async () => {
+    const context = await resolveCompanyContext(request, { access: "read" });
     const query = validate(
       querySchema,
       Object.fromEntries(new URL(request.url).searchParams.entries()),
     );
-    const context = await resolveCompanyContext(request, { access: "read" });
     if (!isCompanyLogoKey(context.companyId, query.key)) {
       throw new ResourceNotFoundError();
     }

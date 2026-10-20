@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
+import { useReadOnly } from "@/components/access/read-only";
 import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -477,6 +477,7 @@ export function PaymentsPanel({
   payments,
   onChanged,
 }: PaymentsPanelProps) {
+  const readOnly = useReadOnly();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string>();
 
@@ -496,19 +497,21 @@ export function PaymentsPanel({
             <span>Pendiente {formatEur(createCents(outstandingCents))}</span>
           </div>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button type="button">Registrar cobro</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <CreatePaymentForm
-              documentId={documentId}
-              outstandingCents={outstandingCents}
-              onCreated={onChanged}
-              onClose={() => setIsCreateOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
+        {readOnly ? null : (
+          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <DialogTrigger asChild>
+              <Button type="button">Registrar cobro</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <CreatePaymentForm
+                documentId={documentId}
+                outstandingCents={outstandingCents}
+                onCreated={onChanged}
+                onClose={() => setIsCreateOpen(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {payments.length === 0 ? (
@@ -522,7 +525,9 @@ export function PaymentsPanel({
               <TableHead>Fecha</TableHead>
               <TableHead>Método</TableHead>
               <TableHead className="text-right">Importe</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
+              {readOnly ? null : (
+                <TableHead className="text-right">Acciones</TableHead>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -540,36 +545,38 @@ export function PaymentsPanel({
                 <TableCell className="text-right font-medium">
                   {formatEur(createCents(payment.amount_cents))}
                 </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Dialog
-                      open={editingPaymentId === payment.id}
-                      onOpenChange={(open) =>
-                        setEditingPaymentId(open ? payment.id : undefined)
-                      }
-                    >
-                      <DialogTrigger asChild>
-                        <Button type="button" variant="ghost" size="sm">
-                          Editar
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-lg">
-                        <EditPaymentForm
-                          payment={payment}
-                          outstandingBeforeThisPayment={
-                            outstandingCents + payment.amount_cents
-                          }
-                          onSaved={onChanged}
-                          onClose={() => setEditingPaymentId(undefined)}
-                        />
-                      </DialogContent>
-                    </Dialog>
-                    <DeletePaymentAction
-                      payment={payment}
-                      onDeleted={onChanged}
-                    />
-                  </div>
-                </TableCell>
+                {readOnly ? null : (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Dialog
+                        open={editingPaymentId === payment.id}
+                        onOpenChange={(open) =>
+                          setEditingPaymentId(open ? payment.id : undefined)
+                        }
+                      >
+                        <DialogTrigger asChild>
+                          <Button type="button" variant="ghost" size="sm">
+                            Editar
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-lg">
+                          <EditPaymentForm
+                            payment={payment}
+                            outstandingBeforeThisPayment={
+                              outstandingCents + payment.amount_cents
+                            }
+                            onSaved={onChanged}
+                            onClose={() => setEditingPaymentId(undefined)}
+                          />
+                        </DialogContent>
+                      </Dialog>
+                      <DeletePaymentAction
+                        payment={payment}
+                        onDeleted={onChanged}
+                      />
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

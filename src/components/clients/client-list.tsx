@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
+import { WriteOnly } from "@/components/access/read-only";
 import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -371,9 +371,13 @@ export function ClientList() {
             Mostrar archivados
           </label>
         </div>
-        <CreateClientDialog
-          onCreated={(created) => setItems((current) => [created, ...current])}
-        />
+        <WriteOnly>
+          <CreateClientDialog
+            onCreated={(created) =>
+              setItems((current) => [created, ...current])
+            }
+          />
+        </WriteOnly>
       </div>
 
       {error ? (
@@ -437,7 +441,9 @@ export function ClientList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <ArchiveToggle client={client} onChanged={replaceItem} />
+                    <WriteOnly>
+                      <ArchiveToggle client={client} onChanged={replaceItem} />
+                    </WriteOnly>
                   </TableCell>
                 </TableRow>
               ))}

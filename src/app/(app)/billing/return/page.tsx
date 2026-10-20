@@ -31,7 +31,7 @@ export default async function BillingReturnPage({
   const params = await searchParams;
   const sessionId = firstValue(params.session_id);
   const resume = firstValue(params.resume);
-  const company = await getLayoutData(session.user.id);
+  const company = await getLayoutData(session.user.id, session.session.id);
   if (!sessionId || !company) {
     redirect("/billing");
   }

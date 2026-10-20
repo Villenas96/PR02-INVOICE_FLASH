@@ -22,7 +22,7 @@ export default async function PrintDocumentPage({
   }
   const [{ id }, summary] = await Promise.all([
     params,
-    getLayoutData(session.user.id),
+    getLayoutData(session.user.id, session.session.id),
   ]);
   if (!summary) {
     notFound();

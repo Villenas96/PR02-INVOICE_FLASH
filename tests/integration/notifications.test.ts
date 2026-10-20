@@ -157,10 +157,10 @@ describe("user notifications", () => {
       );
     expect(deliveries).toHaveLength(1);
     expect(deliveries[0]?.recipient).toBe(tenant.email);
-    const rendered = renderNotice(
+    const rendered = await renderNotice(
       USER_NOTIFICATION_TEMPLATE,
       deliveries[0]?.payload as Record<string, unknown>,
-      APP_BASE_URL,
+      { appBaseUrl: APP_BASE_URL },
     );
     expect(rendered?.subject).toBe("No se pudo generar una factura recurrente");
     expect(rendered?.html).toContain("/recurring/");

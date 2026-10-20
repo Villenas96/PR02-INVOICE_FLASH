@@ -35,6 +35,27 @@ const database = postgres(databaseUrl, {
 });
 
 const DATE_ONLY_TYPE_OID = 1082;
+// json/jsonb values may also be JS arrays: they stay JSON.
+const JSON_TYPE_OIDS = new Set([114, 3802]);
+
+/**
+ * Postgres array text (`{a,"b c",NULL}`), as Neon sends array columns.
+ * postgres.js parses them into JS arrays; JSON would be misread as empty.
+ */
+function arrayLiteral(values) {
+  return `{${values
+    .map((item) => {
+      if (item === null || item === undefined) {
+        return "NULL";
+      }
+      if (Array.isArray(item)) {
+        return arrayLiteral(item);
+      }
+      const text = item instanceof Date ? item.toISOString() : String(item);
+      return `"${text.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+    })
+    .join(",")}}`;
+}
 
 function rawValue(value, typeOid) {
   if (value === null) {
@@ -50,6 +71,9 @@ function rawValue(value, typeOid) {
     return typeOid === DATE_ONLY_TYPE_OID
       ? value.toISOString().slice(0, 10)
       : value.toISOString();
+  }
+  if (Array.isArray(value) && !JSON_TYPE_OIDS.has(typeOid)) {
+    return arrayLiteral(value);
   }
   if (typeof value === "object") {
     return JSON.stringify(value);

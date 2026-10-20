@@ -15,9 +15,12 @@ function labels(items: Array<{ label: string }>): string[] {
 }
 
 describe("buildNavigation", () => {
-  it.each(["basic", "essential"] as const)(
+  it.each([
+    ["basic", ["Facturas", "Clientes", "Productos", "Ajustes"]],
+    ["essential", ["Facturas", "Clientes", "Productos", "Gestoría", "Ajustes"]],
+  ] as const)(
     "gives %s the reduced navigation with only an upgrade entry",
-    (plan) => {
+    (plan, expected) => {
       const navigation = buildNavigation({
         plan,
         uiMode: null,
@@ -25,12 +28,7 @@ describe("buildNavigation", () => {
         creatableTypes: creatable,
       });
       expect(navigation.mode).toBe("simple");
-      expect(labels(navigation.primary)).toEqual([
-        "Facturas",
-        "Clientes",
-        "Productos",
-        "Ajustes",
-      ]);
+      expect(labels(navigation.primary)).toEqual(expected);
       expect(navigation.more).toEqual([]);
       expect(navigation.upgrade).toEqual({
         key: "upgrade",

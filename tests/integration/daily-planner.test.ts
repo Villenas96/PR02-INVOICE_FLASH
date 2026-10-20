@@ -1,6 +1,12 @@
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { subscriptions } from "@/db/schema";
+import {
+  advisorSchedules,
+  companies,
+  exportJobs,
+  subscriptions,
+} from "@/db/schema";
 import { jobMessageSchema } from "@/workers/messages";
 import { runDailyPlanner } from "@/workers/scheduled";
 
@@ -50,5 +56,69 @@ describe("daily planner (0 5 * * *)", () => {
       now: NOW,
     });
     expect(summary.billing_grace).toBe("failed");
+  });
+
+  it("plans one scheduled advisor export per company and closed quarter", async () => {
+    const owner = await createOwner(database, { plan: "pro" });
+    await database
+      .update(companies)
+      .set({ advisorEmail: "asesoria@example.test" })
+      .where(eq(companies.id, owner.companyId));
+    await database.insert(advisorSchedules).values({
+      companyId: owner.companyId,
+      frequency: "quarterly",
+      formats: ["xlsx"],
+      enabled: true,
+    });
+    const firstOfOctober = new Date("2026-10-01T03:00:00.000Z");
+
+    const queue = recordingQueue();
+    await runDailyPlanner({ database, queue, now: firstOfOctober });
+    await runDailyPlanner({ database, queue, now: firstOfOctober });
+    await runDailyPlanner({
+      database,
+      queue,
+      now: new Date("2026-10-02T03:00:00.000Z"),
+    });
+
+    const created = await database
+      .select({ periodKey: exportJobs.periodKey, by: exportJobs.requestedBy })
+      .from(exportJobs)
+      .where(
+        and(
+          eq(exportJobs.companyId, owner.companyId),
+          eq(exportJobs.requestedBy, "system"),
+        ),
+      );
+    expect(created).toEqual([{ periodKey: "2026-Q3", by: "system" }]);
+    expect(
+      queue.messages.filter(
+        (message) => (message as { type: string }).type === "export.build",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("skips scheduled sends while the company is not Pro", async () => {
+    const owner = await createOwner(database, { plan: "essential" });
+    await database
+      .update(companies)
+      .set({ advisorEmail: "asesoria@example.test" })
+      .where(eq(companies.id, owner.companyId));
+    await database.insert(advisorSchedules).values({
+      companyId: owner.companyId,
+      frequency: "monthly",
+      formats: ["xlsx"],
+      enabled: true,
+    });
+    await runDailyPlanner({
+      database,
+      queue: recordingQueue(),
+      now: new Date("2026-10-01T03:00:00.000Z"),
+    });
+    const created = await database
+      .select({ id: exportJobs.id })
+      .from(exportJobs)
+      .where(eq(exportJobs.companyId, owner.companyId));
+    expect(created).toEqual([]);
   });
 });

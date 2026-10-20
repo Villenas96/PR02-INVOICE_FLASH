@@ -9,7 +9,9 @@ import { getLayoutData } from "@/services/layout-data";
 
 export default async function CatalogPage() {
   const session = await auth.api.getSession({ headers: await headers() });
-  const summary = session ? await getLayoutData(session.user.id) : null;
+  const summary = session
+    ? await getLayoutData(session.user.id, session.session.id)
+    : null;
   const canImport = summary
     ? hasFeature(summary.plan, "catalog_import")
     : false;

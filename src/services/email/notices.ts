@@ -10,7 +10,7 @@ import { createEmailSendMessage } from "@/workers/messages";
 
 export type NoticePurpose = Extract<
   (typeof emailDeliveries.$inferInsert)["purpose"],
-  "billing_notice" | "user_notice"
+  "billing_notice" | "user_notice" | "advisor_invite" | "advisor_export"
 >;
 
 async function sha256(value: string): Promise<string> {
@@ -70,6 +70,48 @@ export async function enqueueNotice(
     .onConflictDoNothing({ target: emailDeliveries.idempotencyKey })
     .returning({ id: emailDeliveries.id });
 
+  if (!created) {
+    return null;
+  }
+  await input.queue.send(createEmailSendMessage(created.id));
+  return created.id;
+}
+
+/**
+ * Queues a notice to an explicit recipient (the advisor). The clear email
+ * lives only in `email_delivery` (30-day PII retention); only the opaque
+ * delivery id is queued.
+ */
+export async function enqueueEmail(input: {
+  database: Database;
+  queue: EmailQueue;
+  purpose: NoticePurpose;
+  template: string;
+  companyId: string;
+  recipientEmail: string;
+  idempotencyKey: string;
+  exportJobId?: string;
+  payload?: Record<string, string | number | boolean | null>;
+  now?: Date;
+}): Promise<string | null> {
+  const now = input.now ?? new Date();
+  const [created] = await input.database
+    .insert(emailDeliveries)
+    .values({
+      id: createUuidV7(now.getTime()),
+      purpose: input.purpose,
+      template: input.template,
+      payload: input.payload ?? null,
+      companyId: input.companyId,
+      exportJobId: input.exportJobId ?? null,
+      idempotencyKey: input.idempotencyKey,
+      recipientEmail: input.recipientEmail,
+      recipientHash: await sha256(input.recipientEmail),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoNothing({ target: emailDeliveries.idempotencyKey })
+    .returning({ id: emailDeliveries.id });
   if (!created) {
     return null;
   }
