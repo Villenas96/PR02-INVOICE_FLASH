@@ -78,11 +78,17 @@ function editorLinesFromDraft(draft: EditableDraft): EditorLine[] {
  * Creates a new draft or, with `documentId`, edits an existing one. Saving a
  * new draft POSTs it; an existing draft is PATCHed in place.
  */
-export function InvoiceEditor({ documentId }: { documentId?: string } = {}) {
+export function InvoiceEditor({
+  documentId,
+  initialType = "invoice",
+}: {
+  documentId?: string;
+  initialType?: EditableDocumentType;
+} = {}) {
   const router = useRouter();
   const [company, setCompany] = useState<EditorCompany>();
   const [documentType, setDocumentType] =
-    useState<EditableDocumentType>("invoice");
+    useState<EditableDocumentType>(initialType);
   const [client, setClient] = useState<SelectedClient | null>(null);
   const [issueDate, setIssueDate] = useState(() => madridToday());
   const [dueDate, setDueDate] = useState("");

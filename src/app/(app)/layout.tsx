@@ -2,20 +2,17 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { Suspense } from "react";
+
+import { AppNav } from "@/components/navigation/app-nav";
 import { OnboardingGuard } from "@/components/onboarding-guard";
 import { PlanIndicator } from "@/components/plan/plan-indicator";
 import { auth } from "@/lib/auth";
+import { CREATABLE_DOCUMENT_TYPES } from "@/lib/documents/creatable";
+import { buildNavigation } from "@/lib/navigation";
 import { planLabel } from "@/lib/plan";
 import { usageResponse } from "@/services/company-summary";
 import { getLayoutData } from "@/services/layout-data";
-
-const navigation = [
-  { href: "/dashboard", label: "Resumen" },
-  { href: "/documents", label: "Facturas" },
-  { href: "/clients", label: "Clientes" },
-  { href: "/catalog", label: "Catálogo" },
-  { href: "/settings", label: "Configuración" },
-];
 
 export default async function AppLayout({
   children,
@@ -36,6 +33,12 @@ export default async function AppLayout({
   ];
   const plan = summary?.plan ?? "basic";
   const usage = summary?.usage.map(usageResponse) ?? [];
+  const navigation = buildNavigation({
+    plan,
+    uiMode: summary?.uiMode ?? null,
+    usedDocumentTypes: summary?.usedDocumentTypes ?? [],
+    creatableTypes: CREATABLE_DOCUMENT_TYPES,
+  });
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -46,20 +49,9 @@ export default async function AppLayout({
           </Link>
           <PlanIndicator planLabel={planLabel(plan)} usage={usage} />
         </div>
-        <nav
-          className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-3 sm:px-6"
-          aria-label="Principal"
-        >
-          {navigation.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <Suspense>
+          <AppNav navigation={navigation} />
+        </Suspense>
       </header>
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
         <OnboardingGuard missingFields={missingFields}>

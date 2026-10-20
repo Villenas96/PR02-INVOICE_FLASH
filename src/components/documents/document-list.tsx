@@ -83,8 +83,15 @@ function paymentVariant(status: PaymentStatus) {
   return status === "paid" ? ("default" as const) : ("outline" as const);
 }
 
-export function DocumentList() {
-  const [documentType, setDocumentType] = useState("");
+export function DocumentList({
+  initialType = "",
+  showFilters = true,
+}: {
+  /** Pre-selected type filter (e.g. `/documents?type=quote`). */
+  initialType?: string;
+  showFilters?: boolean;
+} = {}) {
+  const [documentType, setDocumentType] = useState(initialType);
   const [documentStatus, setDocumentStatus] = useState("");
   const [items, setItems] = useState<DocumentListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -167,43 +174,48 @@ export function DocumentList() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-end">
-        <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="document-type-filter">
-            Tipo
-          </label>
-          <select
-            id="document-type-filter"
-            className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
-            value={documentType}
-            onChange={(event) => setDocumentType(event.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="invoice">Facturas</option>
-            <option value="proforma">Proformas</option>
-            <option value="receipt">Recibos</option>
-          </select>
+      {showFilters ? (
+        <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-end">
+          <div className="space-y-2">
+            <label
+              className="text-sm font-medium"
+              htmlFor="document-type-filter"
+            >
+              Tipo
+            </label>
+            <select
+              id="document-type-filter"
+              className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
+              value={documentType}
+              onChange={(event) => setDocumentType(event.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="invoice">Facturas</option>
+              <option value="proforma">Proformas</option>
+              <option value="receipt">Recibos</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label
+              className="text-sm font-medium"
+              htmlFor="document-status-filter"
+            >
+              Estado
+            </label>
+            <select
+              id="document-status-filter"
+              className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
+              value={documentStatus}
+              onChange={(event) => setDocumentStatus(event.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="draft">Borradores</option>
+              <option value="issued">Emitidos</option>
+              <option value="voided">Anulados</option>
+            </select>
+          </div>
         </div>
-        <div className="space-y-2">
-          <label
-            className="text-sm font-medium"
-            htmlFor="document-status-filter"
-          >
-            Estado
-          </label>
-          <select
-            id="document-status-filter"
-            className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
-            value={documentStatus}
-            onChange={(event) => setDocumentStatus(event.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="draft">Borradores</option>
-            <option value="issued">Emitidos</option>
-            <option value="voided">Anulados</option>
-          </select>
-        </div>
-      </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">

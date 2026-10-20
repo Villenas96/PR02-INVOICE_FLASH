@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { PlanIndicator } from "@/components/plan/plan-indicator";
 import { companyHasFeature } from "@/components/plan/types";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api/client";
 import {
   CompanyProfileForm,
   InvoicingPreferencesForm,
 } from "./company-settings";
+import { InterfaceSettings } from "./interface-settings";
 import { LogoSettings } from "./logo-settings";
 import { SeriesSettings } from "./series-settings";
 import { SubscriptionSettings } from "./subscription-settings";
@@ -154,6 +156,63 @@ export function SettingsPanel() {
     );
   }
 
+  const sections: Array<{ id: string; label: string; content: ReactNode }> = [
+    {
+      id: "company",
+      label: "Empresa",
+      content: (
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <CompanyProfileForm company={company} onChange={setCompany} />
+          <div className="space-y-6">
+            <LogoSettings
+              logoKey={company.logo_key}
+              onChange={(logoKey) =>
+                setCompany((current) =>
+                  current ? { ...current, logo_key: logoKey } : current,
+                )
+              }
+            />
+            <InvoicingPreferencesForm company={company} onChange={setCompany} />
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "documents",
+      label: "Documentos",
+      content: (
+        <SeriesSettings
+          items={series}
+          nextCursor={nextCursor}
+          onCreate={addSeries}
+          onUpdate={updateSeries}
+          onLoadMore={loadMore}
+          isLoadingMore={isLoadingMore}
+        />
+      ),
+    },
+    ...(companyHasFeature(company, "full_ui")
+      ? [
+          {
+            id: "interface",
+            label: "Interfaz",
+            content: (
+              <InterfaceSettings company={company} onChange={setCompany} />
+            ),
+          },
+        ]
+      : []),
+    ...(company.role === "owner"
+      ? [
+          {
+            id: "subscription-section",
+            label: "Suscripción",
+            content: <SubscriptionSettings />,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="space-y-6">
       <section className="flex flex-col gap-4 rounded-xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -192,31 +251,32 @@ export function SettingsPanel() {
         </p>
       ) : null}
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <CompanyProfileForm company={company} onChange={setCompany} />
+      {company.effective_ui === "full" ? (
+        // Full interface: one tab per area.
+        <Tabs defaultValue="company">
+          <TabsList className="flex-wrap">
+            {sections.map((section) => (
+              <TabsTrigger key={section.id} value={section.id}>
+                {section.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {sections.map((section) => (
+            <TabsContent key={section.id} value={section.id} className="pt-4">
+              {section.content}
+            </TabsContent>
+          ))}
+        </Tabs>
+      ) : (
+        // Simple interface: every setting on a single page (FR-057).
         <div className="space-y-6">
-          <LogoSettings
-            logoKey={company.logo_key}
-            onChange={(logoKey) =>
-              setCompany((current) =>
-                current ? { ...current, logo_key: logoKey } : current,
-              )
-            }
-          />
-          <InvoicingPreferencesForm company={company} onChange={setCompany} />
+          {sections.map((section) => (
+            <div key={section.id} id={section.id}>
+              {section.content}
+            </div>
+          ))}
         </div>
-      </div>
-
-      {company.role === "owner" ? <SubscriptionSettings /> : null}
-
-      <SeriesSettings
-        items={series}
-        nextCursor={nextCursor}
-        onCreate={addSeries}
-        onUpdate={updateSeries}
-        onLoadMore={loadMore}
-        isLoadingMore={isLoadingMore}
-      />
+      )}
     </div>
   );
 }

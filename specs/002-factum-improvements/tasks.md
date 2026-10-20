@@ -140,18 +140,18 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 3
 
-- [ ] T047 [P] [US3] Write unit tests for `buildNavigation(plan, uiMode, usedTypes)` covering every plan, `ui_mode` null/simple/full, "Más" menu in Pro simple and types appearing after first use, in `tests/unit/navigation.test.ts`
-- [ ] T048 [P] [US3] Write E2E tests for simple UI in Basic and Essential, upsell page on direct access to a Pro route, Pro switching to simple with "Más", and downgrade showing simple UI, in `tests/e2e/simple-ui.spec.ts`
+- [X] T047 [P] [US3] Write unit tests for `buildNavigation(plan, uiMode, usedTypes)` covering every plan, `ui_mode` null/simple/full, "Más" menu in Pro simple and types appearing after first use, in `tests/unit/navigation.test.ts`
+- [X] T048 [P] [US3] Write E2E tests for simple UI in Basic and Essential, upsell page on direct access to a Pro route, Pro switching to simple with "Más", and downgrade showing simple UI, in `tests/e2e/simple-ui.spec.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T049 [P] [US3] Create `src/lib/navigation.ts` with `buildNavigation` returning primary items, "Nuevo ▾" types, "Más" items and the "Mejorar a Pro" entry
+- [X] T049 [P] [US3] Create `src/lib/navigation.ts` with `buildNavigation` returning primary items, "Nuevo ▾" types, "Más" items and the "Mejorar a Pro" entry
 - [X] T050 [US3] Allow `ui_mode` in `PUT /api/v1/company` (`full` requires feature `full_ui`, else `403 feature_not_in_plan`) in `src/app/api/v1/company/route.ts` and its Zod schema
-- [ ] T051 [US3] Render navigation from `buildNavigation` in `src/app/(app)/layout.tsx` via a new `src/components/navigation/app-nav.tsx` (primary items, "Nuevo ▾" dropdown, "Más" menu, "Mejorar a Pro")
-- [ ] T052 [US3] Make the simple-UI home the invoice list with prominent "Nueva factura" and the paid/pending/overdue summary from `GET /api/v1/dashboard`, in `src/app/(app)/dashboard/page.tsx` and `src/components/dashboard/simple-home.tsx`
-- [ ] T053 [US3] Create a `ProRoute` server wrapper that renders `FeatureUpsell` instead of the page when the feature is missing, in `src/components/plan/pro-route.tsx`, to be used by every Pro page added later
-- [ ] T054 [US3] Group settings in a single page with sections for simple UI and tabs for full UI, and add the "Interfaz sencilla" toggle for Pro, in `src/components/settings/settings-panel.tsx` and `src/app/(app)/settings/page.tsx`
-- [ ] T055 [US3] Replace `src/components/documents/editor/catalog-picker.tsx` with a remote `Combobox` whose "Crear «…»" option opens an inline product dialog (description, price, VAT rate) that creates the catalog item and fills the line by value without leaving the editor; add the E2E step creating client and product without leaving the editor to `tests/e2e/simple-ui.spec.ts`
+- [X] T051 [US3] Render navigation from `buildNavigation` in `src/app/(app)/layout.tsx` via a new `src/components/navigation/app-nav.tsx` (primary items, "Nuevo ▾" dropdown, "Más" menu, "Mejorar a Pro")
+- [X] T052 [US3] Make the simple-UI home the invoice list with prominent "Nueva factura" and the paid/pending/overdue summary from `GET /api/v1/dashboard`, in `src/app/(app)/dashboard/page.tsx` and `src/components/dashboard/simple-home.tsx`
+- [X] T053 [US3] Create a `ProRoute` server wrapper that renders `FeatureUpsell` instead of the page when the feature is missing, in `src/components/plan/pro-route.tsx`, to be used by every Pro page added later
+- [X] T054 [US3] Group settings in a single page with sections for simple UI and tabs for full UI, and add the "Interfaz sencilla" toggle for Pro, in `src/components/settings/settings-panel.tsx` and `src/app/(app)/settings/page.tsx`
+- [X] T055 [US3] Replace `src/components/documents/editor/catalog-picker.tsx` with a remote `Combobox` whose "Crear «…»" option opens an inline product dialog (description, price, VAT rate) that creates the catalog item and fills the line by value without leaving the editor; add the E2E step creating client and product without leaving the editor to `tests/e2e/simple-ui.spec.ts`
 
 **Checkpoint**: Incremento 1 completo (V1–V3). Desplegable. Usabilidad SC-004 programada en Polish.
 

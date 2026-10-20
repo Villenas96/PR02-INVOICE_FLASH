@@ -1,6 +1,32 @@
-import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
-export default function DashboardPage() {
+import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { SimpleHome } from "@/components/dashboard/simple-home";
+import { auth } from "@/lib/auth";
+import { getLayoutData } from "@/services/layout-data";
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) {
+    redirect("/login");
+  }
+  const [summary, query] = await Promise.all([
+    getLayoutData(session.user.id),
+    searchParams,
+  ]);
+  const showFull =
+    summary?.effectiveUi === "full" ||
+    (query.view === "full" && summary?.plan === "pro");
+
+  if (!showFull) {
+    return <SimpleHome />;
+  }
+
   return (
     <div className="space-y-6">
       <div>

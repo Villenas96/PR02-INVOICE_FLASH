@@ -145,17 +145,18 @@ test("copia un concepto del catálogo en una línea sin acoplar el documento a e
     "Cliente Catálogo E2E",
     /Cliente Catálogo E2E.*A87654321/,
   );
-  await page.getByRole("button", { name: "Añadir desde catálogo" }).click();
-  await page.getByRole("button", { name: /Hora de consultoría E2E/ }).click();
-  const catalogLine = page.getByRole("group", { name: "Línea 2" });
+  await page
+    .getByRole("combobox", { name: "Añadir producto del catálogo" })
+    .click();
+  await page.keyboard.type("Hora de consultoría");
+  await page.getByRole("option", { name: /Hora de consultoría E2E/ }).click();
+  // The untouched empty first line is replaced by the catalog product.
+  const catalogLine = page.getByRole("group", { name: "Línea 1" });
   await expect(catalogLine.getByLabel("Descripción")).toHaveValue(
     "Hora de consultoría E2E",
   );
   await expect(catalogLine.getByLabel("Precio unitario")).toHaveValue("60,00");
-  await page
-    .getByRole("group", { name: "Línea 1" })
-    .getByRole("button", { name: "Quitar" })
-    .click();
+  await expect(page.getByRole("group", { name: "Línea 2" })).toHaveCount(0);
 
   await page.route("**/api/v1/documents", async (route) => {
     if (route.request().method() === "POST") {
@@ -191,11 +192,17 @@ test("copia un concepto del catálogo en una línea sin acoplar el documento a e
   await expect(page.getByText("Archivado")).toBeVisible();
 
   await page.goto("/documents/new");
-  await page.getByRole("button", { name: "Añadir desde catálogo" }).click();
-  await page.getByLabel("Buscar concepto").fill("Hora de consultoría E2E");
+  await page
+    .getByRole("combobox", { name: "Añadir producto del catálogo" })
+    .click();
+  await page.keyboard.type("Hora de consultoría E2E");
+  // Archived products are never offered; only «Crear …» remains.
   await expect(
-    page.getByText("No hay conceptos con esta búsqueda."),
+    page.getByRole("option", { name: /Crear «Hora de consultoría E2E»/ }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /^Hora de consultoría E2E/ }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await page.goto("/catalog");

@@ -78,9 +78,17 @@ export function InvoiceLines({
             Los importes se calculan y redondean por línea.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <CatalogPicker
-            onSelect={(item) => onChange([...lines, lineFromCatalogItem(item)])}
+            defaultTaxRate={defaultTaxRate}
+            onSelect={(item) => {
+              // Replace the untouched initial line instead of leaving it
+              // empty above the product.
+              const kept = lines.filter(
+                (line) => line.description.trim() !== "" || lines.length > 1,
+              );
+              onChange([...kept, lineFromCatalogItem(item)]);
+            }}
           />
           <Button
             type="button"
