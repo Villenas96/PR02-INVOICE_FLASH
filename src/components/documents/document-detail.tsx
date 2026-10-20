@@ -12,6 +12,7 @@ import {
   PaymentsPanel,
 } from "@/components/documents/payments-panel";
 import { PdfDownload } from "@/components/documents/pdf-download";
+import { RemindersPanel } from "@/components/documents/reminders-panel";
 import { SharePanel } from "@/components/documents/share-panel";
 import {
   type CompanyPlanData,
@@ -96,6 +97,8 @@ interface DocumentDetailData {
   id: string;
   doc_type: DocumentType;
   valid_until: string | null;
+  reminders_enabled: boolean;
+  reminder_warning: string | null;
   quote_decision: "accepted" | "rejected" | null;
   derived_state: string | null;
   document_links?: { from: LinkedDocument[]; to: LinkedDocument[] };
@@ -150,6 +153,9 @@ const eventLabels: Record<string, string> = {
   payment_added: "Pago registrado",
   payment_updated: "Pago actualizado",
   payment_deleted: "Pago eliminado",
+  reminder_sent: "Recordatorio de pago enviado",
+  reminder_skipped: "Recordatorio de pago omitido",
+  recurring_generated: "Generado por una recurrencia",
   quote_accepted: "Presupuesto aceptado",
   quote_rejected: "Presupuesto rechazado",
   linked: "Vinculado a otro documento",
@@ -545,6 +551,15 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           outstandingCents={document.outstanding_cents}
           paymentStatus={document.payment_status}
           payments={document.payments}
+          onChanged={loadDocument}
+        />
+      ) : null}
+
+      {document.doc_type === "invoice" && document.status === "issued" ? (
+        <RemindersPanel
+          documentId={document.id}
+          initialEnabled={document.reminders_enabled}
+          warning={document.reminder_warning}
           onChanged={loadDocument}
         />
       ) : null}

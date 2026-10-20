@@ -7,6 +7,7 @@ import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseJson } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
 import { planLabel } from "@/lib/plan";
+import { reminderPolicySchema } from "@/lib/reminders";
 import {
   type CompanySummary,
   loadCompanySummary,
@@ -93,6 +94,8 @@ const updateCompanySchema = z
     currency: currencySchema.optional(),
     // `null` returns to the plan default; `full` needs Pro (checked below).
     ui_mode: z.enum(["simple", "full"]).nullable().optional(),
+    // Pro: automatic payment reminders (FR-041).
+    reminder_policy: reminderPolicySchema.optional(),
     // Destination of advisor sends (FR-032, FR-034); `null` removes it.
     advisor_email: z
       .union([
@@ -128,6 +131,7 @@ type CompanyUpdate = {
   currency?: string;
   uiMode?: "simple" | "full" | null;
   advisorEmail?: string | null;
+  reminderPolicy?: z.output<typeof reminderPolicySchema>;
   updatedAt: Date;
 };
 
@@ -163,6 +167,7 @@ function companyResponse(summary: CompanySummary, context: CompanyContext) {
     retention_rate: company.retentionRate,
     currency: company.currency,
     advisor_email: company.advisorEmail,
+    reminder_policy: company.reminderPolicy,
     role: context.role,
     plan: summary.plan,
     plan_label: planLabel(summary.plan),
@@ -223,6 +228,9 @@ function updatesFrom(
   if (input.advisor_email !== undefined) {
     updates.advisorEmail = input.advisor_email;
   }
+  if (input.reminder_policy !== undefined) {
+    updates.reminderPolicy = input.reminder_policy;
+  }
 
   return updates;
 }
@@ -271,6 +279,9 @@ export async function PUT(request: Request): Promise<Response> {
     const [context, input] = await Promise.all([contextPromise, inputPromise]);
     if (input.ui_mode === "full") {
       requireFeature(context, "full_ui");
+    }
+    if (input.reminder_policy?.enabled) {
+      requireFeature(context, "reminders");
     }
     const database = createDatabase();
     const [updatedCompany] = await database

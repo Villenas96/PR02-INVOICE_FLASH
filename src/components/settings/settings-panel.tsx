@@ -15,6 +15,7 @@ import {
 } from "./company-settings";
 import { InterfaceSettings } from "./interface-settings";
 import { LogoSettings } from "./logo-settings";
+import { ReminderSettings } from "./reminder-settings";
 import { SeriesSettings } from "./series-settings";
 import { SubscriptionSettings } from "./subscription-settings";
 import { TaxRateSettings } from "./tax-rate-settings";
@@ -184,9 +185,15 @@ export function SettingsPanel() {
       id: "payments",
       label: "Cobros e impuestos",
       content: (
-        <div className="grid items-start gap-6 lg:grid-cols-2">
-          <CollectionMethodSettings />
-          <TaxRateSettings />
+        <div className="space-y-6">
+          <div className="grid items-start gap-6 lg:grid-cols-2">
+            <CollectionMethodSettings />
+            <TaxRateSettings />
+          </div>
+          <ReminderSettings
+            enabledForPlan={companyHasFeature(company, "reminders")}
+            initialPolicy={company.reminder_policy}
+          />
         </div>
       ),
     },

@@ -8,6 +8,7 @@ import { subscriptions } from "@/db/schema/subscription";
 import { logSafe } from "@/lib/log";
 import { planAdvisorExports } from "@/services/advisor-schedule";
 import { planRecurringCycles } from "@/services/recurring/planner";
+import { planPaymentReminders } from "@/services/reminder-planner";
 import {
   type ListableBucket,
   purgeOrphanLogos,
@@ -135,6 +136,10 @@ export async function runDailyPlanner(
     [
       "billing_grace",
       () => planBillingGrace({ ...dependencies, database, now }),
+    ],
+    [
+      "payment_reminders",
+      () => planPaymentReminders({ ...dependencies, database, now }),
     ],
     [
       "recurring_cycles",

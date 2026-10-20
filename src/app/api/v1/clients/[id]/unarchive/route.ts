@@ -74,6 +74,7 @@ function clientResponse(client: ClientRow) {
     city: client.city,
     notes: client.notes,
     logo_key: client.logoKey,
+    reminders_enabled: client.remindersEnabled,
     archived_at: client.archivedAt,
   };
 }

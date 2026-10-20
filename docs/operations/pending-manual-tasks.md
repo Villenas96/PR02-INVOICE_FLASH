@@ -189,3 +189,17 @@ pnpm exec wrangler r2 bucket lifecycle list <bucket>
 Copia el resultado a `r2.lifecycleRules` del fichero de evidencia
 ([cloud-cost-controls.md](./cloud-cost-controls.md)); `pnpm verify:predeploy`
 falla mientras falten.
+
+## Incremento 3 — activar Pro contratable
+
+El código de Pro (exportaciones avanzadas, gestoría, recurrencias, importación) está
+completo. Falta, en cada entorno y con claves reales de Stripe:
+
+1. Poner `PRO_CHECKOUT_ENABLED=true` (secreto/variable del Worker).
+2. Validar la contratación de Pro desde Esencial (Portal → Pro) y que las funciones
+   Pro aparecen sin recargar (quickstart V8).
+3. Comprobar con `wrangler tail` que el cron `0 5 * * *` ejecuta el planificador
+   (recurrencias y envíos programados a la asesoría).
+
+Hasta entonces el checkout de Pro responde `403 plan_not_available` (comprobado en
+servidor).

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
@@ -79,6 +80,8 @@ export const documents = pgTable(
     validUntil: date("valid_until", { mode: "string" }),
     /** Operational, not fiscal: the derived quote state reads it. */
     quoteDecision: quoteDecisionEnum("quote_decision"),
+    /** Per-invoice opt-out of payment reminders (FR-041). */
+    remindersEnabled: boolean("reminders_enabled").notNull().default(true),
     quoteDecidedAt: timestamp("quote_decided_at", { withTimezone: true }),
     /** Cycle that generated this document (one document per cycle). */
     recurringCycleId: uuid("recurring_cycle_id").references(

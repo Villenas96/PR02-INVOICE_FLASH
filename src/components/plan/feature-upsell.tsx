@@ -102,9 +102,15 @@ function UpsellCard({
   className,
 }: UpsellCardProps) {
   const Heading = variant === "page" ? "h1" : "h2";
+  // Several upsells can share a page: each landmark needs its own name.
+  const headingId = `upsell-${title
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")}`;
   return (
     <section
-      aria-labelledby="upsell-title"
+      aria-labelledby={headingId}
       className={cn(
         "rounded-xl border bg-card shadow-sm",
         variant === "page"
@@ -121,7 +127,7 @@ function UpsellCard({
           />
         ) : null}
         <Heading
-          id="upsell-title"
+          id={headingId}
           className={cn(
             "font-semibold",
             variant === "page" ? "text-xl" : "text-sm",

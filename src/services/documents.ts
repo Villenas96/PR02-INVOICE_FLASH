@@ -194,9 +194,19 @@ export async function loadDocumentClient(
   database: Database,
   companyId: string,
   documentId: string,
-): Promise<{ name: string; taxId: string | null } | null> {
+): Promise<{
+  name: string;
+  taxId: string | null;
+  email: string | null;
+  remindersEnabled: boolean;
+} | null> {
   const [row] = await database
-    .select({ name: clients.name, taxId: clients.taxId })
+    .select({
+      name: clients.name,
+      taxId: clients.taxId,
+      email: clients.email,
+      remindersEnabled: clients.remindersEnabled,
+    })
     .from(documents)
     .innerJoin(
       clients,

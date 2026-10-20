@@ -24,6 +24,7 @@ import {
   softDeleteDraftDocument,
   updateDraftDocument,
 } from "@/services/documents";
+import { reminderWarning, setDocumentReminders } from "@/services/reminders";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -60,6 +61,8 @@ const updateDraftSchema = z
     due_date: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
     lines: z.array(draftLineSchema).max(500).optional(),
+    // Allowed on issued invoices too: not fiscal content (FR-041).
+    reminders_enabled: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -155,6 +158,7 @@ function documentResponse(document: DocumentRow) {
     issue_date: document.issueDate,
     due_date: document.dueDate,
     valid_until: document.validUntil,
+    reminders_enabled: document.remindersEnabled,
     quote_decision: document.quoteDecision,
     quote_decided_at: document.quoteDecidedAt,
     derived_state: derivedStateOf(document),
@@ -340,6 +344,14 @@ export async function GET(
       Response.json({
         ...draftResponse(document),
         client_display: clientDisplayFor(document.clientSnapshot, liveClient),
+        reminder_warning:
+          document.documentType === "invoice" && document.status === "issued"
+            ? reminderWarning({
+                clientEmail: liveClient?.email,
+                clientReminders: liveClient?.remindersEnabled,
+                documentReminders: document.remindersEnabled,
+              })
+            : null,
         payments: documentPayments.map((payment) => ({
           id: payment.id,
           amount_cents: payment.amountCents,
@@ -393,6 +405,21 @@ export async function PATCH(
       paramsPromise,
       inputPromise,
     ]);
+    const { reminders_enabled: remindersEnabled, ...draftInput } = input;
+    if (remindersEnabled !== undefined) {
+      await setDocumentReminders({
+        companyId: context.companyId,
+        documentId: params.id,
+        enabled: remindersEnabled,
+      });
+      if (Object.values(draftInput).every((value) => value === undefined)) {
+        const current = await getDocumentDetail<DocumentDetail>({
+          companyId: context.companyId,
+          documentId: params.id,
+        });
+        return withRequestId(Response.json(draftResponse(current)), requestId);
+      }
+    }
     const updatedDocument = await updateDraftDocument({
       companyId: context.companyId,
       documentId: params.id,

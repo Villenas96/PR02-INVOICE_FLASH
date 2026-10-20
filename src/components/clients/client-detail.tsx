@@ -41,6 +41,7 @@ interface ClientDetailData {
   city: string | null;
   notes: string | null;
   logo_key: string | null;
+  reminders_enabled: boolean;
   archived_at: string | null;
   pending_cents: number;
   overdue_cents: number;
@@ -289,6 +290,48 @@ function ArchiveAction({
   );
 }
 
+function RemindersToggle({
+  client,
+  onChanged,
+}: {
+  client: ClientDetailData;
+  onChanged: (enabled: boolean) => void;
+}) {
+  const action = useMutation<ClientDetailData>({ refresh: false });
+
+  async function toggle(enabled: boolean) {
+    onChanged(enabled);
+    const updated = await action.run(() =>
+      apiRequest<ClientDetailData>(
+        `/api/v1/clients/${client.id}`,
+        jsonRequest("PATCH", { reminders_enabled: enabled }),
+      ),
+    );
+    if (!updated) {
+      onChanged(!enabled);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={client.reminders_enabled}
+          disabled={action.isLoading}
+          onChange={(event) => toggle(event.target.checked)}
+        />
+        Enviar recordatorios de pago a este cliente
+      </label>
+      {action.error ? (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {action.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function ClientDetail({ clientId }: { clientId: string }) {
   const [client, setClient] = useState<ClientDetailData>();
   const [history, setHistory] = useState<HistoryDocument[]>([]);
@@ -410,6 +453,14 @@ export function ClientDetail({ clientId }: { clientId: string }) {
       ) : null}
 
       <WriteOnly>
+        <RemindersToggle
+          client={client}
+          onChanged={(enabled) =>
+            setClient((current) =>
+              current ? { ...current, reminders_enabled: enabled } : current,
+            )
+          }
+        />
         <section
           aria-labelledby="client-logo-title"
           className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"

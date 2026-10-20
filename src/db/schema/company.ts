@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -42,6 +43,12 @@ export const companies = pgTable(
     uiMode: uiModeEnum("ui_mode"),
     /** Destination of manual and scheduled advisor sends (FR-032, FR-034). */
     advisorEmail: text("advisor_email"),
+    /** `{enabled, days_before?, on_due, every_days_after?, max_count}`. */
+    reminderPolicy: jsonb("reminder_policy")
+      .notNull()
+      .default(sql`'{"enabled":false}'::jsonb`),
+    /** `{completed: Step[], skipped: Step[], dismissed_at?}` (FR-048). */
+    onboarding: jsonb("onboarding").notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -1,5 +1,12 @@
 import { sql } from "drizzle-orm";
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 import { companies } from "./company";
 
@@ -20,6 +27,7 @@ export const clients = pgTable(
     notes: text("notes"),
     /** Content-addressed R2 key, frozen into the client snapshot at issue. */
     logoKey: text("logo_key"),
+    remindersEnabled: boolean("reminders_enabled").notNull().default(true),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -384,7 +384,7 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ## Phase 15: Foundational — Increment 4
 
-- [ ] T149 Create migrations `0012_reminders` (`payment_reminder` with unique `(document_id, scheduled_on)` and `(document_id, sequence)`, `company.reminder_policy`, `client.reminders_enabled`, `document.reminders_enabled`, email purpose `payment_reminder`), `0013_bank` (`bank_statement`, `bank_transaction` with unique `(collection_method_id, fingerprint, occurrence)`, `reconciliation` with unique `payment_id`) and `0014_onboarding` (`company.onboarding`, `sample_render`), each with `.down.sql`, in `src/db/schema/payment-reminder.ts`, `src/db/schema/bank-statement.ts`, `src/db/schema/bank-transaction.ts`, `src/db/schema/reconciliation.ts`, `src/db/schema/sample-render.ts`, `src/db/schema/company.ts`, `src/db/schema/client.ts`, `src/db/schema/document.ts` and `src/db/migrations/`
+- [X] T149 (one combined migration `0012_reminders_bank_onboarding` instead of 0012–0014; same content) Create migrations `0012_reminders` (`payment_reminder` with unique `(document_id, scheduled_on)` and `(document_id, sequence)`, `company.reminder_policy`, `client.reminders_enabled`, `document.reminders_enabled`, email purpose `payment_reminder`), `0013_bank` (`bank_statement`, `bank_transaction` with unique `(collection_method_id, fingerprint, occurrence)`, `reconciliation` with unique `payment_id`) and `0014_onboarding` (`company.onboarding`, `sample_render`), each with `.down.sql`, in `src/db/schema/payment-reminder.ts`, `src/db/schema/bank-statement.ts`, `src/db/schema/bank-transaction.ts`, `src/db/schema/reconciliation.ts`, `src/db/schema/sample-render.ts`, `src/db/schema/company.ts`, `src/db/schema/client.ts`, `src/db/schema/document.ts` and `src/db/migrations/`
 
 
 ---
@@ -397,16 +397,16 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 
 ### Tests for User Story 11
 
-- [ ] T150 [P] [US11] Write unit tests for `reminderDatesFor(policy, dueDate, sentCount)` and `isReminderDue(today, …)` in `tests/unit/reminders.test.ts`
-- [ ] T151 [P] [US11] Write integration tests: exact send dates, at most one per invoice and day under planner re-runs and redelivery, stop when paid/voided between planning and sending, skip clients without email (warning in detail) or with reminders disabled, per-invoice opt-out, Pro-only, history events, in `tests/integration/reminders.test.ts`
+- [X] T150 [P] [US11] Write unit tests for `reminderDatesFor(policy, dueDate, sentCount)` and `isReminderDue(today, …)` in `tests/unit/reminders.test.ts`
+- [X] T151 [P] [US11] Write integration tests: exact send dates, at most one per invoice and day under planner re-runs and redelivery, stop when paid/voided between planning and sending, skip clients without email (warning in detail) or with reminders disabled, per-invoice opt-out, Pro-only, history events, in `tests/integration/reminders.test.ts`
 
 ### Implementation for User Story 11
 
-- [ ] T152 [P] [US11] Create `src/lib/reminders.ts`
-- [ ] T153 [US11] Accept `reminder_policy` (Pro) in `PUT /api/v1/company`, `reminders_enabled` in client and document PATCH, and expose `reminder_warning` and `GET /api/v1/documents/:id/reminders`, in `src/app/api/v1/company/route.ts`, `src/app/api/v1/clients/[id]/route.ts`, `src/app/api/v1/documents/[id]/route.ts` and `src/app/api/v1/documents/[id]/reminders/route.ts`
-- [ ] T154 [US11] Add the reminders step to the daily planner (candidate invoices with derived pending/partial/overdue state via indexed query, insert `payment_reminder` claims) in `src/workers/scheduled.ts`
-- [ ] T155 [US11] Implement the `reminder.send` handler (revalidate payment state and email, create `email_delivery` with purpose `payment_reminder`, record `reminder_sent`/`reminder_skipped` events) and the reminder template with pending amount, due date, collection method and public link, in `src/workers/handlers/reminder-send.ts` and `src/services/email/templates/reminder.ts`
-- [ ] T156 [US11] Build the reminder policy settings (Pro), the client toggle, the per-invoice toggle and the reminder history/warning in the document detail, in `src/components/settings/reminder-settings.tsx`, `src/components/clients/client-detail.tsx` and `src/components/documents/document-detail.tsx`
+- [X] T152 [P] [US11] Create `src/lib/reminders.ts`
+- [X] T153 [US11] Accept `reminder_policy` (Pro) in `PUT /api/v1/company`, `reminders_enabled` in client and document PATCH, and expose `reminder_warning` and `GET /api/v1/documents/:id/reminders`, in `src/app/api/v1/company/route.ts`, `src/app/api/v1/clients/[id]/route.ts`, `src/app/api/v1/documents/[id]/route.ts` and `src/app/api/v1/documents/[id]/reminders/route.ts`
+- [X] T154 [US11] Add the reminders step to the daily planner (candidate invoices with derived pending/partial/overdue state via indexed query, insert `payment_reminder` claims) in `src/workers/scheduled.ts`
+- [X] T155 [US11] Implement the `reminder.send` handler (revalidate payment state and email, create `email_delivery` with purpose `payment_reminder`, record `reminder_sent`/`reminder_skipped` events) and the reminder template with pending amount, due date, collection method and public link, in `src/workers/handlers/reminder-send.ts` and `src/services/email/templates/reminder.ts`
+- [X] T156 [US11] Build the reminder policy settings (Pro), the client toggle, the per-invoice toggle and the reminder history/warning in the document detail, in `src/components/settings/reminder-settings.tsx`, `src/components/clients/client-detail.tsx` and `src/components/documents/document-detail.tsx`
 
 **Checkpoint**: V11 completa.
 

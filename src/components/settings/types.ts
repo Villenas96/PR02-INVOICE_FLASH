@@ -1,4 +1,5 @@
 import type { CompanyPlanData } from "@/components/plan/types";
+import type { ReminderPolicy } from "@/lib/reminders";
 
 export type DocumentType = "invoice" | "proforma" | "receipt";
 
@@ -14,6 +15,7 @@ export interface CompanySettings extends CompanyPlanData {
   default_tax_rate: string;
   retention_rate: string;
   currency: string;
+  reminder_policy?: ReminderPolicy;
   is_ready_to_issue: boolean;
   missing_fields: string[];
   missing_to_issue: string[];

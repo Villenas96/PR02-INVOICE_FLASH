@@ -23,6 +23,7 @@ export const emailPurposeEnum = pgEnum("email_purpose", [
   "advisor_export",
   "advisor_invite",
   "user_notice",
+  "payment_reminder",
 ]);
 export const emailDeliveryStatusEnum = pgEnum("email_delivery_status", [
   "queued",

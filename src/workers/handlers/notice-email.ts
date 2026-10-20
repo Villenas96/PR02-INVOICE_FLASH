@@ -26,6 +26,7 @@ import {
   type RenderedEmail,
   renderEmailLayout,
 } from "@/services/email/templates/layout";
+import { renderReminderEmail } from "@/services/reminder-email";
 import type { TransactionalEmailProvider } from "@/workers/handlers/email-send";
 import {
   EMAIL_RETRY_WINDOW_MS,
@@ -38,6 +39,7 @@ export const NOTICE_PURPOSES = [
   "user_notice",
   "advisor_invite",
   "advisor_export",
+  "payment_reminder",
 ] as const;
 
 /** Template of `user_notice` deliveries: the in-app notice by email. */
@@ -55,6 +57,8 @@ export interface NoticeEmailDependencies {
 
 export interface RenderNoticeContext {
   appBaseUrl: string;
+  database?: Database;
+  now?: Date;
   tokenSecret?: () => string;
 }
 
@@ -106,6 +110,18 @@ export async function renderNotice(
         action: { label: "Abrir Invoice Flash", url },
       }),
     };
+  }
+  if (template === "payment_reminder") {
+    const documentId = stringField(payload, "document_id");
+    if (!documentId || !context.database) {
+      return null;
+    }
+    return renderReminderEmail(
+      context.database,
+      documentId,
+      appBaseUrl,
+      context.now ?? new Date(),
+    );
   }
   if (template === "advisor_invite" || template === "advisor_export") {
     return renderAdvisorNotice(template, payload, context);
@@ -208,7 +224,7 @@ export function createNoticeEmailHandler(
     const rendered = await renderNotice(
       claimed.template,
       claimed.payload as Payload,
-      dependencies,
+      { ...dependencies, database, now },
     );
     if (!claimed.recipientEmail || !rendered) {
       await markNotice(database, claimed.id, {
