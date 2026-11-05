@@ -9,7 +9,7 @@ Facturación web para autónomos y pequeños negocios (mercado español). Promes
 
 ## Stack (decidido en specs/001-invoice-flash/research.md — no cambiar sin actualizar el plan)
 
-- **TypeScript 5 `strict`** · **Next.js 15 App Router** · React 19 · **pnpm** (único gestor de paquetes permitido).
+- **TypeScript 5 `strict`** · **Next.js 16 App Router** (`src/middleware.ts` en edge: no renombrar a `proxy.ts`, ver specs/002-factum-improvements/research.md R22) · React 19 · **pnpm** (único gestor de paquetes permitido).
 - Hosting: **Cloudflare Workers** vía `@opennextjs/cloudflare` (+ R2, Queues). Fallback documentado: Vercel.
 - BD: **Neon Postgres** + **Drizzle ORM** (migraciones drizzle-kit versionadas y reversibles).
 - Auth: **Better Auth** (adaptador Drizzle). PDF: **pdf-lib** + caché en R2 (job de cola). Email: **Resend** vía Cloudflare Queues.
