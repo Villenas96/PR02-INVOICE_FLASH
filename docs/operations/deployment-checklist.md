@@ -107,7 +107,7 @@ pnpm deploy:staging        # o pnpm deploy:production: build OpenNext + wrangler
 > ```bash
 > git worktree add --detach ../factum-deploy HEAD && cd ../factum-deploy
 > pnpm install --frozen-lockfile && pnpm cf-typegen   # cloudflare-env.d.ts no se versiona
-> DATABASE_URL=postgresql://localhost/unused BETTER_AUTH_SECRET=build-time-placeholder \
+> DATABASE_URL=postgresql://build:build@localhost:5432/unused BETTER_AUTH_SECRET=build-time-placeholder \
 >   pnpm exec opennextjs-cloudflare build             # solo para compilar; no se empaquetan
 > pnpm exec wrangler deploy --env staging             # o --env production
 > ```

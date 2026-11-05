@@ -62,3 +62,4 @@ next-env.d.ts
 
 # performance reports (tests/performance/report.ts)
 /perf-results
+/playwright-report-staging/

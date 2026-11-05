@@ -84,12 +84,13 @@
   "observability": {
     "enabled": true
   },
-  // Ejecuta el Worker cerca de Neon (Frankfurt) y no del usuario: cada
-  // petición hace varias consultas en serie, y con el Worker en el edge cada
-  // una pagaría el viaje de ida y vuelta hasta la base de datos. Se hereda en
-  // los entornos staging y production.
+  // Smart Placement desactivado (heredado por staging y production). Acercaba
+  // el Worker a Neon, pero con OpenNext + Next 16 las invocaciones reenviadas
+  // se cuelgan de forma intermitente (opennextjs-cloudflare#1382): en staging,
+  // 1 de cada 7 páginas autenticadas no respondía; sin él, 0 de 75 (+0,25 s de
+  // media). Reevaluar cuando se corrija la incidencia (research.md R22).
   "placement": {
-    "mode": "smart"
+    "mode": "off"
   },
   // Secretos (DATABASE_URL, BETTER_AUTH_SECRET, RESEND_API_KEY): nunca aquí.
   // Local: .dev.vars (ver .dev.vars.example). Remoto:

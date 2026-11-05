@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
 
 function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
@@ -45,7 +46,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -61,7 +62,7 @@ async function registerVerifyAndSignIn(
   page: Page,
   suffix: string,
 ): Promise<string> {
-  const email = `e2e-proforma-receipt-${suffix}@example.test`;
+  const email = testEmail(`e2e-proforma-receipt-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");

@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
 
 const TEN_SECONDS_MS = 10_000;
 
@@ -47,7 +48,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -61,7 +62,7 @@ async function verificationUrl(email: string): Promise<string> {
 
 async function registerVerifyAndSignIn(page: Page): Promise<string> {
   const suffix = crypto.randomUUID();
-  const email = `e2e-payments-${suffix}@example.test`;
+  const email = testEmail(`e2e-payments-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");

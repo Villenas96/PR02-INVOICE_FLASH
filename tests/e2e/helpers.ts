@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
 
 /**
  * Shared flows for the v2 (specs/002) E2E suites. The v1 specs keep their own
@@ -93,7 +94,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -104,7 +105,7 @@ async function verificationUrl(email: string): Promise<string> {
 }
 
 export async function registerVerifyAndSignIn(page: Page): Promise<string> {
-  const email = `e2e-${crypto.randomUUID()}@example.test`;
+  const email = testEmail(`e2e-${crypto.randomUUID()}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");

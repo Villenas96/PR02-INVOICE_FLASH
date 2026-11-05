@@ -5,6 +5,7 @@ import {
   deriveSignedToken,
 } from "../../src/lib/download-tokens";
 import { resolvePeriod } from "../../src/lib/exports/period";
+import { testEmail } from "./environment";
 import {
   expectAccessible,
   registerVerifyAndSignIn,
@@ -82,7 +83,7 @@ test("Esencial exporta el trimestre anterior y lo envía a su asesoría", async 
   await link.click();
   expect((await downloadPromise).suggestedFilename()).toMatch(/\.xlsx$/);
 
-  await page.getByLabel("Email", { exact: true }).fill("asesoria@example.test");
+  await page.getByLabel("Email", { exact: true }).fill(testEmail("asesoria"));
   await page
     .locator("#advisor-email")
     .getByRole("button", { name: "Guardar" })
@@ -100,7 +101,7 @@ test("Esencial exporta el trimestre anterior y lo envía a su asesoría", async 
   const deliveries = await withDatabase(
     (database) => database<{ purpose: string }[]>`
       SELECT purpose::text FROM email_delivery
-      WHERE recipient_email = 'asesoria@example.test'
+      WHERE recipient_email = ${testEmail("asesoria")}
         AND company_id = ${companyId}
     `,
   );

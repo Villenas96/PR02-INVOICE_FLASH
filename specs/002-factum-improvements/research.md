@@ -192,6 +192,7 @@ Antes de decidir se auditó el código existente (requisito de la spec, apartado
 - **Decision**: Next.js 16 (≥ 16.4.5) con `@opennextjs/cloudflare` ≥ 1.20.16. Sustituye a la decisión R2 de la v1 solo en la versión mayor.
 - **Rationale**: desde el 21/10/2026, `opennextjs-cloudflare build` rechaza Next.js 15 porque han pasado 2 años desde su lanzamiento, lo que bloquea vista previa, E2E y despliegues.
 - **Middleware**: se mantiene `src/middleware.ts` en runtime edge pese al aviso de obsolescencia. `proxy.ts` solo admite runtime Node y OpenNext aún no soporta Node Middleware. Por eso no se ejecuta el codemod `upgrade` ni `middleware-to-proxy`. `config` se declara en `src/middleware.ts`, porque Turbopack no admite reexportarlo.
+- **Smart Placement desactivado**: con OpenNext + Next 16, las invocaciones reenviadas por Smart Placement se cuelgan de forma intermitente ([opennextjs-cloudflare#1382](https://github.com/opennextjs/opennextjs-cloudflare/issues/1382)). En staging (05/11/2026) se colgaban unas 5 de cada 36 peticiones a páginas autenticadas, con 5–60 ms de CPU, y Cloudflare las cancelaba a los 65 s. Sin Smart Placement: 0 de 75, con 0,56 s de media frente a ~0,3 s. Se desactiva en `wrangler.jsonc` para todos los entornos hasta que se corrija la incidencia.
 - **Alternatives rejected**: `--dangerouslyUseUnsupportedNextVersion` mantiene una versión mayor fuera de su ventana de soporte.
 
 ## Nuevas dependencias (todas JS puro, compatibles con workerd)

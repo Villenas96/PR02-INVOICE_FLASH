@@ -140,6 +140,14 @@ const server = createServer(async (request, response) => {
 
   try {
     const body = await requestBody(request);
+    // Optional network latency, to reproduce timing issues seen against Neon.
+    const delayMs = Number.parseInt(
+      process.env.NEON_HTTP_PROXY_DELAY_MS ?? "0",
+      10,
+    );
+    if (delayMs > 0) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+    }
     const payload = Array.isArray(body.queries)
       ? await database.begin(async (transaction) => {
           const results = [];

@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
-
+import { appOrigin, testEmail } from "./environment";
 import {
   registerVerifyAndSignIn,
   saveFiscalData,
@@ -76,7 +76,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -94,7 +94,7 @@ async function registerAndVerifyOnly(
   page: Page,
 ): Promise<{ email: string; password: string }> {
   const suffix = crypto.randomUUID();
-  const email = `e2e-a11y-${suffix}@example.test`;
+  const email = testEmail(`e2e-a11y-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   const signUpResponse = await page.request.post("/api/auth/sign-up/email", {
@@ -289,7 +289,7 @@ test("v2 mutations give visible feedback within 100 ms under a delayed network",
   // Advisor invitation.
   await page.goto("/settings");
   await page.getByRole("tab", { name: "Gestoría" }).click();
-  await page.getByLabel("Email de la gestoría").fill("gestoria@example.test");
+  await page.getByLabel("Email de la gestoría").fill(testEmail("gestoria"));
   await slow("**/api/v1/advisor-access");
   const invite = page
     .getByRole("button")

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-
+import { testEmail } from "./environment";
 import {
   expectAccessible,
   registerVerifyAndSignIn,
@@ -21,7 +21,7 @@ test("Pro crea, pausa, reanuda y finaliza una recurrencia", async ({
       name: "Cliente Recurrente",
       tax_id: "A87654321",
       address: "Calle 1, Madrid",
-      email: "recurrente@example.test",
+      email: testEmail("recurrente"),
     },
   });
   expect(client.status()).toBe(201);
