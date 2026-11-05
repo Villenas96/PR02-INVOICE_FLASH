@@ -112,7 +112,7 @@ Proyecto único Next.js en la raíz: `src/app/` (App Router, `api/v1`, webhooks,
 - [X] T032 [P] [US2] Write integration tests for the Stripe webhook: invalid signature → 400, duplicated event → single effect, out-of-order `customer.subscription.updated` resolved by re-reading the subscription, `plan_change` written once per effective change, using a mocked Stripe client, in `tests/integration/billing-webhook.test.ts`
 - [X] T033 [P] [US2] Write integration tests for grace handling with injected clock: `invoice.payment_failed` sets `grace_until`, day-5 notice, downgrade to `basic` after expiry, paid invoice clears grace, no data deleted, in `tests/integration/billing-grace.test.ts`
 - [X] T034 [P] [US2] Write contract tests for `/api/v1/billing/plans`, `/billing/subscription`, `/billing/checkout` (Idempotency-Key, owner only) and `/billing/portal` in `tests/integration/billing-contract.test.ts`
-- [ ] T035 [P] [US2] Write an E2E test (Stripe test mode, `4242…` card) for limit reached → upgrade → blocked invoice issued without redoing it, and abandoned checkout keeps the draft unnumbered, in `tests/e2e/upgrade-flow.spec.ts`
+- [X] T035 [P] [US2] Write an E2E test (Stripe test mode, `4242…` card) for limit reached → upgrade → blocked invoice issued without redoing it, and abandoned checkout keeps the draft unnumbered, in `tests/e2e/upgrade-flow.spec.ts` (Nota: los flujos de pago se ejecutan solo con `E2E_STRIPE_SECRET_KEY` y `stripe listen` (runbook v2, §1); sin la clave se saltan, como en CI. Validado el 05/11/2026 en un sandbox de Stripe en escritorio y móvil, con los webhooks entregados con 200.)
 
 ### Implementation for User Story 2
 

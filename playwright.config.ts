@@ -1,5 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Stripe test mode is opt-in: only with a test key do the paid E2E flows run
+// (tests/e2e/upgrade-flow.spec.ts), with `stripe listen` forwarding webhooks.
+const stripeVars = process.env.E2E_STRIPE_SECRET_KEY
+  ? [
+      "--var STRIPE_SECRET_KEY:$E2E_STRIPE_SECRET_KEY",
+      "--var STRIPE_WEBHOOK_SECRET:$E2E_STRIPE_WEBHOOK_SECRET",
+      ...(process.env.E2E_STRIPE_TAX_RATE_ID
+        ? ["--var STRIPE_TAX_RATE_ID:$E2E_STRIPE_TAX_RATE_ID"]
+        : []),
+    ].join(" ")
+  : "";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   globalSetup: "./tests/e2e/setup.ts",
@@ -35,8 +47,7 @@ export default defineConfig({
       // build` step imports route modules to collect page data, which
       // constructs the Better Auth instance at import time and throws if
       // `process.env.BETTER_AUTH_SECRET` is unset.
-      command:
-        "DATABASE_URL=$E2E_DATABASE_URL BETTER_AUTH_SECRET=$E2E_BETTER_AUTH_SECRET pnpm preview -- --port 3000 --var DATABASE_URL:$E2E_DATABASE_URL --var BETTER_AUTH_SECRET:$E2E_BETTER_AUTH_SECRET --var BETTER_AUTH_URL:http://127.0.0.1:3000 --var NEON_HTTP_ENDPOINT:http://127.0.0.1:55433/sql --var E2E_DISABLE_AUTH_RATE_LIMIT:true --var EMAIL_FROM:no-reply@factum.test --var APP_BASE_URL:http://127.0.0.1:3000",
+      command: `DATABASE_URL=$E2E_DATABASE_URL BETTER_AUTH_SECRET=$E2E_BETTER_AUTH_SECRET pnpm preview -- --port 3000 --var DATABASE_URL:$E2E_DATABASE_URL --var BETTER_AUTH_SECRET:$E2E_BETTER_AUTH_SECRET --var BETTER_AUTH_URL:http://127.0.0.1:3000 --var NEON_HTTP_ENDPOINT:http://127.0.0.1:55433/sql --var E2E_DISABLE_AUTH_RATE_LIMIT:true --var EMAIL_FROM:no-reply@factum.test --var APP_BASE_URL:http://127.0.0.1:3000 ${stripeVars}`,
       url: "http://127.0.0.1:3000",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

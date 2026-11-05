@@ -40,8 +40,10 @@ Haz esto a mano en cada cuenta/entorno de Stripe y deja captura en la evidencia:
 
 1. Registra el endpoint `https://<host>/api/webhooks/stripe` con los eventos que
    usa la app (suscripciones, facturas y checkout) y copia su secreto de firma.
-2. Local: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
-3. Los eventos se **reconcilian releyendo la suscripción** en Stripe: reenviar o
+2. Local: `stripe listen --api-key <clave sk_test de la cuenta> --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_failed,price.created,price.updated,price.deleted,product.created,product.updated --forward-to 127.0.0.1:3000/api/webhooks/stripe`.
+   `--events` es obligatorio en las versiones actuales del CLI, y `--api-key` asegura que se escuchan los eventos de la misma cuenta (o sandbox) que usa la app. El secreto de firma se obtiene con `stripe listen --api-key … --print-secret`.
+3. E2E de pago (T035): exporta `E2E_STRIPE_SECRET_KEY`, `E2E_STRIPE_WEBHOOK_SECRET` y, opcionalmente, `E2E_STRIPE_TAX_RATE_ID`, deja `stripe listen` en marcha y ejecuta `pnpm test:e2e tests/e2e/upgrade-flow.spec.ts`. Sin la clave, el test de pago se salta. La cuenta necesita los cuatro precios con `lookup_key`.
+4. Los eventos se **reconcilian releyendo la suscripción** en Stripe: reenviar o
    desordenar eventos es seguro. `stripe events resend <id>` no crea un segundo
    `plan_change`.
 
