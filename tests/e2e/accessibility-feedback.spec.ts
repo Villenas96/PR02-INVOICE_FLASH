@@ -6,6 +6,7 @@ import {
   registerVerifyAndSignIn,
   saveFiscalData,
   setCompanyPlan,
+  withDatabase,
 } from "./helpers";
 
 const FEEDBACK_DEADLINE_MS = 100;
@@ -336,5 +337,146 @@ test("v2 mutations give visible feedback within 100 ms under a delayed network",
   await expectFeedbackWithin(
     () => convert.click(),
     () => expect(convert).toHaveText("Convirtiendo…", { timeout: 90 }),
+  );
+});
+
+test("subscribe, invoice delivery notes and reconcile give visible feedback within 100 ms under a delayed network", async ({
+  page,
+}) => {
+  const email = await registerVerifyAndSignIn(page);
+  await page.goto("/settings");
+  await saveFiscalData(page, email);
+  const slow = (pattern: string) =>
+    page.route(pattern, async (route) => {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
+      // The page may have moved on (and handled the route) meanwhile.
+      await route.continue().catch(() => undefined);
+    });
+
+  // Subscribe: only the immediate feedback matters here, so the delayed
+  // request never has to reach Stripe.
+  await withDatabase(async (database) => {
+    await database`
+      INSERT INTO billing_price (lookup_key, stripe_price_id, plan, interval, unit_amount_cents, currency, active, updated_at)
+      VALUES
+        ('essential_monthly', 'price_e2e_essential_monthly', 'essential', 'month', 900, 'eur', true, now()),
+        ('essential_yearly', 'price_e2e_essential_yearly', 'essential', 'year', 9000, 'eur', true, now())
+      ON CONFLICT (lookup_key) DO NOTHING
+    `;
+  });
+  await page.goto("/billing");
+  await page.route("**/api/v1/billing/checkout", async (route) => {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 400));
+    await route
+      .fulfill({ status: 503, json: { error: { code: "unavailable" } } })
+      .catch(() => undefined);
+  });
+  const subscribe = page
+    .getByRole("button")
+    .filter({ hasText: /^(Contratar Esencial|Abriendo el pago…)$/ });
+  await expect(subscribe).toBeVisible();
+  await expectFeedbackWithin(
+    () => subscribe.click(),
+    () => expect(subscribe).toHaveText("Abriendo el pago…", { timeout: 90 }),
+  );
+  await expect(subscribe).toHaveText("Contratar Esencial");
+  await page.unroute("**/api/v1/billing/checkout");
+
+  await setCompanyPlan(email, "pro");
+
+  // Invoicing delivery notes from the list.
+  const client = await page.request.post("/api/v1/clients", {
+    data: {
+      name: "Cliente Albaranes, S.L.",
+      tax_id: "A87654321",
+      address: "Calle del Cliente 2, 46001 Valencia",
+    },
+  });
+  const { id: clientId } = (await client.json()) as { id: string };
+  for (const description of ["Entrega 1", "Entrega 2"]) {
+    const draft = await page.request.post("/api/v1/documents", {
+      data: {
+        doc_type: "delivery_note",
+        client_id: clientId,
+        lines: [
+          {
+            description,
+            quantity: 1,
+            unit_price_cents: 10_000,
+            tax_rate: 21,
+          },
+        ],
+      },
+    });
+    const { id } = (await draft.json()) as { id: string };
+    expect(
+      (await page.request.post(`/api/v1/documents/${id}/issue`)).ok(),
+    ).toBe(true);
+  }
+  await page.goto("/documents?type=delivery_note");
+  const boxes = page.getByRole("checkbox", { name: /para facturar/ });
+  await expect(boxes).toHaveCount(2);
+  await boxes.nth(0).check();
+  await boxes.nth(1).check();
+  await slow("**/api/v1/documents/invoice-delivery-notes");
+  const invoice = page
+    .getByRole("button")
+    .filter({ hasText: /^(Facturar|Facturando…)$/ });
+  await expectFeedbackWithin(
+    () => invoice.click(),
+    () => expect(invoice).toHaveText("Facturando…", { timeout: 90 }),
+  );
+  await expect(page).toHaveURL(/\/documents\/[0-9a-f-]+/);
+  await page.unroute("**/api/v1/documents/invoice-delivery-notes");
+
+  // Reconciling a suggestion. Account of tests/fixtures/bank/sample.n43.
+  const method = await page.request.post("/api/v1/collection-methods", {
+    data: {
+      kind: "bank_account",
+      label: "Cuenta principal",
+      holder_name: "Estudio",
+      iban: "ES8121000001000123456789",
+    },
+  });
+  expect(method.status(), await method.text()).toBe(201);
+  await withDatabase(async (database) => {
+    const [company] = await database<{ id: string }[]>`
+      SELECT company.id FROM company JOIN "user" ON "user".id = company.user_id
+      WHERE "user".email = ${email}
+    `;
+    const talleresId = crypto.randomUUID();
+    await database`
+      INSERT INTO client (id, company_id, name, tax_id, created_at, updated_at)
+      VALUES (${talleresId}, ${company?.id ?? ""}, 'Talleres Martínez SL', 'B12345674', now(), now())
+    `;
+    await database`
+      INSERT INTO document (id, company_id, document_type, status, number, full_number,
+        client_id, issue_date, due_date, subtotal_cents, total_cents, pdf_status,
+        created_at, updated_at)
+      VALUES (${crypto.randomUUID()}, ${company?.id ?? ""}, 'invoice', 'issued', 1, 'F-2026-0001',
+        ${talleresId}, '2026-02-20', '2026-03-15', 16637, 16637, 'ready', now(), now())
+    `;
+  });
+  await page.goto("/reconciliation");
+  await page
+    .getByLabel("Archivo")
+    .setInputFiles("tests/fixtures/bank/sample.n43");
+  await page.getByRole("button", { name: "Analizar" }).click();
+  await page
+    .getByRole("button", { name: "Importar movimientos" })
+    .click({ timeout: 30_000 });
+  await expect(
+    page.getByText(/Importación completada: 20 movimientos nuevos/),
+  ).toBeVisible({ timeout: 30_000 });
+  await slow("**/api/v1/reconciliations");
+  const reconcile = page
+    .getByRole("listitem")
+    .filter({ hasText: "F-2026-0001" })
+    .first()
+    .getByRole("button")
+    .filter({ hasText: /^(Registrar cobro de|Registrando…)/ });
+  await expectFeedbackWithin(
+    () => reconcile.click(),
+    () => expect(reconcile).toHaveText("Registrando…", { timeout: 90 }),
   );
 });

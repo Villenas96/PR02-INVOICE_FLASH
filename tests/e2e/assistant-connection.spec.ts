@@ -84,7 +84,7 @@ test("el asistente se conecta con consentimiento, usa MCP y deja de funcionar al
       resource,
     },
   });
-  expect(token.ok()).toBe(true);
+  expect(token.ok(), `${token.status()} ${await token.text()}`).toBe(true);
   const { access_token: accessToken } = (await token.json()) as {
     access_token: string;
   };
