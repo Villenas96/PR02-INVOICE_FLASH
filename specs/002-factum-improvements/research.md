@@ -195,6 +195,24 @@ Antes de decidir se auditó el código existente (requisito de la spec, apartado
 - **Smart Placement desactivado**: con OpenNext + Next 16, las invocaciones reenviadas por Smart Placement se cuelgan de forma intermitente ([opennextjs-cloudflare#1382](https://github.com/opennextjs/opennextjs-cloudflare/issues/1382)). En staging (05/11/2026) se colgaban unas 5 de cada 36 peticiones a páginas autenticadas, con 5–60 ms de CPU, y Cloudflare las cancelaba a los 65 s. Sin Smart Placement: 0 de 75, con 0,56 s de media frente a ~0,3 s. Se desactiva en `wrangler.jsonc` para todos los entornos hasta que se corrija la incidencia.
 - **Alternatives rejected**: `--dangerouslyUseUnsupportedNextVersion` mantiene una versión mayor fuera de su ventana de soporte.
 
+## R23. Instancia de Better Auth segura entre peticiones en Workers
+
+- **Problema**: en staging, las páginas autenticadas se quedaban colgadas de forma intermitente en `auth.api.getSession`, hasta que Cloudflare las cancelaba (~115 s). Las rutas de API no fallaban.
+- **Causa confirmada** (staging, 07/11/2026, versión instrumentada):
+  - `betterAuth()` crea al cargar el módulo una única promesa de contexto que espera al `init` de los plugins.
+  - El `init` de `oauth-provider`, que trae el plugin `mcp`, consulta la base de datos para sembrar el recurso MCP.
+  - Las precargas RSC (`next-router-prefetch`) cargaban el módulo y terminaban antes de que esa consulta respondiera. Workers cancela la E/S de una petición terminada, así que la promesa no se resolvía nunca.
+  - Las 8 instancias creadas en precargas quedaron `pending`, y la página que reutilizaba una de ellas se colgaba.
+- **Decision**:
+  - `src/lib/auth.ts` crea la instancia bajo demanda con `requestSafeSingleton` (`src/lib/request-safe-singleton.ts`).
+  - Cada petición espera la inicialización de su propia instancia. Solo se comparte en el isolate una instancia ya inicializada; una pendiente o fallida nunca pasa a otra petición.
+  - `auth` conserva la misma interfaz (`auth.api.*`, `auth.handler`), y `getAuth()` da acceso a la instancia completa.
+- **Regla general**: en Workers, ningún módulo inicia E/S al cargarse ni comparte entre peticiones promesas que dependan de E/S pendiente.
+- **Alternatives rejected**:
+  - Desactivar la siembra del recurso: el plugin `mcp` siempre añade su `resource`.
+  - Crear la instancia en cada petición: añade una consulta de siembra por petición.
+  - Poner un timeout a `getSession`: oculta el fallo en vez de evitarlo.
+
 ## Nuevas dependencias (todas JS puro, compatibles con workerd)
 
 | Paquete | Uso | Instalación |

@@ -1,6 +1,6 @@
 import { createLocalJWKSet, errors, type JSONWebKeySet, jwtVerify } from "jose";
 
-import { auth, MCP_RESOURCE, MCP_SCOPE } from "@/lib/auth";
+import { getAuth, MCP_RESOURCE, MCP_SCOPE } from "@/lib/auth";
 
 export class McpTokenError extends Error {
   constructor(
@@ -45,6 +45,7 @@ export async function verifyMcpAccessToken(
     throw new McpTokenError("missing");
   }
   try {
+    const auth = await getAuth();
     const context = await auth.$context;
     const keys = (await auth.api.getJwks()) as JSONWebKeySet;
     const { payload } = await jwtVerify(match[1], createLocalJWKSet(keys), {

@@ -307,12 +307,13 @@ export function Combobox<T>({
                 </CommandItem>
               ) : null}
             </CommandGroup>
-            {remote && remoteOptions.loading ? (
-              <output className="block px-3 py-2 text-sm text-muted-foreground">
-                Buscando…
-              </output>
-            ) : null}
           </CommandList>
+          {/* Outside the listbox: role="listbox" may only own options/groups. */}
+          {remote && remoteOptions.loading ? (
+            <output className="block px-3 py-2 text-sm text-muted-foreground">
+              Buscando…
+            </output>
+          ) : null}
         </Command>
       </PopoverContent>
     </Popover>

@@ -475,6 +475,9 @@ test("subscribe, invoice delivery notes and reconcile give visible feedback with
     .first()
     .getByRole("button")
     .filter({ hasText: /^(Registrar cobro de|Registrando…)/ });
+  // Resolve the button before timing: the clock measures the app's feedback,
+  // not Playwright locating a list that just re-rendered after the import.
+  await expect(reconcile).toBeEnabled();
   await expectFeedbackWithin(
     () => reconcile.click(),
     () => expect(reconcile).toHaveText("Registrando…", { timeout: 90 }),
