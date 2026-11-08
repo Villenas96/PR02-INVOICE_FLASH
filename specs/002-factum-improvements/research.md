@@ -240,4 +240,55 @@ Mismas escalas que la v1. Se suman a la estimación de [../001-invoice-flash/pla
 
 Controles: límites de gasto ya activos (v1); los archivos exportados caducan y se borran a los 7 días; rate limits en `/x/*` y `/api/mcp`; recordatorios limitados por diseño (máx. por factura y uno por día).
 
+### Recalibración con métricas de staging (T186, 2026-11-08)
+
+**Fuente de los datos:**
+
+- Analítica de Cloudflare (GraphQL) del Worker `invoice-flash-staging` y de sus colas, del 05/11 al 08/11/2026.
+- `wrangler r2 bucket info` del bucket de staging.
+- Consultas de tamaño sobre la Neon de staging.
+
+El tráfico es **sintético**: las suites E2E, la exportación de 300 facturas, la ráfaga MCP de 250 llamadas y la prueba manual de V15. Por eso no sirve para medir el uso por persona. Sí sirve para medir **costes unitarios**: operaciones por mensaje, bytes por documento y CPU por petición.
+
+| Medida | Valor medido | Lectura |
+|---|---|---|
+| Peticiones al Worker | 19.934 en 4 días, 0 errores; 198 empresas de prueba creadas (~100 peticiones por recorrido E2E) | — |
+| CPU por petición | media 80 ms; P50 19 ms; P99 570 ms (PDF, exportaciones, hash de contraseñas) | Workers Paid incluye 30M ms de CPU: ~375.000 peticiones/mes a la media medida antes de pagar extra (0,02 $ por millón de ms) |
+| Operaciones de cola por mensaje | 3 (escribir, leer y borrar). Cola `pdf-render`: 377 escrituras, 376 lecturas y 383 borrados | 1 PDF = 3 operaciones |
+| Reintentos de correo | Cola `email-send`: 234 escrituras y 708 lecturas; 158 a la DLQ. Son los 156 correos que fallaron el 05/11 porque el dominio de Resend aún no estaba verificado (1 escritura, ~4 lecturas y 1 escritura en la DLQ cada uno) | Un fallo persistente cuesta ~6 operaciones, no correos facturables |
+| Cola `jobs` | 21 mensajes | Despreciable |
+| Neon: bytes por documento | Fila de `document` 598 B, línea 132 B, evento 121 B (2,8 eventos y 1 línea por documento de prueba); con índices, ~2,8 KB por documento emitido. Base de datos completa: 14 MB con 199 empresas y 422 documentos (sobre todo páginas mínimas e índices) | 100.000 documentos/mes ≈ 280 MB/mes de crecimiento |
+| Neon: movimiento bancario | 243 B por fila | Despreciable frente a los documentos |
+| R2 | 374 objetos, 3,18 MB (incluye un ZIP de 1 MiB con 300 PDF) | PDF de ~6 KB; ~3,4 KB por PDF dentro de un ZIP |
+| Correos | 79 enviados y 160 fallidos (156 antes de verificar el dominio y 2 en una ráfaga de registros) | El volumen real depende del uso y no se puede medir con tráfico sintético |
+
+**Tabla recalibrada:**
+
+- Es incremental sobre la v1 y usa las mismas escalas: 1.000, 10.000 y 100.000 documentos al mes.
+- Toma los precios de lista conocidos de cada proveedor. **Hay que comprobarlos antes de producción.**
+
+| Concepto | Lanzamiento | 10x | 100x | Cambio frente a la estimación inicial |
+|---|---|---|---|---|
+| Stripe | ~0,40 € por cobro de 8 € | ídem | ídem | Sin cambios |
+| Resend | 0 $ | +0–20 $ | +20–90 $ | Cota máxima: ≤ 1 envío por documento, ≤ 3 recordatorios por factura Pro impagada y avisos. Pendiente de medir en producción |
+| Queues + Cron | 0 $ | 0 $ | ~0–1 $ | **Baja (antes 5–15 $).** Peor caso de ~25 operaciones por documento (PDF, envío, 3 recordatorios y trabajos) = 2,5M operaciones/mes a 100x; 1M incluido y 0,40 $/M después |
+| Neon | 0 $ | +2–5 $ | +10–30 $ | El almacenamiento medido es despreciable (~3,4 GB/año a 100x, ~1 $/mes). Se mantiene la horquilla de **cómputo**, que el tráfico sintético no permite medir |
+| R2 | 0 $ | 0 $ | ~0–1 $ | **Baja (antes 2–5 $).** ~0,6 GB/mes a 100x; las exportaciones caducan a los 7 días; 10 GB y 1M de escrituras incluidos |
+| MCP | 0 $ | 0 $ | +0–5 $ | Sin cambios. El limitador aproximado (decisión de abajo) no cambia el coste: 250 llamadas ≈ 20 s de CPU |
+| **Incremento total** | **~0 $** | **~+2–25 $/mes** | **~+30–130 $/mes** | Antes: ~0, +5–30 y +110–145 $ |
+
+**CPU del Worker:**
+
+- No suma a la tabla porque está dentro de la línea de Workers de la v1 (10–50 $ a 100x).
+- Con la media medida y ~500 peticiones por persona al mes, 10.000 personas son ~5M de peticiones y ~400M ms de CPU, es decir, ~+7 $.
+
+**Siguiente recalibración:** con el primer mes de producción, para medir correos por documento, peticiones por persona y cómputo de Neon.
+
+**Decisión sobre el limitador MCP (2026-11-08):**
+
+- El responsable acepta el binding de rate limiting de Cloudflare tal cual.
+- Es aproximado: en una ráfaga de 250 llamadas, el primer 429 llegó en la 151, frente a las 60/min nominales, porque los contadores son por máquina y se sincronizan de forma asíncrona.
+- Corta las ráfagas y su coste es despreciable.
+- No se construye un contador estricto (Durable Object o base de datos).
+
 Todas las incógnitas de la spec quedan resueltas; no quedan `NEEDS CLARIFICATION`.

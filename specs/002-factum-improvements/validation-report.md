@@ -126,7 +126,7 @@ Se saltan fuera de staging.
 - **Limitación por ráfaga** (`assistant-limits`):
   - Se lanzaron 250 llamadas en 38 s; el primer 429 llegó en la llamada 151.
   - El limitador de Cloudflare (60/min por conexión, R19) es aproximado: usa contadores por máquina que se sincronizan de forma asíncrona.
-  - Corta las ráfagas, pero no al umbral exacto. Si se necesita un límite estricto, haría falta un contador propio (Durable Object o base de datos). **Lo decide el responsable.**
+  - Corta las ráfagas, pero no al umbral exacto. **Decisión del responsable (2026-11-08): se acepta así**, sin contador estricto (research.md, recalibración de costes).
 - **Prueba manual con Claude (2026-11-08, cuenta del responsable en Pro):**
   - **Descubrimiento:** la primera conexión falló porque Claude busca los metadatos RFC 8414 en `/.well-known/oauth-authorization-server/api/auth` (ruta del emisor insertada) y daba 404. Corregido en `e0cfea6`; `assistant-connection` ahora recorre ese descubrimiento. Tras desplegarlo (versión `eeed3b93`) Claude conecta, muestra el consentimiento y lista las 15 herramientas.
   - **Borradores:** el responsable da por buenos los 10 intentos (≥ 8/10). En el intento revisado, cliente, cantidad (3 h × 60 €), IVA 21 % y total 217,80 € eran correctos.
