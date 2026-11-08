@@ -35,6 +35,10 @@ Haz esto a mano en cada cuenta/entorno de Stripe y deja captura en la evidencia:
 3. **Customer Portal** (Settings → Billing → Customer portal): cambio de plan
    restringido a los productos Esencial y Pro (mensual/anual), cambio de medio de
    pago, historial de facturas y cancelación **al final del periodo**.
+   Comprueba que «Subscriptions → Customers can switch plans» queda activado y
+   guardado. Sin él, el paso de Esencial a Pro (`subscription_update_confirm`)
+   falla con «the subscription update feature in the portal configuration is
+   disabled». Pasó en el sandbox de staging el 08/11/2026.
 
 ### Webhook
 
