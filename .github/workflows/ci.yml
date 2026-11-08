@@ -42,6 +42,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Binding types (queues, R2, rate limiters) come from wrangler.jsonc and
+      # are not committed (cloudflare-env.d.ts is gitignored).
+      - run: pnpm cf-typegen
       - run: pnpm typecheck
 
   unit_tests:
@@ -124,6 +127,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm cf-typegen
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
 
