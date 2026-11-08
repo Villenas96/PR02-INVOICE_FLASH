@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
-import { useAsyncAction } from "@/components/ui/async-action";
+import { WriteOnly } from "@/components/access/read-only";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LogoUpload } from "@/components/ui/logo-upload";
 import {
   Table,
   TableBody,
@@ -36,7 +37,11 @@ interface ClientDetailData {
   address: string | null;
   email: string | null;
   phone: string | null;
+  postal_code: string | null;
+  city: string | null;
   notes: string | null;
+  logo_key: string | null;
+  reminders_enabled: boolean;
   archived_at: string | null;
   pending_cents: number;
   overdue_cents: number;
@@ -86,7 +91,9 @@ function EditClientDialog({
   const [address, setAddress] = useState(client.address ?? "");
   const [email, setEmail] = useState(client.email ?? "");
   const [phone, setPhone] = useState(client.phone ?? "");
-  const action = useAsyncAction<ClientDetailData>();
+  const [postalCode, setPostalCode] = useState(client.postal_code ?? "");
+  const [city, setCity] = useState(client.city ?? "");
+  const action = useMutation<ClientDetailData>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -99,6 +106,8 @@ function EditClientDialog({
           address: address.trim() || null,
           email: email.trim() || null,
           phone: phone.trim() || null,
+          postal_code: postalCode.trim() || null,
+          city: city.trim() || null,
         }),
       ),
     );
@@ -180,6 +189,29 @@ function EditClientDialog({
                 Necesario para emitir facturas.
               </p>
             </div>
+            <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-postal-code">Código postal</Label>
+                <Input
+                  id="edit-client-postal-code"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={20}
+                  value={postalCode}
+                  onChange={(event) => setPostalCode(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-client-city">Población</Label>
+                <Input
+                  id="edit-client-city"
+                  autoComplete="address-level2"
+                  maxLength={120}
+                  value={city}
+                  onChange={(event) => setCity(event.target.value)}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-client-phone">Teléfono</Label>
               <Input
@@ -223,7 +255,7 @@ function ArchiveAction({
   client: ClientDetailData;
   onChanged: (client: ClientDetailData) => void;
 }) {
-  const action = useAsyncAction<ClientDetailData>();
+  const action = useMutation<ClientDetailData>();
   const isArchived = client.archived_at !== null;
 
   async function handleClick() {
@@ -255,6 +287,48 @@ function ArchiveAction({
           ? "Restaurar cliente"
           : "Archivar cliente"}
     </Button>
+  );
+}
+
+function RemindersToggle({
+  client,
+  onChanged,
+}: {
+  client: ClientDetailData;
+  onChanged: (enabled: boolean) => void;
+}) {
+  const action = useMutation<ClientDetailData>({ refresh: false });
+
+  async function toggle(enabled: boolean) {
+    onChanged(enabled);
+    const updated = await action.run(() =>
+      apiRequest<ClientDetailData>(
+        `/api/v1/clients/${client.id}`,
+        jsonRequest("PATCH", { reminders_enabled: enabled }),
+      ),
+    );
+    if (!updated) {
+      onChanged(!enabled);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={client.reminders_enabled}
+          disabled={action.isLoading}
+          onChange={(event) => toggle(event.target.checked)}
+        />
+        Enviar recordatorios de pago a este cliente
+      </label>
+      {action.error ? (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {action.error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -355,13 +429,20 @@ export function ClientDetail({ clientId }: { clientId: string }) {
           <address className="mt-2 space-y-1 text-sm not-italic text-muted-foreground">
             <p>{client.tax_id ?? "Sin NIF"}</p>
             <p>{client.address ?? "Sin dirección"}</p>
+            {client.postal_code || client.city ? (
+              <p>
+                {[client.postal_code, client.city].filter(Boolean).join(" ")}
+              </p>
+            ) : null}
             <p>{client.email ?? "Sin correo"}</p>
             <p>{client.phone ?? "Sin teléfono"}</p>
           </address>
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          <EditClientDialog client={client} onSaved={setClient} />
-          <ArchiveAction client={client} onChanged={setClient} />
+          <WriteOnly>
+            <EditClientDialog client={client} onSaved={setClient} />
+            <ArchiveAction client={client} onChanged={setClient} />
+          </WriteOnly>
         </div>
       </section>
 
@@ -370,6 +451,39 @@ export function ClientDetail({ clientId }: { clientId: string }) {
           {error}
         </p>
       ) : null}
+
+      <WriteOnly>
+        <RemindersToggle
+          client={client}
+          onChanged={(enabled) =>
+            setClient((current) =>
+              current ? { ...current, reminders_enabled: enabled } : current,
+            )
+          }
+        />
+        <section
+          aria-labelledby="client-logo-title"
+          className="rounded-xl border bg-card p-5 shadow-sm sm:p-6"
+        >
+          <h2 id="client-logo-title" className="font-semibold">
+            Logotipo del cliente
+          </h2>
+          <p className="mt-1 mb-4 text-sm text-muted-foreground">
+            Opcional. Aparece junto a sus datos en los documentos que emitas a
+            partir de ahora.
+          </p>
+          <LogoUpload
+            endpoint={`/api/v1/clients/${client.id}/logo`}
+            inputId="client-logo"
+            logoKey={client.logo_key}
+            onChange={(logoKey) =>
+              setClient((current) =>
+                current ? { ...current, logo_key: logoKey } : current,
+              )
+            }
+          />
+        </section>
+      </WriteOnly>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border bg-card p-5 shadow-sm">

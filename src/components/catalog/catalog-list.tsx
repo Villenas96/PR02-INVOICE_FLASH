@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-
-import { useAsyncAction } from "@/components/ui/async-action";
+import { WriteOnly } from "@/components/access/read-only";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogClose,
@@ -27,15 +28,23 @@ import {
 } from "@/components/ui/table";
 import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { createCents, formatEur, parseEuroInput } from "@/lib/money";
+import { mergeUnits } from "@/lib/units";
 
 const SEARCH_DEBOUNCE_MS = 250;
-const TAX_RATE_OPTIONS = ["0.00", "4.00", "10.00", "21.00"] as const;
+interface TaxOption {
+  id: string;
+  name: string;
+  rate: string;
+  is_default: boolean;
+}
 
 interface CatalogItemData {
   id: string;
   description: string;
   unit_price_cents: number;
   tax_rate: string;
+  tax_rate_id: string | null;
+  unit: string | null;
   archived_at: string | null;
 }
 
@@ -47,48 +56,134 @@ interface CatalogItemPage {
 interface CatalogItemFormFields {
   description: string;
   unitPrice: string;
-  taxRate: (typeof TAX_RATE_OPTIONS)[number];
+  taxRateId: string;
+  unit: string | null;
 }
 
-function TaxRateSelect({
+interface CatalogOptions {
+  taxRates: TaxOption[];
+  units: string[];
+  addUnit: (unit: string) => void;
+}
+
+/** Tax types and units shared by the product dialogs (FR-023, FR-030). */
+function useCatalogOptions(): CatalogOptions {
+  const [taxRates, setTaxRates] = useState<TaxOption[]>([]);
+  const [units, setUnits] = useState<string[]>(() => mergeUnits([]));
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all([
+      apiRequest<{ items: TaxOption[] }>("/api/v1/tax-rates", {
+        signal: controller.signal,
+      }),
+      apiRequest<{ custom: Array<{ name: string }> }>("/api/v1/units", {
+        signal: controller.signal,
+      }),
+    ])
+      .then(([taxPage, unitData]) => {
+        setTaxRates(taxPage.items);
+        setUnits(mergeUnits(unitData.custom.map((unit) => unit.name)));
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  return {
+    taxRates,
+    units,
+    addUnit: (unit) => setUnits((current) => mergeUnits([...current, unit])),
+  };
+}
+
+function TaxTypeSelect({
   id,
   value,
+  taxRates,
   onChange,
 }: {
   id: string;
   value: string;
-  onChange: (value: (typeof TAX_RATE_OPTIONS)[number]) => void;
+  taxRates: TaxOption[];
+  onChange: (value: string) => void;
 }) {
   return (
     <select
       id={id}
       className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       value={value}
-      onChange={(event) =>
-        onChange(event.target.value as (typeof TAX_RATE_OPTIONS)[number])
-      }
+      onChange={(event) => onChange(event.target.value)}
     >
-      {TAX_RATE_OPTIONS.map((rate) => (
-        <option key={rate} value={rate}>
-          {Number(rate).toLocaleString("es-ES")} %
+      {taxRates.map((tax) => (
+        <option key={tax.id} value={tax.id}>
+          {tax.name} {Number(tax.rate).toLocaleString("es-ES")} %
         </option>
       ))}
     </select>
   );
 }
 
+function UnitField({
+  labelId,
+  value,
+  options,
+  onChange,
+}: {
+  labelId: string;
+  value: string | null;
+  options: CatalogOptions;
+  onChange: (unit: string | null) => void;
+}) {
+  return (
+    <Combobox<string>
+      aria-labelledby={labelId}
+      value={value}
+      onChange={onChange}
+      getKey={(unit) => unit}
+      getLabel={(unit) => unit}
+      options={options.units}
+      onCreate={async (name) => {
+        try {
+          const created = await apiRequest<{ name: string }>(
+            "/api/v1/units",
+            jsonRequest("POST", { name }),
+          );
+          options.addUnit(created.name);
+          onChange(created.name);
+        } catch {
+          // The product can still be saved without the unit.
+        }
+      }}
+      clearLabel="Sin unidad"
+      placeholder="Sin unidad"
+      searchPlaceholder="Buscar o crear unidad"
+    />
+  );
+}
+
+function defaultTaxId(options: CatalogOptions): string {
+  return (
+    (options.taxRates.find((tax) => tax.is_default) ?? options.taxRates[0])
+      ?.id ?? ""
+  );
+}
+
 function CreateCatalogItemDialog({
+  options,
   onCreated,
 }: {
+  options: CatalogOptions;
   onCreated: (item: CatalogItemData) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [fields, setFields] = useState<CatalogItemFormFields>({
     description: "",
     unitPrice: "",
-    taxRate: "21.00",
+    taxRateId: "",
+    unit: null,
   });
-  const action = useAsyncAction<CatalogItemData>();
+  const taxRateId = fields.taxRateId || defaultTaxId(options);
+  const action = useMutation<CatalogItemData>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -109,14 +204,15 @@ function CreateCatalogItemDialog({
         jsonRequest("POST", {
           description: fields.description.trim(),
           unit_price_cents: unitPriceCents,
-          tax_rate: fields.taxRate,
+          ...(taxRateId ? { tax_rate_id: taxRateId } : {}),
+          unit: fields.unit,
         }),
       ),
     );
     if (created) {
       onCreated(created);
       setIsOpen(false);
-      setFields({ description: "", unitPrice: "", taxRate: "21.00" });
+      setFields({ description: "", unitPrice: "", taxRateId: "", unit: null });
     }
   }
 
@@ -161,11 +257,23 @@ function CreateCatalogItemDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-catalog-tax">IVA</Label>
-                <TaxRateSelect
+                <Label htmlFor="new-catalog-tax">Impuesto</Label>
+                <TaxTypeSelect
                   id="new-catalog-tax"
-                  value={fields.taxRate}
-                  onChange={(taxRate) => setFields({ ...fields, taxRate })}
+                  value={taxRateId}
+                  taxRates={options.taxRates}
+                  onChange={(value) =>
+                    setFields({ ...fields, taxRateId: value })
+                  }
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label id="new-catalog-unit-label">Unidad</Label>
+                <UnitField
+                  labelId="new-catalog-unit-label"
+                  value={fields.unit}
+                  options={options}
+                  onChange={(unit) => setFields({ ...fields, unit })}
                 />
               </div>
             </div>
@@ -197,18 +305,25 @@ function CreateCatalogItemDialog({
 
 function EditCatalogItemDialog({
   item,
+  options,
   onSaved,
 }: {
   item: CatalogItemData;
+  options: CatalogOptions;
   onSaved: (item: CatalogItemData) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [fields, setFields] = useState<CatalogItemFormFields>({
     description: item.description,
     unitPrice: (item.unit_price_cents / 100).toFixed(2).replace(".", ","),
-    taxRate: item.tax_rate as (typeof TAX_RATE_OPTIONS)[number],
+    taxRateId:
+      item.tax_rate_id ??
+      options.taxRates.find((tax) => tax.rate === item.tax_rate)?.id ??
+      "",
+    unit: item.unit,
   });
-  const action = useAsyncAction<CatalogItemData>();
+  const taxRateId = fields.taxRateId || defaultTaxId(options);
+  const action = useMutation<CatalogItemData>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -229,7 +344,8 @@ function EditCatalogItemDialog({
         jsonRequest("PATCH", {
           description: fields.description.trim(),
           unit_price_cents: unitPriceCents,
-          tax_rate: fields.taxRate,
+          ...(taxRateId ? { tax_rate_id: taxRateId } : {}),
+          unit: fields.unit,
         }),
       ),
     );
@@ -285,11 +401,23 @@ function EditCatalogItemDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor={`edit-catalog-tax-${item.id}`}>IVA</Label>
-                <TaxRateSelect
+                <Label htmlFor={`edit-catalog-tax-${item.id}`}>Impuesto</Label>
+                <TaxTypeSelect
                   id={`edit-catalog-tax-${item.id}`}
-                  value={fields.taxRate}
-                  onChange={(taxRate) => setFields({ ...fields, taxRate })}
+                  value={taxRateId}
+                  taxRates={options.taxRates}
+                  onChange={(value) =>
+                    setFields({ ...fields, taxRateId: value })
+                  }
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label id={`edit-catalog-unit-label-${item.id}`}>Unidad</Label>
+                <UnitField
+                  labelId={`edit-catalog-unit-label-${item.id}`}
+                  value={fields.unit}
+                  options={options}
+                  onChange={(unit) => setFields({ ...fields, unit })}
                 />
               </div>
             </div>
@@ -326,7 +454,7 @@ function ArchiveToggle({
   item: CatalogItemData;
   onChanged: (item: CatalogItemData) => void;
 }) {
-  const action = useAsyncAction<CatalogItemData>();
+  const action = useMutation<CatalogItemData>();
   const isArchived = item.archived_at !== null;
 
   async function handleClick() {
@@ -357,6 +485,7 @@ function ArchiveToggle({
 }
 
 export function CatalogList() {
+  const options = useCatalogOptions();
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [items, setItems] = useState<CatalogItemData[]>([]);
@@ -474,9 +603,14 @@ export function CatalogList() {
             Mostrar archivados
           </label>
         </div>
-        <CreateCatalogItemDialog
-          onCreated={(created) => setItems((current) => [created, ...current])}
-        />
+        <WriteOnly>
+          <CreateCatalogItemDialog
+            options={options}
+            onCreated={(created) =>
+              setItems((current) => [created, ...current])
+            }
+          />
+        </WriteOnly>
       </div>
 
       {error ? (
@@ -508,7 +642,8 @@ export function CatalogList() {
               <TableRow>
                 <TableHead>Descripción</TableHead>
                 <TableHead className="text-right">Precio</TableHead>
-                <TableHead className="text-right">IVA</TableHead>
+                <TableHead>Unidad</TableHead>
+                <TableHead className="text-right">Impuesto</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -522,7 +657,10 @@ export function CatalogList() {
                   <TableCell className="text-right">
                     {formatEur(createCents(item.unit_price_cents))}
                   </TableCell>
+                  <TableCell>{item.unit ?? "—"}</TableCell>
                   <TableCell className="text-right">
+                    {options.taxRates.find((tax) => tax.id === item.tax_rate_id)
+                      ?.name ?? "IVA"}{" "}
                     {Number(item.tax_rate).toLocaleString("es-ES")} %
                   </TableCell>
                   <TableCell>
@@ -533,13 +671,16 @@ export function CatalogList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <EditCatalogItemDialog
-                        item={item}
-                        onSaved={replaceItem}
-                      />
-                      <ArchiveToggle item={item} onChanged={replaceItem} />
-                    </div>
+                    <WriteOnly>
+                      <div className="flex justify-end gap-1">
+                        <EditCatalogItemDialog
+                          item={item}
+                          options={options}
+                          onSaved={replaceItem}
+                        />
+                        <ArchiveToggle item={item} onChanged={replaceItem} />
+                      </div>
+                    </WriteOnly>
                   </TableCell>
                 </TableRow>
               ))}

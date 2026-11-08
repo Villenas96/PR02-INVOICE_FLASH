@@ -29,6 +29,90 @@
       "when": 1791307420691,
       "tag": "0003_chief_revanche",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792456778577,
+      "tag": "0004_plan_tiers_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792458794525,
+      "tag": "0005_billing",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792469030375,
+      "tag": "0006_payment_tax_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792469304804,
+      "tag": "0007_logos",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792472093758,
+      "tag": "0008_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792488573229,
+      "tag": "0009_quotes_delivery_notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792488911984,
+      "tag": "0010_advisor_exports_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792488950458,
+      "tag": "0011_recurring",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792509133033,
+      "tag": "0012_reminders_bank_onboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792510469838,
+      "tag": "0013_reconciliation_cascade",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792512215836,
+      "tag": "0014_ai_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792513634114,
+      "tag": "0015_plan_contract",
+      "breakpoints": true
     }
   ]
 }

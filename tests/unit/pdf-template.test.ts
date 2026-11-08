@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { createCents, formatEur } from "@/lib/money";
+
 import { renderDocumentPdf } from "@/services/pdf/render";
 import {
   buildDocumentPdfLayout,
@@ -17,6 +19,15 @@ interface PdfDocumentLine {
   lineSubtotalCents: number;
   lineTaxCents: number;
   lineTotalCents: number;
+}
+
+interface PdfImageElement {
+  kind: "image";
+  role: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface PdfTextElement {
@@ -40,7 +51,7 @@ interface PdfTableElement {
   width: number;
 }
 
-type PdfLayoutElement = PdfTableElement | PdfTextElement;
+type PdfLayoutElement = PdfImageElement | PdfTableElement | PdfTextElement;
 
 interface PdfLayout {
   pageSize: {
@@ -110,9 +121,17 @@ function visibleText(layout: PdfLayout): string[] {
     page.elements.flatMap((element) =>
       element.kind === "text"
         ? [element.text]
-        : [...element.headers, ...element.rows.flatMap((row) => row.cells)],
+        : element.kind === "table"
+          ? [...element.headers, ...element.rows.flatMap((row) => row.cells)]
+          : [],
     ),
   );
+}
+
+function elementByRole(layout: PdfLayout, role: string) {
+  return layout.pages
+    .flatMap((page) => page.elements)
+    .find((element) => element.role === role);
 }
 
 function lineTables(layout: PdfLayout): PdfTableElement[] {
@@ -137,6 +156,44 @@ describe("professional invoice PDF template", () => {
     expect(text).toContain(invoiceFixture.fullNumber);
     expect(text).toContain("30/07/2026");
     expect(text).toContain("29/08/2026");
+  });
+
+  it("never prints the client's email, even when the snapshot keeps it", () => {
+    const layout = buildDocumentPdfLayout(createInput()) as PdfLayout;
+    const text = visibleText(layout).join("\n");
+
+    expect(text).not.toContain(invoiceFixture.client.email);
+    expect(text).toContain(invoiceFixture.issuer.email);
+  });
+
+  it.each([null, "", "   \n  "])(
+    "omits the notes block entirely when notes are %j",
+    (notes) => {
+      const layout = buildDocumentPdfLayout({
+        ...createInput(),
+        notes,
+      }) as PdfLayout;
+      const text = visibleText(layout).join("\n");
+
+      expect(layout.pages.flatMap(roles)).not.toContain("notes");
+      expect(text).not.toContain("Sin notas");
+      expect(text).not.toMatch(/^Notas$/m);
+    },
+  );
+
+  it("prints non-empty notes trimmed under their heading", () => {
+    const layout = buildDocumentPdfLayout({
+      ...createInput(),
+      notes: "  Pago por transferencia a 30 días.  ",
+    }) as PdfLayout;
+    const notes = layout.pages
+      .flatMap((page) => page.elements)
+      .find((element) => element.role === "notes");
+
+    expect(notes).toMatchObject({
+      kind: "text",
+      text: "Observaciones\nPago por transferencia a 30 días.",
+    });
   });
 
   it("paginates every line exactly once and repeats the Spanish table header", () => {
@@ -275,7 +332,7 @@ describe("proforma PDF notice", () => {
     const text = visibleText(layout).join("\n");
 
     expect(text).toContain("Proforma");
-    expect(text).toContain("Documento sin validez fiscal.");
+    expect(text).toContain("Documento sin validez fiscal de factura.");
   });
 
   it("renders a proforma for a client without tax id or address", async () => {
@@ -365,3 +422,153 @@ describe("receipt PDF layout", () => {
     expect(pdf.getTitle()).toBe(`Recibo ${input.fullNumber}`);
   });
 });
+
+describe("professional document design (US6)", () => {
+  it.each([
+    { width: 600, height: 200, label: "wide" },
+    { width: 2_000, height: 20, label: "extreme wide" },
+    { width: 50, height: 900, label: "extreme tall" },
+  ])(
+    "scales the issuer logo into its box keeping the $label ratio",
+    ({ width, height }) => {
+      const input = createInput();
+      const layout = buildDocumentPdfLayout({
+        ...input,
+        issuer: { ...input.issuer, logo: { width, height } },
+      }) as PdfLayout;
+      const logo = elementByRole(layout, "issuer_logo") as PdfImageElement;
+
+      expect(logo.kind).toBe("image");
+      expect(logo.width).toBeLessThanOrEqual(150);
+      expect(logo.height).toBeLessThanOrEqual(48);
+      expect(logo.width / logo.height).toBeCloseTo(width / height, 5);
+      expect(logo.width === 150 || Math.abs(logo.height - 48) < 1e-9).toBe(
+        true,
+      );
+      expect(elementByRole(layout, "brand")).toBeUndefined();
+    },
+  );
+
+  it("places the client logo next to the client data", () => {
+    const input = createInput();
+    const layout = buildDocumentPdfLayout({
+      ...input,
+      client: { ...input.client, logo: { width: 300, height: 300 } },
+    }) as PdfLayout;
+    const logo = elementByRole(layout, "client_logo") as PdfImageElement;
+    const heading = elementByRole(layout, "client_heading") as PdfTextElement;
+
+    expect(logo).toMatchObject({ kind: "image", width: 36, height: 36 });
+    expect(logo.x).toBe(heading.x);
+    expect(logo.y).toBeGreaterThan(heading.y);
+  });
+
+  it("prints the unit next to each quantity and the tax by name", () => {
+    const input = createInput();
+    const [first, second, ...rest] = input.lines;
+    const layout = buildDocumentPdfLayout({
+      ...input,
+      lines: [
+        { ...(first as PdfDocumentLine), unit: "hora", taxName: "IGIC" },
+        { ...(second as PdfDocumentLine), unit: null },
+        ...rest,
+      ],
+    }) as PdfLayout;
+    const [table] = lineTables(layout);
+
+    expect(table?.headers).toEqual([
+      "Concepto",
+      "Cantidad",
+      "Precio unitario",
+      "Impuesto",
+      "Total",
+    ]);
+    expect(table?.rows[0]?.cells[1]).toBe("1 hora");
+    expect(table?.rows[0]?.cells[3]).toBe("IGIC 21 %");
+    expect(table?.rows[1]?.cells[1]).toBe("1");
+  });
+
+  it("adds a payment block with due date, amount and bank details", () => {
+    const layout = buildDocumentPdfLayout({
+      ...createInput(),
+      payment: {
+        kind: "bank_account",
+        label: "Cuenta principal",
+        holder: "Estudio Relámpago, S.L.",
+        iban: "ES9121000418450200051332",
+        bic: "CAIXESBB",
+      },
+    }) as PdfLayout;
+    const payment = elementByRole(layout, "payment") as PdfTextElement;
+
+    expect(payment.text.split("\n")).toEqual([
+      "Pago",
+      `Importe: ${formatEurForTest(invoiceFixture.totalCents)}`,
+      "Vencimiento: 29/08/2026",
+      "Cuenta principal",
+      "Titular: Estudio Relámpago, S.L.",
+      "IBAN: ES91 2100 0418 4502 0005 1332",
+      "BIC: CAIXESBB",
+    ]);
+  });
+
+  it.each([
+    [{ kind: "bizum", label: "Bizum", phone: "600123456" }, "Bizum: 600123456"],
+    [
+      {
+        kind: "paypal",
+        label: "PayPal",
+        email_or_url: "pagos@estudio.example",
+      },
+      "PayPal: pagos@estudio.example",
+    ],
+    [
+      { kind: "other", label: "Otro", instructions: "Pago en la tienda" },
+      "Pago en la tienda",
+    ],
+    [{ kind: "cash", label: "Efectivo" }, "Efectivo"],
+  ])("renders the %o payment variant", (payment, expected) => {
+    const layout = buildDocumentPdfLayout({
+      ...createInput(),
+      payment,
+    }) as PdfLayout;
+    const block = elementByRole(layout, "payment") as PdfTextElement;
+    expect(block.text).toContain(expected);
+  });
+
+  it("shows amount and due date even without a collection method, and no block for proformas", () => {
+    const invoice = buildDocumentPdfLayout({
+      ...createInput(),
+      payment: null,
+    }) as PdfLayout;
+    expect((elementByRole(invoice, "payment") as PdfTextElement).text).toMatch(
+      /^Pago\nImporte: /,
+    );
+    const proforma = buildDocumentPdfLayout({
+      ...createInput(),
+      documentType: "proforma",
+    }) as PdfLayout;
+    expect(elementByRole(proforma, "payment")).toBeUndefined();
+  });
+
+  it("renders a PDF with embedded PNG logos", async () => {
+    const input = createInput();
+    const bytes = await renderDocumentPdf(input, {
+      issuerLogo: { bytes: TINY_PNG, format: "png" },
+      clientLogo: { bytes: TINY_PNG, format: "png" },
+    });
+    expect(bytes.byteLength).toBeGreaterThan(1_000);
+  });
+});
+
+function formatEurForTest(cents: number): string {
+  return formatEur(createCents(cents));
+}
+
+// 1×1 transparent PNG.
+const TINY_PNG = Uint8Array.from(
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  ),
+  (character) => character.charCodeAt(0),
+);

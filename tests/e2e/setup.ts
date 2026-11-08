@@ -19,6 +19,10 @@ const BUSINESS_TABLES = [
   "account",
   "verification",
   "user",
+  // Signing keys are encrypted with the auth secret: a key left by a run with
+  // another secret makes every token request fail.
+  "jwks",
+  "oauth_client",
 ] as const;
 
 function e2eDatabaseUrl(): string {

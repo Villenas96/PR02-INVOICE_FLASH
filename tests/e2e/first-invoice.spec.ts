@@ -3,6 +3,8 @@ import { stat } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
+import { chooseLineTax } from "./helpers";
 
 const TEN_MINUTES_MS = 10 * 60 * 1_000;
 const TWO_MINUTES_MS = 2 * 60 * 1_000;
@@ -79,7 +81,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -93,7 +95,7 @@ async function verificationUrl(email: string): Promise<string> {
 
 async function registerVerifyAndSignIn(page: Page): Promise<string> {
   const suffix = crypto.randomUUID();
-  const email = `e2e-${suffix}@example.test`;
+  const email = testEmail(`e2e-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");
@@ -202,13 +204,13 @@ async function fillTwoInvoiceLines(page: Page): Promise<void> {
   await lines.nth(0).getByLabel("Descripción").fill("Consultoría técnica");
   await lines.nth(0).getByLabel("Cantidad").fill("2");
   await lines.nth(0).getByLabel("Precio unitario").fill("100,00");
-  await lines.nth(0).getByLabel("IVA").selectOption("21.00");
+  await chooseLineTax(page, lines.nth(0), "IVA 21 %");
 
   await page.getByRole("button", { name: "Añadir línea" }).click();
   await lines.nth(1).getByLabel("Descripción").fill("Materiales");
   await lines.nth(1).getByLabel("Cantidad").fill("1");
   await lines.nth(1).getByLabel("Precio unitario").fill("50,00");
-  await lines.nth(1).getByLabel("IVA").selectOption("10.00");
+  await chooseLineTax(page, lines.nth(1), "IVA 10 %");
   await expect(page.getByText("297,00 €")).toBeVisible();
 }
 

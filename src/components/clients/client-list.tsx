@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
-import { useAsyncAction } from "@/components/ui/async-action";
+import { WriteOnly } from "@/components/access/read-only";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,8 @@ interface ClientListItem {
   tax_id: string | null;
   email: string | null;
   phone: string | null;
+  postal_code: string | null;
+  city: string | null;
   archived_at: string | null;
 }
 
@@ -55,7 +57,9 @@ function CreateClientDialog({
   const [address, setAddress] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const action = useAsyncAction<ClientListItem>();
+  const [postalCode, setPostalCode] = useState("");
+  const [city, setCity] = useState("");
+  const action = useMutation<ClientListItem>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,6 +72,8 @@ function CreateClientDialog({
           address: address.trim() || null,
           email: email.trim() || null,
           phone: phone.trim() || null,
+          postal_code: postalCode.trim() || null,
+          city: city.trim() || null,
         }),
       ),
     );
@@ -79,6 +85,8 @@ function CreateClientDialog({
       setAddress("");
       setEmail("");
       setPhone("");
+      setPostalCode("");
+      setCity("");
     }
   }
 
@@ -153,6 +161,29 @@ function CreateClientDialog({
                 Necesario para emitir facturas.
               </p>
             </div>
+            <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+              <div className="space-y-2">
+                <Label htmlFor="new-client-postal-code">Código postal</Label>
+                <Input
+                  id="new-client-postal-code"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={20}
+                  value={postalCode}
+                  onChange={(event) => setPostalCode(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-client-city">Población</Label>
+                <Input
+                  id="new-client-city"
+                  autoComplete="address-level2"
+                  maxLength={120}
+                  value={city}
+                  onChange={(event) => setCity(event.target.value)}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="new-client-phone">Teléfono</Label>
               <Input
@@ -196,7 +227,7 @@ function ArchiveToggle({
   client: ClientListItem;
   onChanged: (client: ClientListItem) => void;
 }) {
-  const action = useAsyncAction<ClientListItem>();
+  const action = useMutation<ClientListItem>();
   const isArchived = client.archived_at !== null;
 
   async function handleClick() {
@@ -325,8 +356,8 @@ export function ClientList() {
             <Label htmlFor="client-search">Buscar</Label>
             <Input
               id="client-search"
-              placeholder="Nombre o NIF"
-              className="sm:w-64"
+              placeholder="Nombre, NIF, email, teléfono o población"
+              className="sm:w-80"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -340,9 +371,13 @@ export function ClientList() {
             Mostrar archivados
           </label>
         </div>
-        <CreateClientDialog
-          onCreated={(created) => setItems((current) => [created, ...current])}
-        />
+        <WriteOnly>
+          <CreateClientDialog
+            onCreated={(created) =>
+              setItems((current) => [created, ...current])
+            }
+          />
+        </WriteOnly>
       </div>
 
       {error ? (
@@ -375,6 +410,7 @@ export function ClientList() {
                 <TableHead>Nombre</TableHead>
                 <TableHead>NIF</TableHead>
                 <TableHead>Contacto</TableHead>
+                <TableHead>Población</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -393,6 +429,11 @@ export function ClientList() {
                   <TableCell>{client.tax_id ?? "—"}</TableCell>
                   <TableCell>{client.email ?? client.phone ?? "—"}</TableCell>
                   <TableCell>
+                    {[client.postal_code, client.city]
+                      .filter(Boolean)
+                      .join(" ") || "—"}
+                  </TableCell>
+                  <TableCell>
                     {client.archived_at ? (
                       <Badge variant="secondary">Archivado</Badge>
                     ) : (
@@ -400,7 +441,9 @@ export function ClientList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <ArchiveToggle client={client} onChanged={replaceItem} />
+                    <WriteOnly>
+                      <ArchiveToggle client={client} onChanged={replaceItem} />
+                    </WriteOnly>
                   </TableCell>
                 </TableRow>
               ))}

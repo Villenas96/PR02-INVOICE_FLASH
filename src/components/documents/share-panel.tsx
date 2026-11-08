@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { useAsyncAction } from "@/components/ui/async-action";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +47,8 @@ function formattedDateTime(date: string): string {
 function ShareLinkControls({ documentId }: { documentId: string }) {
   const [link, setLink] = useState<ShareLinkData>();
   const [copied, setCopied] = useState(false);
-  const createAction = useAsyncAction<ShareLinkData>();
-  const disableAction = useAsyncAction<ShareLinkData>();
+  const createAction = useMutation<ShareLinkData>();
+  const disableAction = useMutation<ShareLinkData>();
 
   async function handleCreate() {
     const created = await createAction.run(() =>
@@ -145,7 +145,7 @@ function EmailForm({
 }) {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [customMessage, setCustomMessage] = useState("");
-  const action = useAsyncAction<{ delivery_id: string; status: string }>();
+  const action = useMutation<{ delivery_id: string; status: string }>();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -10,7 +10,9 @@ import {
   payments,
   users,
 } from "@/db/schema";
+import { documentTypeEnum } from "@/db/schema/document-series";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/api/pagination";
+import { type DocumentType, documentLimit } from "@/lib/plan";
 
 import { createIntegrationDatabase } from "./database";
 
@@ -94,6 +96,9 @@ const { PATCH: patchPayment, DELETE: deletePayment } = await import(
   "@/app/api/v1/payments/[id]/route"
 );
 const { GET: getSeries } = await import("@/app/api/v1/series/route");
+const { GET: getCompany, PUT: putCompany } = await import(
+  "@/app/api/v1/company/route"
+);
 const { PATCH: patchSeries } = await import("@/app/api/v1/series/[id]/route");
 
 interface TenantFixture {
@@ -802,5 +807,82 @@ describe("API invariants: tenant isolation (foreign resource -> 404)", () => {
       routeContext(ownDocumentId),
     );
     expect(response.status).toBe(201);
+  });
+});
+
+describe("API invariants: company plan contract", () => {
+  let owner: TenantFixture;
+
+  beforeEach(async () => {
+    setAuthEmailDeliveryHandler(() => Promise.resolve());
+    owner = await createTenant();
+  });
+
+  it("reports per-type usage for every issuable type with limits from plan.ts", async () => {
+    const response = await getCompany(
+      authenticatedRequest(owner, "/api/v1/company"),
+    );
+    expect(response.status).toBe(200);
+    const body = await jsonRecord(response);
+    const usage = body.usage as Array<Record<string, unknown>>;
+
+    expect(usage.map((entry) => entry.document_type)).toEqual(
+      documentTypeEnum.enumValues,
+    );
+    for (const entry of usage) {
+      expect(entry).toEqual({
+        document_type: entry.document_type,
+        used: 0,
+        limit: documentLimit("basic", entry.document_type as DocumentType),
+        warning: false,
+        reached: false,
+      });
+    }
+    expect(body).toMatchObject({
+      role: "owner",
+      plan: "basic",
+      plan_label: "Básico",
+      features: [],
+      effective_ui: "simple",
+    });
+    for (const removed of [
+      "docs_issued_this_month",
+      "doc_limit",
+      "can_send_email",
+      "usage_warning",
+    ]) {
+      expect(body).not.toHaveProperty(removed);
+    }
+  });
+
+  it("only lets Pro switch to the full interface, and accepts the simple one", async () => {
+    const denied = await putCompany(
+      authenticatedRequest(owner, "/api/v1/company", {
+        method: "PUT",
+        body: JSON.stringify({ ui_mode: "full" }),
+      }),
+    );
+    expect(denied.status).toBe(403);
+    expect((await jsonRecord(denied)).error).toMatchObject({
+      code: "feature_not_in_plan",
+      details: { feature: "full_ui", required_plan: "pro" },
+    });
+
+    await database
+      .update(companies)
+      .set({ plan: "pro" })
+      .where(eq(companies.id, owner.companyId));
+    const full = await putCompany(
+      authenticatedRequest(owner, "/api/v1/company", {
+        method: "PUT",
+        body: JSON.stringify({ ui_mode: "simple" }),
+      }),
+    );
+    expect(full.status).toBe(200);
+    expect(await jsonRecord(full)).toMatchObject({
+      plan: "pro",
+      ui_mode: "simple",
+      effective_ui: "simple",
+    });
   });
 });

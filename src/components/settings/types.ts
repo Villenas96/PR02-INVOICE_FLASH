@@ -1,6 +1,10 @@
+import type { CompanyPlanData } from "@/components/plan/types";
+import type { OnboardingProgress } from "@/lib/onboarding";
+import type { ReminderPolicy } from "@/lib/reminders";
+
 export type DocumentType = "invoice" | "proforma" | "receipt";
 
-export interface CompanySettings {
+export interface CompanySettings extends CompanyPlanData {
   id: string;
   legal_name: string | null;
   tax_id: string | null;
@@ -12,15 +16,11 @@ export interface CompanySettings {
   default_tax_rate: string;
   retention_rate: string;
   currency: string;
-  plan: "free" | "pro";
+  reminder_policy?: ReminderPolicy;
   is_ready_to_issue: boolean;
   missing_fields: string[];
-  docs_issued_this_month: number;
-  doc_limit: number;
-  can_generate_pdf: boolean;
-  can_send_email: boolean;
-  can_share_link: boolean;
-  usage_warning: boolean;
+  missing_to_issue: string[];
+  onboarding?: OnboardingProgress;
 }
 
 export interface DocumentSeries {
@@ -29,6 +29,7 @@ export interface DocumentSeries {
   prefix: string;
   next_number: number;
   is_default: boolean;
+  archived_at: string | null;
 }
 
 export interface SeriesPage {

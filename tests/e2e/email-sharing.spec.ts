@@ -1,5 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
 
 function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
@@ -39,7 +40,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -53,7 +54,7 @@ async function verificationUrl(email: string): Promise<string> {
 
 async function setCompanyPlan(
   email: string,
-  plan: "free" | "pro",
+  plan: "basic" | "essential",
 ): Promise<void> {
   const database = postgres(e2eDatabaseUrl(), { max: 1 });
   try {
@@ -68,7 +69,7 @@ async function setCompanyPlan(
 
 async function registerVerifyAndSignIn(page: Page): Promise<string> {
   const suffix = crypto.randomUUID();
-  const email = `e2e-email-share-${suffix}@example.test`;
+  const email = testEmail(`e2e-email-share-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");
@@ -156,7 +157,7 @@ test("el plan de pago envía por correo y una reentrega con la misma clave no du
 }) => {
   const email = await registerVerifyAndSignIn(page);
   const documentId = await configureCompanyAndIssueInvoice(page, email);
-  await setCompanyPlan(email, "pro");
+  await setCompanyPlan(email, "essential");
 
   await page.goto(`/documents/${documentId}`);
   await page.reload();
@@ -169,7 +170,7 @@ test("el plan de pago envía por correo y una reentrega con la misma clave no du
     await route.continue();
   });
 
-  await page.getByLabel("Correo del destinatario").fill("cliente@example.test");
+  await page.getByLabel("Correo del destinatario").fill(testEmail("cliente"));
   const emailResponsePromise = page.waitForResponse(
     (response) =>
       response.url().includes("/email") &&

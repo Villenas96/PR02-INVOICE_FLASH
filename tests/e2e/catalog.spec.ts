@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
+import { selectClientInEditor } from "./helpers";
 
 function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
@@ -57,7 +59,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -71,7 +73,7 @@ async function verificationUrl(email: string): Promise<string> {
 
 async function registerVerifyAndSignIn(page: Page): Promise<string> {
   const suffix = crypto.randomUUID();
-  const email = `e2e-catalog-${suffix}@example.test`;
+  const email = testEmail(`e2e-catalog-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");
@@ -139,21 +141,23 @@ test("copia un concepto del catálogo en una línea sin acoplar el documento a e
   expect(clientResponse.status(), await clientResponse.text()).toBe(201);
 
   await page.goto("/documents/new");
-  await page.getByLabel("Buscar cliente").fill("Cliente Catálogo E2E");
+  await selectClientInEditor(
+    page,
+    "Cliente Catálogo E2E",
+    /Cliente Catálogo E2E.*A87654321/,
+  );
   await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente Catálogo E2E · A87654321" });
-  await page.getByRole("button", { name: "Añadir desde catálogo" }).click();
-  await page.getByRole("button", { name: /Hora de consultoría E2E/ }).click();
-  const catalogLine = page.getByRole("group", { name: "Línea 2" });
+    .getByRole("combobox", { name: "Añadir producto del catálogo" })
+    .click();
+  await page.keyboard.type("Hora de consultoría");
+  await page.getByRole("option", { name: /Hora de consultoría E2E/ }).click();
+  // The untouched empty first line is replaced by the catalog product.
+  const catalogLine = page.getByRole("group", { name: "Línea 1" });
   await expect(catalogLine.getByLabel("Descripción")).toHaveValue(
     "Hora de consultoría E2E",
   );
   await expect(catalogLine.getByLabel("Precio unitario")).toHaveValue("60,00");
-  await page
-    .getByRole("group", { name: "Línea 1" })
-    .getByRole("button", { name: "Quitar" })
-    .click();
+  await expect(page.getByRole("group", { name: "Línea 2" })).toHaveCount(0);
 
   await page.route("**/api/v1/documents", async (route) => {
     if (route.request().method() === "POST") {
@@ -189,11 +193,17 @@ test("copia un concepto del catálogo en una línea sin acoplar el documento a e
   await expect(page.getByText("Archivado")).toBeVisible();
 
   await page.goto("/documents/new");
-  await page.getByRole("button", { name: "Añadir desde catálogo" }).click();
-  await page.getByLabel("Buscar concepto").fill("Hora de consultoría E2E");
+  await page
+    .getByRole("combobox", { name: "Añadir producto del catálogo" })
+    .click();
+  await page.keyboard.type("Hora de consultoría E2E");
+  // Archived products are never offered; only «Crear …» remains.
   await expect(
-    page.getByText("No hay conceptos con esta búsqueda."),
+    page.getByRole("option", { name: /Crear «Hora de consultoría E2E»/ }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /^Hora de consultoría E2E/ }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await page.goto("/catalog");

@@ -4,6 +4,31 @@ import type { Database } from "@/db";
 import { createDatabase } from "@/db";
 import { verifications } from "@/db/schema/auth";
 import { emailDeliveries } from "@/db/schema/email-delivery";
+import { subscriptions } from "@/db/schema/subscription";
+import { logSafe } from "@/lib/log";
+import { planAdvisorExports } from "@/services/advisor-schedule";
+import { purgeExpiredSamples } from "@/services/onboarding";
+import { planRecurringCycles } from "@/services/recurring/planner";
+import { planPaymentReminders } from "@/services/reminder-planner";
+import type { PrivateBucket } from "@/services/storage";
+import {
+  type ListableBucket,
+  purgeOrphanLogos,
+} from "@/services/storage-purge";
+import { createBillingGraceMessage } from "@/workers/messages";
+
+export const PURGE_CRON = "0 3 * * *";
+export const PLANNER_CRON = "0 5 * * *";
+
+export interface JobsQueue {
+  send(message: unknown): Promise<void>;
+}
+
+export interface PlannerDependencies {
+  database?: Database;
+  queue: JobsQueue;
+  now?: Date;
+}
 
 export const PII_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -58,10 +83,95 @@ export async function purgeExpiredAuthVerifications(
 }
 
 export async function runScheduledPurge(
-  dependencies: { database?: Database; now?: Date } = {},
+  dependencies: {
+    database?: Database;
+    now?: Date;
+    bucket?: ListableBucket & Partial<PrivateBucket>;
+  } = {},
 ): Promise<void> {
   const database = dependencies.database ?? createDatabase();
   const now = dependencies.now ?? new Date();
   await purgeTerminalEmailDeliveryPii(database, now);
   await purgeExpiredAuthVerifications(database, now);
+  if (dependencies.bucket) {
+    await purgeOrphanLogos({ database, bucket: dependencies.bucket, now });
+    // Wizard samples live 7 days (FR-049).
+    await purgeExpiredSamples({
+      database,
+      bucket: dependencies.bucket as unknown as PrivateBucket,
+      now,
+    });
+  }
+}
+
+/**
+ * Planner step: one `billing.grace` job per company in a payment grace
+ * period. The handler decides (notice, downgrade or nothing), so re-running
+ * the planner is harmless.
+ */
+export async function planBillingGrace(
+  dependencies: PlannerDependencies,
+): Promise<number> {
+  const database = dependencies.database ?? createDatabase();
+  const now = dependencies.now ?? new Date();
+  const due = await database
+    .select({ companyId: subscriptions.companyId })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.status, "past_due"),
+        isNotNull(subscriptions.graceUntil),
+      ),
+    );
+  for (const { companyId } of due) {
+    await dependencies.queue.send(createBillingGraceMessage(companyId, now));
+  }
+  return due.length;
+}
+
+/**
+ * Daily planner (`0 5 * * *`, research R11): it only selects pending work,
+ * inserts idempotent claims and enqueues jobs; it never does the work itself.
+ */
+export type PlannerSummary = Record<string, number | "failed">;
+
+export async function runDailyPlanner(
+  dependencies: PlannerDependencies,
+): Promise<PlannerSummary> {
+  const database = dependencies.database ?? createDatabase();
+  const now = dependencies.now ?? new Date();
+  const steps: Array<[string, () => Promise<number>]> = [
+    [
+      "billing_grace",
+      () => planBillingGrace({ ...dependencies, database, now }),
+    ],
+    [
+      "payment_reminders",
+      () => planPaymentReminders({ ...dependencies, database, now }),
+    ],
+    [
+      "recurring_cycles",
+      () => planRecurringCycles({ ...dependencies, database, now }),
+    ],
+    [
+      "advisor_exports",
+      () => planAdvisorExports({ ...dependencies, database, now }),
+    ],
+  ];
+  const summary: PlannerSummary = {};
+  for (const [step, run] of steps) {
+    // Each step is independent: one failing step must not starve the rest.
+    try {
+      const planned = await run();
+      summary[step] = planned;
+      logSafe("info", "planner.step_completed", { step, planned });
+    } catch (error) {
+      summary[step] = "failed";
+      logSafe("error", "planner.step_failed", {
+        step,
+        error_type: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
+  }
+  return summary;
 }

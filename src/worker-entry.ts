@@ -1,13 +1,38 @@
+import {
+  getDownloadTokenSecret,
+  getEmailFrom,
+  getEmailReplyTo,
+  optionalEnv,
+} from "@/lib/env";
 import type { PrivateBucket } from "@/services/storage";
+import type { ListableBucket } from "@/services/storage-purge";
+import { handleBillingGrace } from "@/workers/handlers/billing-grace";
 import {
   createDocumentEmailHandler,
   createEmailSendHandler,
   createResendEmailProvider,
+  type TransactionalEmailProvider,
 } from "@/workers/handlers/email-send";
+import { handleExportBuild } from "@/workers/handlers/export-build";
+import { handleImportAnalyze } from "@/workers/handlers/import-analyze";
+import { handleImportApply } from "@/workers/handlers/import-apply";
+import { createNoticeEmailHandler } from "@/workers/handlers/notice-email";
 import { createPdfRenderHandler } from "@/workers/handlers/pdf-render";
-import type { EmailSendMessage, PdfRenderMessage } from "@/workers/messages";
+import { handlePdfSample } from "@/workers/handlers/pdf-sample";
+import { handleRecurringRun } from "@/workers/handlers/recurring-run";
+import { handleReminderSend } from "@/workers/handlers/reminder-send";
+import { dispatchJob } from "@/workers/jobs";
+import type {
+  EmailSendMessage,
+  JobMessage,
+  PdfRenderMessage,
+} from "@/workers/messages";
 import { processQueueBatch, type QueueBatch } from "@/workers/queue-consumer";
-import { runScheduledPurge } from "@/workers/scheduled";
+import {
+  PLANNER_CRON,
+  runDailyPlanner,
+  runScheduledPurge,
+} from "@/workers/scheduled";
 import openNextWorker, {
   BucketCachePurge,
   DOQueueHandler,
@@ -20,8 +45,11 @@ export { BucketCachePurge, DOQueueHandler, DOShardedTagCache };
 type QueueEnv = CloudflareEnv & {
   STORAGE_BUCKET: PrivateBucket;
   RESEND_API_KEY?: string;
-  RESEND_FROM_EMAIL?: string;
+  EMAIL_FROM?: string;
+  EMAIL_REPLY_TO?: string;
+  APP_BASE_URL?: string;
   BETTER_AUTH_URL?: string;
+  BETTER_AUTH_SECRET?: string;
 };
 
 interface CloudflareQueueMessage {
@@ -33,6 +61,15 @@ interface CloudflareQueueMessage {
 
 interface CloudflareMessageBatch {
   messages: CloudflareQueueMessage[];
+}
+
+/** `APP_BASE_URL`, falling back to the auth base URL of v1 deployments. */
+function appBaseUrlFrom(env: QueueEnv): string {
+  return (
+    optionalEnv("APP_BASE_URL", env) ??
+    env.BETTER_AUTH_URL ??
+    "http://localhost:3000"
+  ).replace(/\/+$/, "");
 }
 
 async function queue(
@@ -49,11 +86,17 @@ async function queue(
   };
 
   const renderPdf = createPdfRenderHandler({ bucket: env.STORAGE_BUCKET });
-  const emailProvider = createResendEmailProvider({
-    apiKey: env.RESEND_API_KEY ?? "",
-    from: env.RESEND_FROM_EMAIL ?? "facturas@invoiceflash.app",
-  });
-  const appBaseUrl = env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  // Resolve the sender lazily: a missing EMAIL_FROM must only fail (and
+  // retry) email deliveries, never PDF renders in the same batch.
+  const emailProvider: TransactionalEmailProvider = {
+    send: (message) =>
+      createResendEmailProvider({
+        apiKey: env.RESEND_API_KEY ?? "",
+        from: getEmailFrom(env),
+        replyTo: getEmailReplyTo(env),
+      }).send(message),
+  };
+  const appBaseUrl = appBaseUrlFrom(env);
   const sendEmail = createEmailSendHandler({
     provider: emailProvider,
     appBaseUrl,
@@ -61,16 +104,75 @@ async function queue(
       provider: emailProvider,
       appBaseUrl,
     }),
+    noticeHandler: createNoticeEmailHandler({
+      provider: emailProvider,
+      appBaseUrl,
+      tokenSecret: () => getDownloadTokenSecret(env),
+    }),
   });
 
   await processQueueBatch(adaptedBatch, {
     renderPdf: (message: PdfRenderMessage) => renderPdf(message),
     sendEmail: (message: EmailSendMessage) => sendEmail(message),
+    runJob: (message: JobMessage) => runJob(message, env),
   });
 }
 
-async function scheduled(): Promise<void> {
-  await runScheduledPurge();
+/** Adapts a Cloudflare queue binding to the minimal producer interface. */
+function producer(queue: { send(message: unknown): Promise<unknown> }) {
+  return {
+    send: async (message: unknown) => {
+      await queue.send(message);
+    },
+  };
+}
+
+async function runJob(message: JobMessage, env: QueueEnv): Promise<void> {
+  await dispatchJob(message, {
+    "billing.grace": (job) =>
+      handleBillingGrace(job, { emailQueue: producer(env.EMAIL_SEND_QUEUE) }),
+    "import.analyze": (job) =>
+      handleImportAnalyze(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+      }),
+    "export.build": (job) =>
+      handleExportBuild(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+        pdfQueue: producer(env.PDF_RENDER_QUEUE),
+        emailQueue: producer(env.EMAIL_SEND_QUEUE),
+        secret: getDownloadTokenSecret(env),
+      }),
+    "reminder.send": (job) =>
+      handleReminderSend(job, {
+        emailQueue: producer(env.EMAIL_SEND_QUEUE),
+      }),
+    "recurring.run": (job) =>
+      handleRecurringRun(job, {
+        pdfQueue: producer(env.PDF_RENDER_QUEUE),
+        emailQueue: producer(env.EMAIL_SEND_QUEUE),
+      }),
+    "pdf.sample": (job) =>
+      handlePdfSample(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+      }),
+    "import.apply": (job) =>
+      handleImportApply(job, {
+        bucket: env.STORAGE_BUCKET as unknown as PrivateBucket,
+      }),
+  });
+}
+
+async function scheduled(
+  controller: { cron: string },
+  env: QueueEnv,
+): Promise<void> {
+  if (controller.cron === PLANNER_CRON) {
+    await runDailyPlanner({ queue: producer(env.JOBS_QUEUE) });
+    return;
+  }
+  await runScheduledPurge({
+    bucket: env.STORAGE_BUCKET as unknown as ListableBucket,
+  });
 }
 
 export default {

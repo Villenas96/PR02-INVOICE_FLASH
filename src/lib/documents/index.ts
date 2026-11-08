@@ -1,3 +1,4 @@
+import type { DocumentType } from "@/lib/plan";
 export type CompanyReadinessField = "legalName" | "taxId" | "address";
 
 export interface CompanyFiscalDetails {
@@ -43,8 +44,12 @@ export interface ClientSnapshotInput {
   name: string;
   taxId: string | null;
   address: string | null;
+  /** Kept for sending the document; never printed (FR-006). */
   email: string | null;
   phone: string | null;
+  /** Content-addressed key, frozen so later logo changes never alter an
+   * issued document (FR-025). */
+  logoKey?: string | null;
 }
 
 export type ClientSnapshot = Readonly<ClientSnapshotInput>;
@@ -87,7 +92,7 @@ export interface ClientFiscalDetails {
 
 export interface IssueValidationInput {
   /** Invoices need the client's tax id and address; proformas do not. */
-  documentType?: "invoice" | "proforma";
+  documentType?: DocumentType;
   company: CompanyFiscalDetails;
   clientId?: string | null;
   /** Fiscal data of the selected client, when one is selected. */
@@ -295,5 +300,6 @@ export function buildClientSnapshot(
     address: client.address,
     email: client.email,
     phone: client.phone,
+    ...(client.logoKey ? { logoKey: client.logoKey } : {}),
   });
 }

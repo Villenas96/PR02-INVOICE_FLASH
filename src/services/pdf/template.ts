@@ -1,4 +1,6 @@
+import { documentTypeLabel } from "@/lib/documents/labels";
 import { createCents, formatEur } from "@/lib/money";
+import type { DocumentType } from "@/lib/plan";
 
 export const PDF_PAGE_SIZE = {
   width: 595.28,
@@ -30,11 +32,19 @@ export interface DocumentPdfLine {
   position: number;
   description: string;
   quantity: string;
+  /** Printed next to the quantity when present (FR-030). */
+  unit?: string | null;
   unitPriceCents: number;
   taxRate: string;
+  /** Frozen tax name; documents issued before tax types were IVA. */
+  taxName?: string;
   lineSubtotalCents: number;
   lineTaxCents: number;
   lineTotalCents: number;
+  /** Groups lines per delivery note when invoicing several (US9-AC4). */
+  sectionLabel?: string | null;
+  /** Layout-only row announcing a section; never part of the totals. */
+  heading?: boolean;
 }
 
 export interface DocumentPdfParty {
@@ -43,7 +53,23 @@ export interface DocumentPdfParty {
    * client may lack it (proformas carry no fiscal validity). */
   taxId: string | null;
   addressLines: string[];
+  /** Printed for the issuer only: documents never show the client's email
+   * (FR-006), even though the client snapshot keeps it for sending. */
   email?: string | null;
+  /** Intrinsic size of the embedded logo, when there is one. */
+  logo?: { width: number; height: number } | null;
+}
+
+/** Collection method frozen at issue (FR-022, FR-026). */
+export interface DocumentPdfPayment {
+  kind: string;
+  label: string;
+  holder?: string;
+  iban?: string;
+  bic?: string;
+  phone?: string;
+  email_or_url?: string;
+  instructions?: string;
 }
 
 export interface DocumentPdfReceiptDetails {
@@ -52,16 +78,21 @@ export interface DocumentPdfReceiptDetails {
 }
 
 export interface DocumentPdfInput {
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   fullNumber: string;
   issueDate: string;
   dueDate?: string | null;
+  /** Quotes print their validity instead of a due date (FR-035). */
+  validUntil?: string | null;
   currency: "EUR";
   issuer: DocumentPdfParty;
   client: DocumentPdfParty;
   lines: DocumentPdfLine[];
   subtotalCents: number;
+  /** `name` is missing on documents issued before tax types existed:
+   * they were all IVA. */
   taxBreakdown: Array<{
+    name?: string;
     rate: string;
     baseCents: number;
     taxCents: number;
@@ -70,8 +101,12 @@ export interface DocumentPdfInput {
   retentionCents: number;
   totalCents: number;
   notes?: string | null;
+  /** Invoices only: frozen collection method for the payment block. */
+  payment?: DocumentPdfPayment | null;
   /** Only present (and only used) for receipts. */
   receipt?: DocumentPdfReceiptDetails;
+  /** Diagonal mark on every page; only the wizard's sample sets it (FR-049). */
+  watermark?: string | null;
 }
 
 export interface PdfTextElement {
@@ -95,7 +130,23 @@ export interface PdfTableElement {
   width: number;
 }
 
-export type PdfLayoutElement = PdfTableElement | PdfTextElement;
+export interface PdfImageElement {
+  kind: "image";
+  role: "issuer_logo" | "client_logo";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type PdfLayoutElement =
+  | PdfImageElement
+  | PdfTableElement
+  | PdfTextElement;
+
+const ISSUER_LOGO_BOX = { width: 150, height: 48, top: 805 } as const;
+const CLIENT_LOGO_BOX = { width: 110, height: 36, top: 740 } as const;
+const WRAP_CHARACTERS = 52;
 
 export interface DocumentPdfLayout {
   pageSize: typeof PDF_PAGE_SIZE;
@@ -138,13 +189,51 @@ function formatMoney(value: number): string {
   return formatEur(createCents(value));
 }
 
-function partyDetails(party: DocumentPdfParty): string {
+function partyDetails(
+  party: DocumentPdfParty,
+  { includeEmail }: { includeEmail: boolean },
+): string {
   return [
     party.legalName,
     ...(party.taxId ? [`NIF: ${party.taxId}`] : []),
     ...party.addressLines,
-    ...(party.email ? [party.email] : []),
+    ...(includeEmail && party.email ? [party.email] : []),
   ].join("\n");
+}
+
+function issuerDetails(party: DocumentPdfParty): string {
+  return partyDetails(party, { includeEmail: true });
+}
+
+function clientDetails(party: DocumentPdfParty): string {
+  return partyDetails(party, { includeEmail: false });
+}
+
+/** Inserts a heading row whenever the section label changes. */
+export function withSectionHeadings(
+  lines: readonly DocumentPdfLine[],
+): DocumentPdfLine[] {
+  const rows: DocumentPdfLine[] = [];
+  let current: string | null = null;
+  for (const line of lines) {
+    const label = line.sectionLabel ?? null;
+    if (label && label !== current) {
+      rows.push({
+        position: line.position,
+        description: label,
+        quantity: "0",
+        unitPriceCents: 0,
+        taxRate: "0",
+        lineSubtotalCents: 0,
+        lineTaxCents: 0,
+        lineTotalCents: 0,
+        heading: true,
+      });
+    }
+    current = label;
+    rows.push(line);
+  }
+  return rows;
 }
 
 function paginateLines(lines: DocumentPdfLine[]): DocumentPdfLine[][] {
@@ -176,20 +265,100 @@ function paginateLines(lines: DocumentPdfLine[]): DocumentPdfLine[][] {
   return pages;
 }
 
+/** Fits an image inside a box without distorting it (R10, scaleToFit). */
+export function scaleToFit(
+  size: { width: number; height: number },
+  box: { width: number; height: number },
+): { width: number; height: number } {
+  const ratio = Math.min(box.width / size.width, box.height / size.height);
+  return { width: size.width * ratio, height: size.height * ratio };
+}
+
+function logoElement(
+  role: PdfImageElement["role"],
+  logo: { width: number; height: number },
+  box: { width: number; height: number; top: number },
+  x: number,
+): PdfImageElement {
+  const size = scaleToFit(logo, box);
+  return { kind: "image", role, x, y: box.top - size.height, ...size };
+}
+
+function wrapText(text: string, width = WRAP_CHARACTERS): string[] {
+  return text.split("\n").flatMap((paragraph) => {
+    const lines: string[] = [];
+    let current = "";
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      if (current && `${current} ${word}`.length > width) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = current ? `${current} ${word}` : word;
+      }
+    }
+    lines.push(current);
+    return lines;
+  });
+}
+
+function formatIban(iban: string): string {
+  return iban.replace(/(.{4})(?=.)/g, "$1 ");
+}
+
+function paymentText(input: DocumentPdfInput): string {
+  const lines = [
+    "Pago",
+    `Importe: ${formatMoney(input.totalCents)}`,
+    ...(input.dueDate ? [`Vencimiento: ${formatDate(input.dueDate)}`] : []),
+  ];
+  const payment = input.payment;
+  if (payment) {
+    switch (payment.kind) {
+      case "bank_account":
+        lines.push(
+          payment.label,
+          ...(payment.holder ? [`Titular: ${payment.holder}`] : []),
+          ...(payment.iban ? [`IBAN: ${formatIban(payment.iban)}`] : []),
+          ...(payment.bic ? [`BIC: ${payment.bic}`] : []),
+        );
+        break;
+      case "bizum":
+        lines.push(`Bizum: ${payment.phone ?? ""}`.trim());
+        break;
+      case "paypal":
+        lines.push(`PayPal: ${payment.email_or_url ?? ""}`.trim());
+        break;
+      case "cash":
+        lines.push("Efectivo");
+        break;
+      default:
+        lines.push(
+          payment.label,
+          ...wrapText(payment.instructions ?? "").filter(Boolean),
+        );
+    }
+  }
+  return lines.join("\n");
+}
+
 function lineTable(lines: DocumentPdfLine[], y: number): PdfTableElement {
   return {
     kind: "table",
     role: "line_table",
-    headers: ["Concepto", "Cantidad", "Precio unitario", "IVA", "Total"],
+    headers: ["Concepto", "Cantidad", "Precio unitario", "Impuesto", "Total"],
     rows: lines.map((line) => ({
       position: line.position,
-      cells: [
-        line.description,
-        formatQuantity(line.quantity),
-        formatMoney(line.unitPriceCents),
-        `${formatPercentage(line.taxRate)} %`,
-        formatMoney(line.lineTotalCents),
-      ],
+      cells: line.heading
+        ? [line.description, "", "", "", ""]
+        : [
+            line.description,
+            line.unit
+              ? `${formatQuantity(line.quantity)} ${line.unit}`
+              : formatQuantity(line.quantity),
+            formatMoney(line.unitPriceCents),
+            `${line.taxName ?? "IVA"} ${formatPercentage(line.taxRate)} %`,
+            formatMoney(line.lineTotalCents),
+          ],
     })),
     x: PDF_MARGINS.left,
     y,
@@ -211,7 +380,7 @@ function taxBreakdownText(input: DocumentPdfInput): string {
   return input.taxBreakdown
     .map(
       (entry) =>
-        `IVA ${formatPercentage(entry.rate)} %    ${formatMoney(entry.taxCents)}`,
+        `${entry.name ?? "IVA"} ${formatPercentage(entry.rate)} %    ${formatMoney(entry.taxCents)}`,
     )
     .join("\n");
 }
@@ -227,13 +396,7 @@ function totalsText(input: DocumentPdfInput): string {
 export function documentTitle(
   documentType: DocumentPdfInput["documentType"],
 ): string {
-  if (documentType === "invoice") {
-    return "Factura";
-  }
-  if (documentType === "proforma") {
-    return "Proforma";
-  }
-  return "Recibo";
+  return documentTypeLabel(documentType);
 }
 
 function buildReceiptPdfLayout(input: DocumentPdfInput): DocumentPdfLayout {
@@ -275,7 +438,7 @@ function buildReceiptPdfLayout(input: DocumentPdfInput): DocumentPdfLayout {
     {
       kind: "text",
       role: "issuer_details",
-      text: partyDetails(input.issuer),
+      text: issuerDetails(input.issuer),
       x: PDF_MARGINS.left,
       y: 666,
     },
@@ -289,7 +452,7 @@ function buildReceiptPdfLayout(input: DocumentPdfInput): DocumentPdfLayout {
     {
       kind: "text",
       role: "client_details",
-      text: partyDetails(input.client),
+      text: clientDetails(input.client),
       x: 310,
       y: 666,
     },
@@ -336,7 +499,7 @@ export function buildDocumentPdfLayout(
     return buildReceiptPdfLayout(input);
   }
 
-  const linePages = paginateLines(input.lines);
+  const linePages = paginateLines(withSectionHeadings(input.lines));
   const pageCount = linePages.length;
   const title = documentTitle(input.documentType);
   const pages = linePages.map((pageLines, pageIndex) => {
@@ -346,14 +509,23 @@ export function buildDocumentPdfLayout(
     const elements: PdfLayoutElement[] = [];
 
     if (isFirstPage) {
+      // The issuer's logo heads the document (FR-024); without one, the
+      // product wordmark keeps its place.
       elements.push(
-        {
-          kind: "text",
-          role: "brand",
-          text: "INVOICE FLASH",
-          x: PDF_MARGINS.left,
-          y: 790,
-        },
+        input.issuer.logo
+          ? logoElement(
+              "issuer_logo",
+              input.issuer.logo,
+              ISSUER_LOGO_BOX,
+              PDF_MARGINS.left,
+            )
+          : {
+              kind: "text",
+              role: "brand",
+              text: "INVOICE FLASH",
+              x: PDF_MARGINS.left,
+              y: 790,
+            },
         {
           kind: "text",
           role: "document_title",
@@ -362,12 +534,21 @@ export function buildDocumentPdfLayout(
           y: 744,
         },
       );
+      if (input.client.logo) {
+        elements.push(
+          logoElement("client_logo", input.client.logo, CLIENT_LOGO_BOX, 310),
+        );
+      }
 
-      if (input.documentType === "proforma") {
+      if (
+        input.documentType === "proforma" ||
+        input.documentType === "quote" ||
+        input.documentType === "delivery_note"
+      ) {
         elements.push({
           kind: "text",
           role: "fiscal_notice",
-          text: "Documento sin validez fiscal.",
+          text: "Documento sin validez fiscal de factura.",
           x: PDF_MARGINS.left,
           y: 724,
         });
@@ -394,7 +575,7 @@ export function buildDocumentPdfLayout(
         {
           kind: "text",
           role: "issuer_details",
-          text: partyDetails(input.issuer),
+          text: issuerDetails(input.issuer),
           x: PDF_MARGINS.left,
           y: 666,
         },
@@ -408,7 +589,7 @@ export function buildDocumentPdfLayout(
         {
           kind: "text",
           role: "client_details",
-          text: partyDetails(input.client),
+          text: clientDetails(input.client),
           x: 310,
           y: 666,
         },
@@ -422,7 +603,10 @@ export function buildDocumentPdfLayout(
         {
           kind: "text",
           role: "due_date",
-          text: `Fecha de vencimiento\n${input.dueDate ? formatDate(input.dueDate) : "-"}`,
+          text:
+            input.documentType === "quote"
+              ? `Válido hasta\n${input.validUntil ? formatDate(input.validUntil) : "-"}`
+              : `Fecha de vencimiento\n${input.dueDate ? formatDate(input.dueDate) : "-"}`,
           x: 310,
           y: 558,
         },
@@ -452,14 +636,30 @@ export function buildDocumentPdfLayout(
           x: 310,
           y: totalsY,
         },
-        {
+      );
+      const footerY = Math.min(totalsY - 60, 200);
+      // FR-026: invoices end with a payment block (amount, due date and the
+      // frozen collection method).
+      if (input.documentType === "invoice") {
+        elements.push({
+          kind: "text",
+          role: "payment",
+          text: paymentText(input),
+          x: PDF_MARGINS.left,
+          y: footerY,
+        });
+      }
+      // FR-005: no observations box at all when there are no notes.
+      const notes = input.notes?.trim();
+      if (notes) {
+        elements.push({
           kind: "text",
           role: "notes",
-          text: `Notas\n${input.notes?.trim() || "Sin notas."}`,
-          x: PDF_MARGINS.left,
-          y: Math.min(totalsY - 76, 170),
-        },
-      );
+          text: `Observaciones\n${wrapText(notes).join("\n")}`,
+          x: input.documentType === "invoice" ? 310 : PDF_MARGINS.left,
+          y: footerY,
+        });
+      }
     }
 
     elements.push(pageFooter(pageIndex + 1, pageCount));

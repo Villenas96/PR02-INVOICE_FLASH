@@ -7,7 +7,9 @@ import { payments } from "@/db/schema/payment";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
+import { hasFeature } from "@/lib/plan";
 import { resolveCompanyContext } from "@/services/context";
+import { invoicedFigures } from "@/services/dashboard";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 
@@ -91,7 +93,7 @@ export async function GET(request: Request): Promise<Response> {
       dashboardQuerySchema,
       Object.fromEntries(searchParams.entries()),
     );
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
     const paidCents = paidCentsExpression(context.companyId);
     const isOverdue = isOverdueExpression();
@@ -147,8 +149,30 @@ export async function GET(request: Request): Promise<Response> {
       overdueCount: 0,
     };
 
+    // Pro: invoiced base/total and the tax collected by name and rate.
+    const full = hasFeature(context.plan, "dashboard_full")
+      ? await invoicedFigures(
+          context.companyId,
+          { from: query.from, to: query.to },
+          database,
+        )
+      : null;
+
     return withRequestId(
       Response.json({
+        ...(full
+          ? {
+              invoiced_base_cents: full.invoicedBaseCents,
+              invoiced_total_cents: full.invoicedTotalCents,
+              invoice_count: full.invoiceCount,
+              tax_collected: full.taxCollected.map((tax) => ({
+                name: tax.name,
+                rate: tax.rate,
+                base_cents: tax.baseCents,
+                tax_cents: tax.taxCents,
+              })),
+            }
+          : {}),
         paid_cents: totals.paidTotal,
         pending_cents: totals.pendingTotal,
         overdue_cents: totals.overdueTotal,

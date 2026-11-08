@@ -6,6 +6,7 @@ import {
   clients,
   companies,
   documentEvents,
+  documentLinks,
   documents,
   emailDeliveries,
   payments,
@@ -23,8 +24,8 @@ vi.mock("@/db/index", () => ({ createDatabase: () => database }));
 
 const { seedDemoData } = await import("@/db/seed");
 
-const FREE_EMAIL = "demo-free@invoiceflash.test";
-const PRO_EMAIL = "demo-pro@invoiceflash.test";
+const BASIC_EMAIL = "demo-basic@invoiceflash.test";
+const ESSENTIAL_EMAIL = "demo-essential@invoiceflash.test";
 
 async function companyIdFor(email: string): Promise<string> {
   const [row] = await database
@@ -38,6 +39,7 @@ async function companyIdFor(email: string): Promise<string> {
   return row.companyId;
 }
 
+/** Issued invoices this month: the quota is counted per document type. */
 async function issuedCountFor(companyId: string): Promise<number> {
   const rows = await database
     .select({ id: documents.id })
@@ -45,6 +47,7 @@ async function issuedCountFor(companyId: string): Promise<number> {
     .where(
       and(
         eq(documents.companyId, companyId),
+        eq(documents.documentType, "invoice"),
         inArray(documents.status, ["issued", "voided"]),
       ),
     );
@@ -52,16 +55,16 @@ async function issuedCountFor(companyId: string): Promise<number> {
 }
 
 describe("deterministic demo seed", () => {
-  it("seeds a free-plan company at its 5/5 monthly boundary with varied documents and payments", async () => {
+  it("seeds a Basic company at its 5/5 monthly invoice boundary with varied documents and payments", async () => {
     const now = new Date();
     await seedDemoData({ database, now });
 
-    const companyId = await companyIdFor(FREE_EMAIL);
+    const companyId = await companyIdFor(BASIC_EMAIL);
     const [company] = await database
       .select({ plan: companies.plan })
       .from(companies)
       .where(eq(companies.id, companyId));
-    expect(company?.plan).toBe("free");
+    expect(company?.plan).toBe("basic");
     expect(await issuedCountFor(companyId)).toBe(5);
 
     const companyClients = await database
@@ -84,7 +87,6 @@ describe("deterministic demo seed", () => {
         documentType: documents.documentType,
         status: documents.status,
         pdfStatus: documents.pdfStatus,
-        convertedFromId: documents.convertedFromId,
       })
       .from(documents)
       .where(eq(documents.companyId, companyId));
@@ -97,9 +99,17 @@ describe("deterministic demo seed", () => {
     expect(
       companyDocuments.some((document) => document.documentType === "receipt"),
     ).toBe(true);
-    expect(
-      companyDocuments.some((document) => document.convertedFromId !== null),
-    ).toBe(true);
+    const [conversionLink] = await database
+      .select({ id: documentLinks.id })
+      .from(documentLinks)
+      .where(
+        and(
+          eq(documentLinks.companyId, companyId),
+          eq(documentLinks.kind, "converted"),
+        ),
+      )
+      .limit(1);
+    expect(conversionLink).toBeDefined();
     expect(
       companyDocuments.some((document) => document.pdfStatus === "ready"),
     ).toBe(true);
@@ -120,16 +130,16 @@ describe("deterministic demo seed", () => {
     expect(issuedEvents.some((row) => row.event === "issued")).toBe(true);
   });
 
-  it("seeds a pro-plan company at its 100/100 monthly boundary with a voided document and a sent email", async () => {
+  it("seeds an Essential company at its 100/100 monthly invoice boundary with a voided document and a sent email", async () => {
     const now = new Date();
     await seedDemoData({ database, now });
 
-    const companyId = await companyIdFor(PRO_EMAIL);
+    const companyId = await companyIdFor(ESSENTIAL_EMAIL);
     const [company] = await database
       .select({ plan: companies.plan })
       .from(companies)
       .where(eq(companies.id, companyId));
-    expect(company?.plan).toBe("pro");
+    expect(company?.plan).toBe("essential");
     expect(await issuedCountFor(companyId)).toBe(100);
 
     const voidedDocuments = await database
@@ -153,13 +163,13 @@ describe("deterministic demo seed", () => {
     const firstRunUsers = await database
       .select({ id: users.id })
       .from(users)
-      .where(inArray(users.email, [FREE_EMAIL, PRO_EMAIL]));
+      .where(inArray(users.email, [BASIC_EMAIL, ESSENTIAL_EMAIL]));
 
     await seedDemoData({ database, now });
     const secondRunUsers = await database
       .select({ id: users.id })
       .from(users)
-      .where(inArray(users.email, [FREE_EMAIL, PRO_EMAIL]));
+      .where(inArray(users.email, [BASIC_EMAIL, ESSENTIAL_EMAIL]));
 
     expect(secondRunUsers).toHaveLength(2);
     expect(new Set(secondRunUsers.map((row) => row.id))).toEqual(

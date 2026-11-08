@@ -4,7 +4,22 @@
 DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 BETTER_AUTH_SECRET=
 RESEND_API_KEY=
-RESEND_FROM_EMAIL=facturas@invoiceflash.app
+# Remitente de todos los correos (dominio de Factum verificado en Resend).
+EMAIL_FROM=Factum <no-reply@factum.example>
+# Opcional: dirección de respuesta para correos de sistema. Los documentos
+# usan siempre el email de la empresa emisora como Reply-To.
+EMAIL_REPLY_TO=
+# URL pública de la app (enlaces en correos y retorno de Stripe Checkout).
+APP_BASE_URL=http://localhost:3000
+
+# Stripe Billing (claves de modo test en local; nunca en el repositorio).
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+# Tax rate de IVA 21 % (incluido en el precio) creado en Stripe: txr_…
+STRIPE_TAX_RATE_ID=
+# Pro contratable solo desde el Incremento 3. Mientras sea false, Pro aparece
+# como «Próximamente» y el checkout lo rechaza con plan_not_available.
+PRO_CHECKOUT_ENABLED=false
 SENTRY_DSN=
 
 # Solo integración: usa una base aislada; nunca reutilices DATABASE_URL.

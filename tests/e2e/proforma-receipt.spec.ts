@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
 
 function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
@@ -45,7 +46,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -61,7 +62,7 @@ async function registerVerifyAndSignIn(
   page: Page,
   suffix: string,
 ): Promise<string> {
-  const email = `e2e-proforma-receipt-${suffix}@example.test`;
+  const email = testEmail(`e2e-proforma-receipt-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");
@@ -278,9 +279,9 @@ test("al agotar el cupo mensual, convertir y emitir ofrece guardar la conversió
   const email = await registerVerifyAndSignIn(page, crypto.randomUUID());
   const clientId = await configureCompanyAndClient(page, email);
 
-  // Four issued invoices plus the proforma issued below hit the free plan's
-  // five-document monthly limit, shared across every document type.
-  for (let index = 0; index < 4; index += 1) {
+  // Quotas are per document type: five issued invoices use up the Basic
+  // plan's invoice quota, while the proforma still fits in its own quota.
+  for (let index = 0; index < 5; index += 1) {
     await createIssuedInvoice(page, clientId);
   }
   const proformaId = await createIssuedProforma(page, clientId, 20_000);
@@ -295,7 +296,7 @@ test("al agotar el cupo mensual, convertir y emitir ofrece guardar la conversió
   });
   await expect(convertButton).toBeDisabled();
   await expect(
-    page.getByText(/Has alcanzado el límite de 5 emisiones de este mes/),
+    page.getByText(/Has alcanzado el límite de 5 facturas de este mes/),
   ).toBeVisible();
   await expectAccessible(page);
 

@@ -9,12 +9,12 @@ import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseIdempotencyKey } from "@/lib/api/idempotency";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { getPlanCapabilities } from "@/lib/plan";
 import {
   ResourceNotFoundError,
   resolveCompanyContext,
 } from "@/services/context";
 import { createOrReuseDocumentEmailDelivery } from "@/services/email/deliveries";
+import { requireFeature } from "@/services/entitlements";
 import { createEmailSendMessage } from "@/workers/messages";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
@@ -88,7 +88,7 @@ function routeErrorResponse(
 
 async function emailQueue(): Promise<EmailQueue> {
   const cloudflare = await getCloudflareContext();
-  const queue = (cloudflare.env as { EMAIL_SEND_QUEUE?: EmailQueue })
+  const queue = (cloudflare.env as unknown as { EMAIL_SEND_QUEUE?: EmailQueue })
     .EMAIL_SEND_QUEUE;
 
   if (!queue) {
@@ -101,14 +101,6 @@ async function emailQueue(): Promise<EmailQueue> {
   return queue;
 }
 
-function featureNotInPlanError(): ApiError {
-  return new ApiError(
-    "feature_not_in_plan",
-    403,
-    "El envío por correo solo está disponible en el plan de pago. Puedes copiar el enlace público o descargar el PDF.",
-  );
-}
-
 export async function POST(
   request: Request,
   routeContext: RouteContext,
@@ -116,15 +108,7 @@ export async function POST(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const idempotencyKey = parseIdempotencyKey(request, true);
-    if (!idempotencyKey) {
-      throw new ApiError(
-        "idempotency_key_invalid",
-        400,
-        "La cabecera Idempotency-Key es obligatoria.",
-      );
-    }
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -136,6 +120,15 @@ export async function POST(
       inputPromise,
       queuePromise,
     ]);
+    // After the access check: a read-only role is denied before anything else.
+    const idempotencyKey = parseIdempotencyKey(request, true);
+    if (!idempotencyKey) {
+      throw new ApiError(
+        "idempotency_key_invalid",
+        400,
+        "La cabecera Idempotency-Key es obligatoria.",
+      );
+    }
     const database = createDatabase();
     const [row] = await database
       .select({
@@ -163,9 +156,9 @@ export async function POST(
         "Emite el documento antes de enviarlo por correo.",
       );
     }
-    if (!getPlanCapabilities(row.plan).canSendEmail) {
-      throw featureNotInPlanError();
-    }
+    // Gate on the plan read with the document, not the context's: both come
+    // from `company.plan`, this one in the same query as the status check.
+    requireFeature({ plan: row.plan }, "email");
 
     const delivery = await createOrReuseDocumentEmailDelivery({
       database,

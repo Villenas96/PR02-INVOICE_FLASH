@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useReducer, useRef } from "react";
 
 export type AsyncActionStatus = "idle" | "loading" | "success" | "error";
@@ -98,4 +99,47 @@ export function useAsyncAction<T>() {
   );
 
   return { ...state, run };
+}
+
+export interface MutationOptions {
+  /** Refresh the server-rendered tree after success (default `true`). */
+  refresh?: boolean;
+}
+
+/**
+ * Single pattern for client mutations (specs/002 research R17): same feedback
+ * state as `useAsyncAction`, plus `router.refresh()` after every successful
+ * mutation so server-rendered data (fiscal-data banner, quota counters, plan,
+ * navigation) updates without reloading the page. Opt out per hook or per
+ * call with `{ refresh: false }`.
+ */
+export function useMutation<T>(defaults: MutationOptions = {}) {
+  const router = useRouter();
+  const action = useAsyncAction<T>();
+  const { run: runAction } = action;
+  const defaultRefresh = defaults.refresh ?? true;
+
+  const run = useCallback(
+    async (
+      mutation: () => Promise<T>,
+      options: { optimisticData?: T } & MutationOptions = {},
+    ): Promise<T | undefined> => {
+      let succeeded = false;
+      const result = await runAction(
+        async () => {
+          const data = await mutation();
+          succeeded = true;
+          return data;
+        },
+        { optimisticData: options.optimisticData },
+      );
+      if (succeeded && (options.refresh ?? defaultRefresh)) {
+        router.refresh();
+      }
+      return result;
+    },
+    [runAction, router, defaultRefresh],
+  );
+
+  return { ...action, run };
 }

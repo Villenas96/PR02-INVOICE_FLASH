@@ -11,48 +11,26 @@ export interface PrivateBucket {
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>;
   delete(key: string): Promise<void>;
+  /** R2 multipart upload (large exports); absent in some test doubles. */
+  createMultipartUpload?(
+    key: string,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<MultipartUpload>;
 }
 
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
-const LOGO_CONTENT_TYPES = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/svg+xml": "svg",
-} as const;
-
-type LogoContentType = keyof typeof LOGO_CONTENT_TYPES;
+export interface MultipartUpload {
+  uploadPart(
+    partNumber: number,
+    value: Uint8Array,
+  ): Promise<{ partNumber: number; etag: string }>;
+  complete(
+    parts: Array<{ partNumber: number; etag: string }>,
+  ): Promise<unknown>;
+  abort(): Promise<void>;
+}
 
 export function pdfObjectKey(documentId: string): string {
   return `documents/${documentId}/pdf/v1.pdf`;
-}
-
-export function logoObjectKey(
-  companyId: string,
-  contentType: LogoContentType,
-): string {
-  return `companies/${companyId}/logos/${crypto.randomUUID()}.${LOGO_CONTENT_TYPES[contentType]}`;
-}
-
-export async function storeCompanyLogo(
-  bucket: PrivateBucket,
-  companyId: string,
-  bytes: Uint8Array,
-  contentType: string,
-): Promise<string> {
-  if (!(contentType in LOGO_CONTENT_TYPES)) {
-    throw new Error("El logotipo debe ser PNG, JPG o SVG.");
-  }
-
-  if (bytes.byteLength > MAX_LOGO_BYTES) {
-    throw new Error("El logotipo no puede superar 2 MB.");
-  }
-
-  const validContentType = contentType as LogoContentType;
-  const key = logoObjectKey(companyId, validContentType);
-  await bucket.put(key, bytes, {
-    httpMetadata: { contentType: validContentType },
-  });
-  return key;
 }
 
 export async function getPrivateObject(

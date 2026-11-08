@@ -25,6 +25,7 @@ const updateSeriesSchema = z
     prefix: z.string().trim().min(1).max(50).optional(),
     next_number: z.number().int().min(1).max(MAX_POSTGRES_INTEGER).optional(),
     is_default: z.literal(true).optional(),
+    archived: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -99,6 +100,48 @@ function seriesResponse(series: typeof documentSeries.$inferSelect) {
   };
 }
 
+/**
+ * Archives or restores a series (FR-016). The default series of a type can
+ * never be archived: another series must become the default first.
+ */
+async function setSeriesArchived(
+  database: ReturnType<typeof createDatabase>,
+  companyId: string,
+  seriesId: string,
+  archived: boolean,
+  becomesDefault: boolean,
+): Promise<void> {
+  const [series] = await database
+    .select({ isDefault: documentSeries.isDefault })
+    .from(documentSeries)
+    .where(
+      and(
+        eq(documentSeries.id, seriesId),
+        eq(documentSeries.companyId, companyId),
+      ),
+    )
+    .limit(1);
+  if (!series) {
+    throw new ResourceNotFoundError();
+  }
+  if (archived && (series.isDefault || becomesDefault)) {
+    throw new ApiError(
+      "conflict",
+      409,
+      "No puedes archivar la serie predeterminada. Elige antes otra serie predeterminada para este tipo.",
+    );
+  }
+  await database
+    .update(documentSeries)
+    .set({ archivedAt: archived ? new Date() : null })
+    .where(
+      and(
+        eq(documentSeries.id, seriesId),
+        eq(documentSeries.companyId, companyId),
+      ),
+    );
+}
+
 export async function PATCH(
   request: Request,
   routeContext: RouteContext,
@@ -106,7 +149,9 @@ export async function PATCH(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const companyContextPromise = resolveCompanyContext(request);
+    const companyContextPromise = resolveCompanyContext(request, {
+      access: "write",
+    });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -117,8 +162,18 @@ export async function PATCH(
       inputPromise,
     ]);
     const database = createDatabase();
+    if (input.archived !== undefined) {
+      await setSeriesArchived(
+        database,
+        companyContext.companyId,
+        params.id,
+        input.archived,
+        input.is_default === true,
+      );
+    }
     const changesNumbering =
       input.prefix !== undefined || input.next_number !== undefined;
+    const onlyArchive = !changesNumbering && input.is_default === undefined;
     const result = await database.execute<{ id: string }>(sql`
       WITH locked_company AS MATERIALIZED (
         SELECT ${companies.id} AS id
@@ -189,7 +244,7 @@ export async function PATCH(
       RETURNING target_series.id
     `);
 
-    if (executionRows<{ id: string }>(result).length === 0) {
+    if (!onlyArchive && executionRows<{ id: string }>(result).length === 0) {
       const [existingSeries] = await database
         .select({ id: documentSeries.id })
         .from(documentSeries)

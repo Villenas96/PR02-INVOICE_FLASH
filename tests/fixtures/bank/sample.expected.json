@@ -1,0 +1,134 @@
+{
+  "account": {
+    "entity": "2100",
+    "office": "0001",
+    "number": "0123456789"
+  },
+  "period": {
+    "start": "2026-03-01",
+    "end": "2026-03-31"
+  },
+  "opening_balance_cents": 250000,
+  "closing_balance_cents": 1114918,
+  "movement_count": 20,
+  "credit_count": 16,
+  "debit_count": 4,
+  "overlap": {
+    "movement_count": 8,
+    "new_movements": 3
+  },
+  "invoices": [
+    {
+      "invoice": "F-2026-0001",
+      "client": "Talleres Martínez SL",
+      "tax_id": "B12345674",
+      "total_cents": 16637,
+      "allocation_cents": 16637
+    },
+    {
+      "invoice": "F-2026-0002",
+      "client": "Estudio Gráfico Luna",
+      "tax_id": "B87654321",
+      "total_cents": 28737,
+      "allocation_cents": 28737
+    },
+    {
+      "invoice": "F-2026-0003",
+      "client": "Panadería El Trigal",
+      "tax_id": "B11223344",
+      "total_cents": 40837,
+      "allocation_cents": 40837
+    },
+    {
+      "invoice": "F-2026-0004",
+      "client": "Clínica Dental Sonrisa",
+      "tax_id": "B55667788",
+      "total_cents": 52937,
+      "allocation_cents": 52937
+    },
+    {
+      "invoice": "F-2026-0005",
+      "client": "Construcciones Ibáñez",
+      "tax_id": "A12121212",
+      "total_cents": 65037,
+      "allocation_cents": 65037
+    },
+    {
+      "invoice": "F-2026-0006",
+      "client": "Asesoría Núñez",
+      "tax_id": "B34343434",
+      "total_cents": 77137,
+      "allocation_cents": 77137
+    },
+    {
+      "invoice": "F-2026-0007",
+      "client": "Hotel Brisa Marina",
+      "tax_id": "A56565656",
+      "total_cents": 89237,
+      "allocation_cents": 89237
+    },
+    {
+      "invoice": "F-2026-0008",
+      "client": "Librería Cervantes",
+      "tax_id": "B78787878",
+      "total_cents": 101337,
+      "allocation_cents": 101337
+    },
+    {
+      "invoice": "F-2026-0009",
+      "client": "Talleres Martínez SL",
+      "tax_id": "B12345674",
+      "total_cents": 33275,
+      "allocation_cents": 33275
+    },
+    {
+      "invoice": "F-2026-0010",
+      "client": "Estudio Gráfico Luna",
+      "tax_id": "B87654321",
+      "total_cents": 34275,
+      "allocation_cents": 34275
+    },
+    {
+      "invoice": "F-2026-0011",
+      "client": "Panadería El Trigal",
+      "tax_id": "B11223344",
+      "total_cents": 35275,
+      "allocation_cents": 35275
+    },
+    {
+      "invoice": "F-2026-0012",
+      "client": "Clínica Dental Sonrisa",
+      "tax_id": "B55667788",
+      "total_cents": 36275,
+      "allocation_cents": 36275
+    },
+    {
+      "invoice": "F-2026-0013",
+      "client": "Construcciones Ibáñez",
+      "tax_id": "A12121212",
+      "total_cents": 62450,
+      "allocation_cents": 62450
+    },
+    {
+      "invoice": "F-2026-0014",
+      "client": "Asesoría Núñez",
+      "tax_id": "B34343434",
+      "total_cents": 64450,
+      "allocation_cents": 64450
+    },
+    {
+      "invoice": "F-2026-0015",
+      "client": "Hotel Brisa Marina",
+      "tax_id": "A56565656",
+      "total_cents": 121000,
+      "allocation_cents": 50000
+    },
+    {
+      "invoice": "F-2026-0016",
+      "client": "Librería Cervantes",
+      "tax_id": "B78787878",
+      "total_cents": 98765,
+      "allocation_cents": 98765
+    }
+  ]
+}

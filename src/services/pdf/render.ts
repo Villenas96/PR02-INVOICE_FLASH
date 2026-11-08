@@ -1,6 +1,8 @@
 import {
+  degrees,
   PDFDocument,
   type PDFFont,
+  type PDFImage,
   type PDFPage,
   rgb,
   StandardFonts,
@@ -74,6 +76,7 @@ function textStyle(element: PdfTextElement, regular: PDFFont, bold: PDFFont) {
     case "totals":
       return { font: bold, size: 10, lineHeight: 18, align: "left" as const };
     case "notes":
+    case "payment":
       return { font: regular, size: 9, lineHeight: 13, align: "left" as const };
     default:
       return { font: regular, size: 9, lineHeight: 13, align: "left" as const };
@@ -186,11 +189,69 @@ function drawTable(
   });
 }
 
+function drawWatermark(page: PDFPage, text: string, font: PDFFont): void {
+  const size = 44;
+  const label = normalizePdfText(text);
+  const width = font.widthOfTextAtSize(label, size);
+  const { width: pageWidth, height: pageHeight } = page.getSize();
+  // Centred on the page, rotated 45° around its own midpoint.
+  const angle = Math.PI / 4;
+  page.drawText(label, {
+    x: pageWidth / 2 - (width / 2) * Math.cos(angle),
+    y: pageHeight / 2 - (width / 2) * Math.sin(angle),
+    font,
+    size,
+    rotate: degrees(45),
+    color: rgb(0.85, 0.2, 0.2),
+    opacity: 0.25,
+  });
+}
+
+export interface PdfLogoAsset {
+  bytes: Uint8Array;
+  format: "png" | "jpg";
+}
+
+export interface PdfAssets {
+  issuerLogo?: PdfLogoAsset | null;
+  clientLogo?: PdfLogoAsset | null;
+}
+
+async function embedLogo(
+  document: PDFDocument,
+  asset: PdfLogoAsset | null | undefined,
+): Promise<PDFImage | null> {
+  if (!asset) {
+    return null;
+  }
+  return asset.format === "png"
+    ? document.embedPng(asset.bytes)
+    : document.embedJpg(asset.bytes);
+}
+
 export async function renderDocumentPdf(
   input: DocumentPdfInput,
+  assets: PdfAssets = {},
 ): Promise<Uint8Array> {
-  const layout = buildDocumentPdfLayout(input);
   const document = await PDFDocument.create();
+  const issuerLogo = await embedLogo(document, assets.issuerLogo);
+  const clientLogo = await embedLogo(document, assets.clientLogo);
+  // The template only needs each logo's intrinsic size to lay it out.
+  const layout = buildDocumentPdfLayout({
+    ...input,
+    issuer: {
+      ...input.issuer,
+      logo: issuerLogo
+        ? { width: issuerLogo.width, height: issuerLogo.height }
+        : null,
+    },
+    client: {
+      ...input.client,
+      logo: clientLogo
+        ? { width: clientLogo.width, height: clientLogo.height }
+        : null,
+    },
+  });
   const regular = await document.embedFont(StandardFonts.Helvetica);
   const bold = await document.embedFont(StandardFonts.HelveticaBold);
   const colors = {
@@ -221,9 +282,22 @@ export async function renderDocumentPdf(
     for (const element of pageLayout.elements) {
       if (element.kind === "table") {
         drawTable(page, element, regular, bold, colors);
+      } else if (element.kind === "image") {
+        const image = element.role === "issuer_logo" ? issuerLogo : clientLogo;
+        if (image) {
+          page.drawImage(image, {
+            x: element.x,
+            y: element.y,
+            width: element.width,
+            height: element.height,
+          });
+        }
       } else {
         drawTextElement(page, element, regular, bold, colors);
       }
+    }
+    if (input.watermark) {
+      drawWatermark(page, input.watermark, bold);
     }
   }
 

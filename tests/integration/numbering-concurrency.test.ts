@@ -65,7 +65,7 @@ describe("concurrent conventional document issue", () => {
       taxId: "B12345678",
       address: "Calle Mayor 1, 28013 Madrid",
       email: "billing-concurrency@example.test",
-      plan: "pro",
+      plan: "essential",
       retentionRate: "0.00",
       createdAt: now,
       updatedAt: now,

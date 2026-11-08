@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
@@ -92,6 +92,7 @@ function seriesResponse(series: SeriesRow) {
     prefix: series.prefix,
     next_number: series.nextNumber,
     is_default: series.isDefault,
+    archived_at: series.archivedAt,
   };
 }
 
@@ -167,19 +168,26 @@ export async function GET(request: Request): Promise<Response> {
       documentTypeSchema.optional(),
       searchParams.get("doc_type") ?? undefined,
     );
+    const archived = validate(
+      z.enum(["true", "false"]).optional(),
+      searchParams.get("archived") ?? undefined,
+    );
     const cursorId = decodeCursor(pagination.cursor);
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
 
-    await ensureDefaultSeries(
-      database,
-      context.companyId,
-      documentType ?? "invoice",
-    );
+    // Only the invoice series is bootstrapped when listing; any other type
+    // gets its series when its first draft is saved (FR-019), so the user is
+    // told about it (and about a renamed prefix) at that moment.
+    if (documentType === undefined || documentType === "invoice") {
+      await ensureDefaultSeries(database, context.companyId, "invoice");
+    }
 
     const conditions = [
       eq(documentSeries.companyId, context.companyId),
       documentType ? eq(documentSeries.documentType, documentType) : undefined,
+      archived === "true" ? isNotNull(documentSeries.archivedAt) : undefined,
+      archived === "false" ? isNull(documentSeries.archivedAt) : undefined,
       cursorId ? gt(documentSeries.id, cursorId) : undefined,
     ].filter((condition) => condition !== undefined);
     const rows = await database
@@ -208,7 +216,7 @@ export async function POST(request: Request): Promise<Response> {
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const inputPromise = parseJson(request, createSeriesSchema);
     const [context, input] = await Promise.all([contextPromise, inputPromise]);
     const database = createDatabase();

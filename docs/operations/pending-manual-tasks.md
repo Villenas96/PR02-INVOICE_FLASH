@@ -169,3 +169,79 @@ Hazla al final, con T122, T123, T129 y T130 cerradas.
 4. Confirma que `main` está protegida (repository-governance.md) y que el PR final
    tiene al menos una aprobación. Puedo ejecutar el paso 1 y preparar el borrador
    del informe cuando me lo pidas.
+
+---
+
+# v2 (`specs/002-factum-improvements`) — pasos que dependen del titular
+
+## T192 — Reglas de ciclo de vida de R2
+
+El código y el verificador están listos; falta aplicar las reglas en Cloudflare
+(no se ejecutan desde el repositorio porque modifican la cuenta). En cada bucket
+(`invoice-flash-storage-staging` e `invoice-flash-storage`):
+
+```bash
+pnpm exec wrangler r2 bucket lifecycle add <bucket> expire-exports exports/ --expire-days 8
+pnpm exec wrangler r2 bucket lifecycle add <bucket> expire-imports imports/ --expire-days 8
+pnpm exec wrangler r2 bucket lifecycle list <bucket>
+```
+
+Copia el resultado a `r2.lifecycleRules` del fichero de evidencia
+([cloud-cost-controls.md](./cloud-cost-controls.md)); `pnpm verify:predeploy`
+falla mientras falten.
+
+## Incremento 3 — activar Pro contratable
+
+El código de Pro (exportaciones avanzadas, gestoría, recurrencias, importación) está
+completo. Falta, en cada entorno y con claves reales de Stripe:
+
+1. Poner `PRO_CHECKOUT_ENABLED=true` (secreto/variable del Worker).
+2. Validar la contratación de Pro desde Esencial (Portal → Pro) y que las funciones
+   Pro aparecen sin recargar (quickstart V8).
+3. Comprobar con `wrangler tail` que el cron `0 5 * * *` ejecuta el planificador
+   (recurrencias y envíos programados a la asesoría).
+
+Hasta entonces el checkout de Pro responde `403 plan_not_available` (comprobado en
+servidor).
+
+## T186 — Recalibrar la tabla de costes con métricas de staging
+
+Necesita tráfico real en staging (no se puede simular desde el repositorio).
+
+1. Tras ≥ 2 semanas de uso de staging, anota por mes: correos enviados (Resend →
+   Analytics), operaciones de colas (Cloudflare → Queues → Metrics, las tres
+   colas), almacenamiento y cómputo de Neon, peticiones Worker y operaciones R2.
+2. Compáralos con la tabla de «Coste» de
+   [research.md](../../specs/002-factum-improvements/research.md) (R19–R21 y la
+   tabla de costes) y corrige las estimaciones que se desvíen más de un 25 %.
+3. Marca T186 como `[X]` en `tasks.md`.
+
+## T188 — Sesiones de usabilidad (SC-004 interfaz simple, SC-010 asistente de alta)
+
+Necesita ≥ 10 participantes del perfil objetivo; no se puede automatizar.
+
+1. Usa el protocolo de la v1 (T130, arriba) con dos metas: «Emite tu primera
+   factura» desde la interfaz simple (SC-004) y «Deja tu negocio listo para
+   facturar» con el asistente de configuración (SC-010).
+2. Registra por participante (anonimizado): minutos, éxito autónomo, abandono y
+   bloqueos. El asistente de alta está en `/onboarding`.
+3. Escribe `specs/002-factum-improvements/usability-report.md` con la tabla, las
+   medianas y el resultado frente a los criterios de la spec. No lo crees con datos
+   inventados: hasta que haya sesiones reales no debe existir.
+
+## T189 — Escenarios V1–V15 en staging
+
+Necesita el entorno de staging desplegado con claves reales de Stripe (modo test),
+dominio de Resend verificado, cola `jobs` y cron activos.
+
+1. Despliega (deployment-checklist.md) y aplica migraciones hasta `0015`.
+2. Recorre V1–V15 de [quickstart.md](../../specs/002-factum-improvements/quickstart.md)
+   y anota el resultado de cada uno sin secretos (capturas, ids de evento de Stripe,
+   versión del Worker).
+3. V15 (asistente de IA): conecta un cliente MCP real (Claude o ChatGPT) a
+   `https://<host>/api/mcp`, crea un borrador, emite tras confirmar, revoca y
+   comprueba el rechazo. Aquí se valida SC-012 (≥ 8/10 peticiones resueltas).
+4. Escribe `specs/002-factum-improvements/validation-report.md` con los resultados.
+   Lo que cubren ya las pruebas automáticas (unitarias, integración, E2E con
+   Postgres real y `pnpm preview` en workerd) no sustituye a este paso: Stripe,
+   Resend, cron y colas reales solo se ejercitan en staging.

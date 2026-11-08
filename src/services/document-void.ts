@@ -4,6 +4,7 @@ import type { Database } from "@/db";
 import { firstExecutionRow } from "@/db/result";
 import { documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
+import { documentLinks } from "@/db/schema/document-link";
 import { ApiError, ResourceNotFoundError } from "@/lib/api/errors";
 import { createUuidV7 } from "@/lib/ids";
 
@@ -81,6 +82,28 @@ export async function voidIssuedDocument(input: {
         'voided'::document_event_type,
         ${nowIso}
       FROM voided_document
+      RETURNING document_id
+    ),
+    -- FR-037: a voided invoice bills nothing; its delivery notes can be
+    -- invoiced again. Released in the same statement as the void.
+    released_links AS (
+      UPDATE ${documentLinks} link
+      SET released_at = ${nowIso}
+      FROM voided_document
+      WHERE link.target_document_id = voided_document.id
+        AND link.kind = 'invoiced'::document_link_kind
+        AND link.released_at IS NULL
+      RETURNING link.source_document_id, link.company_id
+    ),
+    released_events AS (
+      INSERT INTO ${documentEvents} (
+        id, company_id, document_id, actor, event, payload, created_at
+      )
+      SELECT gen_random_uuid(), released_links.company_id,
+        released_links.source_document_id, ${input.actor},
+        'link_released'::document_event_type,
+        jsonb_build_object('invoice_id', ${input.documentId}::text), ${nowIso}
+      FROM released_links
       RETURNING document_id
     )
     SELECT inserted_event.document_id

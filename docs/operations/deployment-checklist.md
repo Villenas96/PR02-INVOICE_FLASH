@@ -41,7 +41,7 @@ propios:
   `pnpm exec wrangler queues create <cola>`.
 - [ ] Secretos cargados con `pnpm exec wrangler secret put <NOMBRE> --env $ENV`:
   `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `RESEND_API_KEY`,
-  `RESEND_FROM_EMAIL`, `SENTRY_DSN`. Nunca se reutiliza un secreto entre entornos.
+  `EMAIL_FROM`, `SENTRY_DSN`. Nunca se reutiliza un secreto entre entornos.
 - [ ] Alerta de presupuesto de la cuenta activa y probada (cloud-cost-controls.md
   § Cloudflare).
 
@@ -52,7 +52,7 @@ propios:
 
 **Resend y Sentry**
 
-- [ ] Dominio remitente de `RESEND_FROM_EMAIL` verificado en Resend.
+- [ ] Dominio remitente de `EMAIL_FROM` verificado en Resend.
 - [ ] Proyecto Sentry creado y token de solo lectura de eventos para
   `verify:postdeploy`.
 
@@ -97,6 +97,24 @@ Exporta siempre `DATABASE_URL` en la propia orden: `drizzle.config.ts` carga
 DATABASE_URL='<url directa del entorno>' pnpm db:migrate:prod
 pnpm deploy:staging        # o pnpm deploy:production: build OpenNext + wrangler
 ```
+
+> **Despliega siempre desde un checkout limpio, sin ficheros `.env*`.** OpenNext
+> copia al bundle del Worker (`.open-next/cloudflare/next-env.mjs`) todas las variables
+> de los `.env*` que carga Next, como `.env.local`. En el Worker solo se usan para las
+> claves que no existen como binding, pero quedan guardadas en Cloudflare. Desde un
+> worktree limpio:
+>
+> ```bash
+> git worktree add --detach ../factum-deploy HEAD && cd ../factum-deploy
+> pnpm install --frozen-lockfile && pnpm cf-typegen   # cloudflare-env.d.ts no se versiona
+> DATABASE_URL=postgresql://build:build@localhost:5432/unused BETTER_AUTH_SECRET=build-time-placeholder \
+>   pnpm exec opennextjs-cloudflare build             # solo para compilar; no se empaquetan
+> pnpm exec wrangler deploy --env staging             # o --env production
+> ```
+>
+> Comprueba antes de subir que `.open-next/cloudflare/next-env.mjs` exporta objetos
+> vacíos. `DATABASE_URL` debe apuntar a una base inalcanzable o local: al compilar,
+> Better Auth intenta registrar el recurso MCP en esa base.
 
 No existe un script de despliegue sin entorno, para que producción nunca se
 despliegue por omisión. Antes del primer despliegue de un entorno puedes comprobar

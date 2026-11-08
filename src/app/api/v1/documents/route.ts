@@ -2,6 +2,7 @@ import { and, asc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase } from "@/db";
+import { clients } from "@/db/schema/client";
 import { documentStatusEnum, documents } from "@/db/schema/document";
 import { documentTypeEnum } from "@/db/schema/document-series";
 import { payments } from "@/db/schema/payment";
@@ -9,8 +10,18 @@ import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parsePagination } from "@/lib/api/pagination";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { resolveCompanyContext } from "@/services/context";
-import { createDraftDocument, type DocumentDetail } from "@/services/documents";
+import { auditActor, resolveCompanyContext } from "@/services/context";
+import {
+  deliveryNoteInvoicedExpression,
+  derivedStateExpression,
+  quoteStateExpression,
+} from "@/services/document-states";
+import {
+  clientDisplayFor,
+  createDraftDocument,
+  type DocumentDetail,
+  type DocumentLinkRef,
+} from "@/services/documents";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -22,6 +33,11 @@ const collectionQuerySchema = z
     status: z.enum(documentStatusEnum.enumValues).optional(),
     payment_status: z.enum(PAYMENT_STATUSES).optional(),
     client_id: z.string().uuid().optional(),
+    quote_state: z
+      .enum(["pending", "accepted", "rejected", "converted", "expired"])
+      .optional(),
+    // `false`: issued delivery notes not invoiced yet (FR-037).
+    invoiced: z.enum(["true", "false"]).optional(),
     from: z.iso.date().optional(),
     to: z.iso.date().optional(),
     cursor: z.string().optional(),
@@ -50,12 +66,19 @@ const draftLineSchema = z
     unit_price_cents: z.number().int().min(0).max(MAX_POSTGRES_INTEGER),
     tax_rate: decimalSchema,
     discount_pct: decimalSchema.optional(),
+    tax_name: z.string().trim().min(1).max(30).optional(),
+    unit: z.string().trim().max(20).nullable().optional(),
+    tax_rate_id: z.string().uuid().nullable().optional(),
+    catalog_item_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 const createDraftSchema = z
   .object({
-    doc_type: z.enum(["invoice", "proforma"]),
+    doc_type: z.enum(["invoice", "proforma", "quote", "delivery_note"]),
+    valid_until: z.iso.date().nullable().optional(),
     client_id: z.string().uuid().nullable().optional(),
+    collection_method_id: z.string().uuid().nullable().optional(),
+    series_id: z.string().uuid().nullable().optional(),
     issue_date: z.iso.date().optional(),
     due_date: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
@@ -66,7 +89,7 @@ const createDraftSchema = z
   })
   .strict();
 
-type DocumentRow = typeof documents.$inferSelect;
+type DocumentRow = DocumentDetail;
 type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 function requestIdFrom(request: Request): {
@@ -158,6 +181,17 @@ function madridDate(now = new Date()): string {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
+function linksResponse(links: NonNullable<DocumentDetail["links"]>) {
+  const ref = (link: DocumentLinkRef) => ({
+    id: link.id,
+    kind: link.kind,
+    doc_type: link.documentType,
+    full_number: link.fullNumber,
+    status: link.status,
+  });
+  return { from: links.from.map(ref), to: links.to.map(ref) };
+}
+
 function documentResponse(document: DocumentRow) {
   return {
     id: document.id,
@@ -177,8 +211,9 @@ function documentResponse(document: DocumentRow) {
     total_cents: document.totalCents,
     issuer_snapshot: document.issuerSnapshot,
     client_snapshot: document.clientSnapshot,
-    converted_from_id: document.convertedFromId,
-    converted_to_id: document.convertedToId,
+    converted_from_id: document.convertedFromId ?? null,
+    converted_to_id: document.convertedToId ?? null,
+    document_links: document.links ? linksResponse(document.links) : undefined,
     invoice_id: document.invoiceId,
     payment_id: document.paymentId,
     pdf_status: document.pdfStatus,
@@ -200,6 +235,10 @@ function draftResponse(document: DocumentDetail) {
       quantity: line.quantity,
       unit_price_cents: line.unitPriceCents,
       tax_rate: line.taxRate,
+      tax_name: line.taxName,
+      unit: line.unit,
+      tax_rate_id: line.taxRateId,
+      catalog_item_id: line.catalogItemId,
       discount_pct: line.discountPercentage,
       line_subtotal_cents: line.lineSubtotalCents,
       line_tax_cents: line.lineTaxCents,
@@ -253,10 +292,11 @@ export async function GET(request: Request): Promise<Response> {
     );
     const pagination = parsePagination(searchParams);
     const cursorId = decodeCursor(pagination.cursor);
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
     const paidCents = paidCentsExpression(context.companyId);
     const paymentStatus = paymentStatusExpression(context.companyId);
+    const derivedState = derivedStateExpression(madridDate(new Date()));
     const conditions = [
       eq(documents.companyId, context.companyId),
       isNull(documents.deletedAt),
@@ -267,6 +307,21 @@ export async function GET(request: Request): Promise<Response> {
       query.to ? lte(documents.issueDate, query.to) : undefined,
       query.payment_status
         ? sql`${paymentStatus} = ${query.payment_status}`
+        : undefined,
+      query.quote_state
+        ? and(
+            eq(documents.documentType, "quote"),
+            sql`${quoteStateExpression(madridDate(new Date()))} = ${query.quote_state}`,
+          )
+        : undefined,
+      query.invoiced
+        ? and(
+            eq(documents.documentType, "delivery_note"),
+            eq(documents.status, "issued"),
+            query.invoiced === "true"
+              ? deliveryNoteInvoicedExpression()
+              : sql`NOT ${deliveryNoteInvoicedExpression()}`,
+          )
         : undefined,
       cursorId ? gt(documents.id, cursorId) : undefined,
     ].filter((condition) => condition !== undefined);
@@ -288,8 +343,20 @@ export async function GET(request: Request): Promise<Response> {
         updatedAt: documents.updatedAt,
         paidCents,
         paymentStatus,
+        derivedState,
+        validUntil: documents.validUntil,
+        clientSnapshot: documents.clientSnapshot,
+        clientName: clients.name,
+        clientTaxId: clients.taxId,
       })
       .from(documents)
+      .leftJoin(
+        clients,
+        and(
+          eq(clients.id, documents.clientId),
+          eq(clients.companyId, documents.companyId),
+        ),
+      )
       .where(and(...conditions))
       .orderBy(asc(documents.id))
       .limit(pagination.limit + 1);
@@ -305,6 +372,12 @@ export async function GET(request: Request): Promise<Response> {
           status: row.status,
           full_number: row.fullNumber,
           client_id: row.clientId,
+          client_display: clientDisplayFor(
+            row.clientSnapshot,
+            row.clientName === null
+              ? null
+              : { name: row.clientName, taxId: row.clientTaxId },
+          ),
           issue_date: row.issueDate,
           due_date: row.dueDate,
           total_cents: row.totalCents,
@@ -316,6 +389,8 @@ export async function GET(request: Request): Promise<Response> {
           paid_cents: row.paidCents,
           outstanding_cents: Math.max(row.totalCents - row.paidCents, 0),
           payment_status: row.paymentStatus,
+          derived_state: row.derivedState,
+          valid_until: row.validUntil,
         })),
         next_cursor: hasNextPage && lastItem ? encodeCursor(lastItem.id) : null,
       }),
@@ -330,14 +405,18 @@ export async function POST(request: Request): Promise<Response> {
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const inputPromise = parseJson(request, createDraftSchema);
     const [context, input] = await Promise.all([contextPromise, inputPromise]);
     const createdDocument = await createDraftDocument({
       companyId: context.companyId,
       actor: context.userId,
+      eventActor: auditActor(context),
       documentType: input.doc_type,
+      validUntil: input.valid_until ?? null,
       clientId: input.client_id ?? null,
+      collectionMethodId: input.collection_method_id,
+      seriesId: input.series_id,
       issueDate: input.issue_date ?? madridDate(),
       dueDate: input.due_date ?? null,
       notes: input.notes ?? null,
@@ -347,11 +426,21 @@ export async function POST(request: Request): Promise<Response> {
         unitPriceCents: line.unit_price_cents,
         taxRate: line.tax_rate,
         discountPercentage: line.discount_pct ?? "0",
+        taxName: line.tax_name ?? "IVA",
+        unit: line.unit?.trim() ? line.unit.trim() : null,
+        taxRateId: line.tax_rate_id ?? null,
+        catalogItemId: line.catalog_item_id ?? null,
       })),
     });
 
     return withRequestId(
-      Response.json(draftResponse(createdDocument), { status: 201 }),
+      Response.json(
+        {
+          ...draftResponse(createdDocument),
+          series_created: createdDocument.seriesCreated ?? null,
+        },
+        { status: 201 },
+      ),
       requestId,
     );
   } catch (error) {

@@ -3,9 +3,11 @@ import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { createDatabase, type Database } from "@/db";
 import { firstExecutionRow } from "@/db/result";
 import { clients } from "@/db/schema/client";
+import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
+import { documentLinks } from "@/db/schema/document-link";
 import { documentSeries } from "@/db/schema/document-series";
 import { ApiError } from "@/lib/api/errors";
 import { type BillingResult, calculateBilling } from "@/lib/billing";
@@ -15,14 +17,20 @@ import {
   getCompanyReadiness,
   validateIssue,
 } from "@/lib/documents";
+import { documentTypePlural } from "@/lib/documents/labels";
 import { createUuidV7 } from "@/lib/ids";
 import { createCents } from "@/lib/money";
 import {
+  type DocumentType,
+  documentLimit,
   getMadridMonthBounds,
-  getPlanCapabilities,
+  PLANS,
   type Plan,
+  planLabel,
 } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
+import { seriesArchivedError } from "@/services/document-errors";
+import { ensureDefaultSeries } from "@/services/series";
 import { createPdfRenderMessage } from "@/workers/messages";
 
 const MAX_ISSUANCE_PREPARATION_ATTEMPTS = 3;
@@ -45,12 +53,19 @@ export type IssuanceIdempotencyStrategy =
   | {
       kind: "receipt_for_payment";
       paymentId: string;
+    }
+  | {
+      /** The document generated for a recurring cycle (SC-008). */
+      kind: "recurring_cycle";
+      cycleId: string;
     };
 
 export interface IssueDocumentInput {
   companyId: string;
   documentId: string;
   actor: string;
+  /** Audit actor of the events when it differs from `actor` (AI, FR-056). */
+  eventActor?: string;
   idempotency?: IssuanceIdempotencyStrategy;
 }
 
@@ -63,7 +78,7 @@ export interface IssueDocumentDependencies {
 
 export interface IssuedDocumentResult {
   id: string;
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   status: "issued" | "voided";
   seriesId: string;
   number: number;
@@ -98,9 +113,11 @@ interface IssuePreparation {
   };
   document: {
     id: string;
-    documentType: "invoice" | "proforma" | "receipt";
+    documentType: DocumentType;
     status: "draft" | "issued" | "voided";
     clientId: string | null;
+    /** Series chosen in the editor; `null` → the type's default series. */
+    seriesId: string | null;
     issueDate: string;
     dueDate: string | null;
     deletedAt: Date | null;
@@ -120,6 +137,7 @@ interface IssuePreparation {
     address: string | null;
     email: string | null;
     phone: string | null;
+    logoKey: string | null;
     archivedAt: Date | null;
   } | null;
   lines: Array<{
@@ -129,6 +147,7 @@ interface IssuePreparation {
     quantity: string;
     unitPriceCents: number;
     taxRate: string;
+    taxName: string;
     discountPercentage: string;
   }>;
 }
@@ -140,6 +159,7 @@ interface PreparedLine {
   quantity: string;
   unit_price_cents: number;
   tax_rate: string;
+  tax_name: string;
   discount_percentage: string;
   line_subtotal_cents: number;
   line_tax_cents: number;
@@ -151,6 +171,9 @@ interface AtomicIssueRow extends Record<string, unknown> {
   document_id: string | null;
   company_locked: boolean;
   series_locked: boolean;
+  /** Only for `plan_limit`: plan and same-type usage read under the lock. */
+  locked_plan: Plan | null;
+  used_count: number | null;
 }
 
 async function executeIssuanceTransaction(
@@ -226,12 +249,45 @@ function documentStateConflict(
   );
 }
 
-function planLimitError(plan: Plan): ApiError {
-  const limit = getPlanCapabilities(plan).docLimit;
+export const UPGRADE_URL = "/billing";
+
+function planLimitError(
+  plan: Plan,
+  documentType: DocumentType,
+  used: number,
+): ApiError {
+  const limit = documentLimit(plan, documentType);
   return new ApiError(
     "plan_limit_reached",
     402,
-    `Has alcanzado el límite de ${limit} documentos emitidos este mes para tu plan.`,
+    `Has alcanzado el límite de ${limit} ${documentTypePlural(documentType)} este mes en el plan ${planLabel(plan)}. Mejora tu plan para seguir emitiendo; el borrador se conserva.`,
+    undefined,
+    {
+      document_type: documentType,
+      limit,
+      used,
+      plan: plan,
+      upgrade_url: UPGRADE_URL,
+    },
+  );
+}
+
+/**
+ * `CASE` over every stored plan value, with limits injected from
+ * `src/lib/plan.ts`, so the limit is chosen from the plan read under the
+ * company lock rather than the one seen during preparation.
+ */
+function limitCaseSql(documentType: DocumentType): SQL {
+  return sql.join(
+    [
+      sql`CASE locked_company.plan`,
+      ...PLANS.map(
+        (plan) =>
+          sql`WHEN ${plan}::plan THEN ${documentLimit(plan, documentType)}::integer`,
+      ),
+      sql`END`,
+    ],
+    sql` `,
   );
 }
 
@@ -259,6 +315,7 @@ async function loadIssuePreparation(
         documentType: documents.documentType,
         status: documents.status,
         clientId: documents.clientId,
+        seriesId: documents.seriesId,
         issueDate: documents.issueDate,
         dueDate: documents.dueDate,
         deletedAt: documents.deletedAt,
@@ -276,6 +333,7 @@ async function loadIssuePreparation(
         address: clients.address,
         email: clients.email,
         phone: clients.phone,
+        logoKey: clients.logoKey,
         archivedAt: clients.archivedAt,
       },
       line: {
@@ -285,6 +343,7 @@ async function loadIssuePreparation(
         quantity: documentLines.quantity,
         unitPriceCents: documentLines.unitPriceCents,
         taxRate: documentLines.taxRate,
+        taxName: documentLines.taxName,
         discountPercentage: documentLines.discountPercentage,
       },
     })
@@ -426,6 +485,7 @@ function calculateIssueBilling(preparation: IssuePreparation): {
         quantity: line.quantity,
         unitPriceCents: createCents(line.unitPriceCents),
         taxRate: line.taxRate,
+        taxName: line.taxName,
         discountPercentage: line.discountPercentage,
       })),
       retentionRate: preparation.company.retentionRate,
@@ -444,6 +504,7 @@ function calculateIssueBilling(preparation: IssuePreparation): {
           quantity: line.quantity,
           unit_price_cents: line.unitPriceCents,
           tax_rate: line.taxRate,
+          tax_name: line.taxName,
           discount_percentage: line.discountPercentage,
           line_subtotal_cents: calculated.subtotalCents,
           line_tax_cents: calculated.taxCents,
@@ -464,7 +525,7 @@ function calculateIssueBilling(preparation: IssuePreparation): {
   }
 }
 
-async function loadIssuedDocument(
+export async function loadIssuedDocument(
   database: Database,
   companyId: string,
   documentId: string,
@@ -537,13 +598,23 @@ async function resolveExistingIdempotentDocument(
         sql`${documents.status} IN ('issued'::document_status, 'voided'::document_status)`,
         idempotency.kind === "converted_from"
           ? and(
-              eq(documents.documentType, "invoice"),
-              eq(documents.convertedFromId, idempotency.sourceDocumentId),
+              // The converted document itself: confirmed repeats of the
+              // same source are distinct documents, each issued once.
+              eq(documents.id, input.documentId),
+              sql`EXISTS (
+                SELECT 1 FROM ${documentLinks}
+                WHERE ${documentLinks.targetDocumentId} = ${documents.id}
+                  AND ${documentLinks.sourceDocumentId} = ${idempotency.sourceDocumentId}
+                  AND ${documentLinks.kind} = 'converted'
+                  AND ${documentLinks.releasedAt} IS NULL
+              )`,
             )
-          : and(
-              eq(documents.documentType, "receipt"),
-              eq(documents.paymentId, idempotency.paymentId),
-            ),
+          : idempotency.kind === "recurring_cycle"
+            ? eq(documents.recurringCycleId, idempotency.cycleId)
+            : and(
+                eq(documents.documentType, "receipt"),
+                eq(documents.paymentId, idempotency.paymentId),
+              ),
       ),
     )
     .limit(1);
@@ -577,6 +648,7 @@ function prepareSnapshots(preparation: IssuePreparation): {
       address: client.address,
       email: client.email,
       phone: client.phone,
+      logoKey: client.logoKey,
     }),
   };
 }
@@ -593,8 +665,7 @@ async function executeAtomicIssue(
   const nowIso = now.toISOString();
   const preparedDocumentUpdatedAtIso =
     preparation.document.updatedAt.toISOString();
-  const freeLimit = getPlanCapabilities("free").docLimit;
-  const proLimit = getPlanCapabilities("pro").docLimit;
+  const documentType = preparation.document.documentType;
   const eventId = createUuidV7(now.getTime());
   const idempotencyKind = input.idempotency?.kind ?? null;
   const idempotencyReference =
@@ -602,7 +673,9 @@ async function executeAtomicIssue(
       ? input.idempotency.sourceDocumentId
       : input.idempotency?.kind === "receipt_for_payment"
         ? input.idempotency.paymentId
-        : null;
+        : input.idempotency?.kind === "recurring_cycle"
+          ? input.idempotency.cycleId
+          : null;
 
   const lockStatement = sql`
     SELECT issuer.id
@@ -641,8 +714,19 @@ async function executeAtomicIssue(
         AND (
           (
             ${idempotencyKind}::text = 'converted_from'
-            AND existing_document.document_type = 'invoice'::document_type
-            AND existing_document.converted_from_id =
+            AND existing_document.id = ${input.documentId}::uuid
+            AND EXISTS (
+              SELECT 1 FROM ${documentLinks} existing_link
+              WHERE existing_link.target_document_id = existing_document.id
+                AND existing_link.source_document_id =
+                  ${idempotencyReference}::uuid
+                AND existing_link.kind = 'converted'::document_link_kind
+                AND existing_link.released_at IS NULL
+            )
+          )
+          OR (
+            ${idempotencyKind}::text = 'recurring_cycle'
+            AND existing_document.recurring_cycle_id =
               ${idempotencyReference}::uuid
           )
           OR (
@@ -662,6 +746,7 @@ async function executeAtomicIssue(
           'issued'::document_status,
           'voided'::document_status
         )
+        AND issued_document.document_type = ${documentType}::document_type
         AND issued_document.issued_at >= ${start.toISOString()}
         AND issued_document.issued_at < ${endExclusive.toISOString()}
       WHERE NOT EXISTS (SELECT 1 FROM idempotent_result)
@@ -671,16 +756,14 @@ async function executeAtomicIssue(
       FROM locked_company
       CROSS JOIN monthly_usage
       WHERE NOT EXISTS (SELECT 1 FROM idempotent_result)
-        AND monthly_usage.issued_count < CASE locked_company.plan
-          WHEN 'free'::plan THEN ${freeLimit}::integer
-          WHEN 'pro'::plan THEN ${proLimit}::integer
-        END
+        AND monthly_usage.issued_count < ${limitCaseSql(documentType)}
     ),
     target_document AS MATERIALIZED (
       SELECT
         target.id,
         target.document_type,
         target.client_id,
+        target.series_id,
         target.issue_date,
         target.due_date
       FROM ${documents} target
@@ -712,6 +795,8 @@ async function executeAtomicIssue(
           ${preparation.client?.email ?? null}
         AND customer.phone IS NOT DISTINCT FROM
           ${preparation.client?.phone ?? null}
+        AND customer.logo_key IS NOT DISTINCT FROM
+          ${preparation.client?.logoKey ?? null}
       FOR SHARE OF customer
     ),
     line_input AS MATERIALIZED (
@@ -723,6 +808,7 @@ async function executeAtomicIssue(
         quantity numeric(12, 3),
         unit_price_cents integer,
         tax_rate numeric(5, 2),
+        tax_name text,
         discount_percentage numeric(5, 2),
         line_subtotal_cents integer,
         line_tax_cents integer,
@@ -773,6 +859,7 @@ async function executeAtomicIssue(
               OR current_line.unit_price_cents IS DISTINCT FROM
                 line_input.unit_price_cents
               OR current_line.tax_rate IS DISTINCT FROM line_input.tax_rate
+              OR current_line.tax_name IS DISTINCT FROM line_input.tax_name
               OR current_line.discount_pct IS DISTINCT FROM
                 line_input.discount_percentage
             )
@@ -785,7 +872,11 @@ async function executeAtomicIssue(
         ON validated_target.document_type = numbering_series.document_type
       JOIN quota_slot
         ON quota_slot.id = numbering_series.company_id
-      WHERE numbering_series.is_default
+      WHERE (
+          (validated_target.series_id IS NULL AND numbering_series.is_default)
+          OR numbering_series.id = validated_target.series_id
+        )
+        AND numbering_series.archived_at IS NULL
         AND numbering_series.next_number < 2147483647
       FOR UPDATE OF numbering_series
     ),
@@ -824,6 +915,23 @@ async function executeAtomicIssue(
         total_cents = ${billing.totalCents},
         issuer_snapshot = ${JSON.stringify(issuerSnapshot)}::jsonb,
         client_snapshot = ${JSON.stringify(clientSnapshot)}::jsonb,
+        -- FR-022: the collection method is frozen as it is at issue time.
+        collection_method_snapshot = (
+          SELECT jsonb_strip_nulls(jsonb_build_object(
+            'kind', method.kind,
+            'label', method.label,
+            'holder', method.holder_name,
+            'iban', method.iban,
+            'bic', method.bic,
+            'phone', method.phone,
+            'email_or_url', method.email_or_url,
+            'instructions', method.instructions
+          ))
+          FROM ${collectionMethods} method
+          WHERE method.id = target.collection_method_id
+            AND method.company_id = target.company_id
+            AND method.archived_at IS NULL
+        ),
         pdf_status = 'pending'::pdf_status,
         pdf_ready_at = NULL,
         issued_at = ${nowIso},
@@ -860,7 +968,7 @@ async function executeAtomicIssue(
         ${eventId},
         issued_document.company_id,
         issued_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'issued'::document_event_type,
         ${nowIso}
       FROM issued_document
@@ -872,14 +980,18 @@ async function executeAtomicIssue(
       'existing'::text AS outcome,
       idempotent_result.document_id,
       TRUE AS company_locked,
-      FALSE AS series_locked
+      FALSE AS series_locked,
+      NULL::plan AS locked_plan,
+      NULL::integer AS used_count
     FROM idempotent_result
     UNION ALL
     SELECT
       'issued'::text AS outcome,
       issued_document.id AS document_id,
       TRUE AS company_locked,
-      TRUE AS series_locked
+      TRUE AS series_locked,
+      NULL::plan AS locked_plan,
+      NULL::integer AS used_count
     FROM issued_document
     JOIN inserted_event
       ON inserted_event.document_id = issued_document.id
@@ -888,8 +1000,11 @@ async function executeAtomicIssue(
       'plan_limit'::text AS outcome,
       NULL::uuid AS document_id,
       TRUE AS company_locked,
-      FALSE AS series_locked
+      FALSE AS series_locked,
+      locked_company.plan AS locked_plan,
+      monthly_usage.issued_count AS used_count
     FROM locked_company
+    CROSS JOIN monthly_usage
     WHERE NOT EXISTS (SELECT 1 FROM idempotent_result)
       AND NOT EXISTS (SELECT 1 FROM quota_slot)
   `;
@@ -908,13 +1023,16 @@ async function throwAtomicIssueFailure(
     .select({
       id: documentSeries.id,
       nextNumber: documentSeries.nextNumber,
+      archivedAt: documentSeries.archivedAt,
     })
     .from(documentSeries)
     .where(
       and(
         eq(documentSeries.companyId, input.companyId),
         eq(documentSeries.documentType, preparation.document.documentType),
-        eq(documentSeries.isDefault, true),
+        preparation.document.seriesId
+          ? eq(documentSeries.id, preparation.document.seriesId)
+          : eq(documentSeries.isDefault, true),
       ),
     )
     .limit(1);
@@ -926,6 +1044,9 @@ async function throwAtomicIssueFailure(
         seriesId: `Falta una serie predeterminada para ${preparation.document.documentType}.`,
       },
     );
+  }
+  if (defaultSeries.archivedAt) {
+    throw seriesArchivedError();
   }
   if (defaultSeries.nextNumber >= 2_147_483_647) {
     throw new ApiError(
@@ -959,6 +1080,15 @@ export async function issueDocument(
     attempt += 1
   ) {
     const preparation = await loadIssuePreparation(database, input);
+    if (attempt === 0 && preparation.document.status === "draft") {
+      // FR-019: a type's first issue never fails for lack of a series.
+      await ensureDefaultSeries(
+        database,
+        input.companyId,
+        preparation.document.documentType,
+        now,
+      );
+    }
 
     // A concurrent call sharing the same idempotency key (converting the
     // same proforma, or receipting the same payment) may have issued this
@@ -986,7 +1116,11 @@ export async function issueDocument(
       return loadIssuedDocument(database, input.companyId, row.document_id);
     }
     if (row?.outcome === "plan_limit") {
-      throw planLimitError(preparation.company.plan);
+      throw planLimitError(
+        row.locked_plan ?? preparation.company.plan,
+        preparation.document.documentType,
+        Number(row.used_count ?? 0),
+      );
     }
     if (row?.outcome === "issued" && row.document_id) {
       await dependencies.queue.send(createPdfRenderMessage(row.document_id));

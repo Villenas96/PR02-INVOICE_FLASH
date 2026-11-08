@@ -104,6 +104,9 @@ const updateClientSchema = z
     email: emailSchema,
     phone: phoneSchema,
     address: optionalTextSchema("La dirección", 500),
+    postal_code: optionalTextSchema("El código postal", 20),
+    city: optionalTextSchema("La población", 120),
+    reminders_enabled: z.boolean().optional(),
     notes: optionalTextSchema("Las notas", 5_000),
   })
   .strict()
@@ -166,7 +169,11 @@ function clientResponse(
     address: client.address,
     email: client.email,
     phone: client.phone,
+    postal_code: client.postalCode,
+    city: client.city,
+    reminders_enabled: client.remindersEnabled,
     notes: client.notes,
+    logo_key: client.logoKey,
     archived_at: client.archivedAt,
     pending_cents: aggregates.pendingCents,
     overdue_cents: aggregates.overdueCents,
@@ -247,7 +254,7 @@ export async function GET(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "read" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -279,7 +286,7 @@ export async function PATCH(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -298,6 +305,13 @@ export async function PATCH(
         ...(input.address === undefined ? {} : { address: input.address }),
         ...(input.email === undefined ? {} : { email: input.email }),
         ...(input.phone === undefined ? {} : { phone: input.phone }),
+        ...(input.postal_code === undefined
+          ? {}
+          : { postalCode: input.postal_code }),
+        ...(input.city === undefined ? {} : { city: input.city }),
+        ...(input.reminders_enabled === undefined
+          ? {}
+          : { remindersEnabled: input.reminders_enabled }),
         ...(input.notes === undefined ? {} : { notes: input.notes }),
         updatedAt: new Date(),
       })

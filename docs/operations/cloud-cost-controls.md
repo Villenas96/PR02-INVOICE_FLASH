@@ -86,6 +86,10 @@ ser HTTPS y no contener secretos:
     "customDomainsDisabled": true,
     "httpsOnly": true,
     "encryptionAtRest": "AES-256-GCM",
+    "lifecycleRules": [
+      { "prefix": "exports/", "expireAfterDays": 8, "enabled": true },
+      { "prefix": "imports/", "expireAfterDays": 8, "enabled": true }
+    ],
     "verifiedAt": "<ISO-8601 con zona>",
     "evidenceUrl": "https://<ticket-o-registro-privado>"
   },

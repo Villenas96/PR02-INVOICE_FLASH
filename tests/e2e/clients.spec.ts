@@ -1,6 +1,8 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import postgres from "postgres";
+import { appOrigin, testEmail } from "./environment";
+import { chooseLineTax } from "./helpers";
 
 function e2eDatabaseUrl(): string {
   const url = process.env.E2E_DATABASE_URL;
@@ -57,7 +59,7 @@ async function verificationUrl(email: string): Promise<string> {
     if (!token) {
       throw new Error("No se ha persistido el token de verificación.");
     }
-    const url = new URL("/api/auth/verify-email", "http://127.0.0.1:3000");
+    const url = new URL("/api/auth/verify-email", appOrigin());
     url.searchParams.set("token", token);
     url.searchParams.set(
       "callbackURL",
@@ -71,7 +73,7 @@ async function verificationUrl(email: string): Promise<string> {
 
 async function registerVerifyAndSignIn(page: Page): Promise<string> {
   const suffix = crypto.randomUUID();
-  const email = `e2e-clients-${suffix}@example.test`;
+  const email = testEmail(`e2e-clients-${suffix}`);
   const password = "invoice-flash-e2e-password";
 
   await page.goto("/register");
@@ -144,18 +146,20 @@ test("crea, busca, factura, edita y archiva un cliente sin alterar el documento 
   await page.getByLabel("Buscar").fill("");
 
   await page.goto("/documents/new");
-  await page.getByLabel("Buscar cliente").fill("E2E Clientes");
+  await page.getByRole("combobox", { name: "Cliente" }).click();
+  await page.keyboard.type("E2E Clientes");
   await expect(
-    page.getByLabel("Cliente", { exact: true }).locator("option"),
-  ).toHaveCount(2);
-  await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente E2E Clientes · A87654321" });
+    page.getByRole("option", { name: /^Cliente E2E Clientes/ }),
+  ).toHaveCount(1);
+  await page.getByRole("option", { name: /^Cliente E2E Clientes/ }).click();
+  await expect(page.getByRole("combobox", { name: "Cliente" })).toContainText(
+    "A87654321",
+  );
   const firstLine = page.getByRole("group", { name: "Línea 1" });
   await firstLine.getByLabel("Descripción").fill("Servicio de prueba");
   await firstLine.getByLabel("Cantidad").fill("1");
   await firstLine.getByLabel("Precio unitario").fill("200,00");
-  await firstLine.getByLabel("IVA").selectOption("21.00");
+  await chooseLineTax(page, firstLine, "IVA 21 %");
 
   await page.route("**/api/v1/documents", async (route) => {
     if (route.request().method() === "POST") {
@@ -200,8 +204,13 @@ test("crea, busca, factura, edita y archiva un cliente sin alterar el documento 
   await expect(page.getByText("Archivado")).toBeVisible();
 
   await page.goto("/documents/new");
-  await page.getByLabel("Buscar cliente").fill("E2E Renombrado");
+  await page.getByRole("combobox", { name: "Cliente" }).click();
+  await page.keyboard.type("E2E Renombrado");
+  // Archived clients never appear; only «Sin cliente» and «Crear …» remain.
   await expect(
-    page.getByLabel("Cliente", { exact: true }).locator("option"),
-  ).toHaveCount(1);
+    page.getByRole("option", { name: /Crear «E2E Renombrado»/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: /^Cliente E2E Renombrado/ }),
+  ).toHaveCount(0);
 });

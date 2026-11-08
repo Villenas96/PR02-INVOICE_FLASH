@@ -3,6 +3,7 @@ import { captureException } from "@/lib/sentry";
 import {
   canRetryEmail,
   type EmailSendMessage,
+  type JobMessage,
   MAX_QUEUE_RETRIES,
   type PdfRenderMessage,
   parseQueueMessage,
@@ -24,6 +25,8 @@ export interface QueueBatch {
 export interface QueueConsumers {
   renderPdf(message: PdfRenderMessage): Promise<void>;
   sendEmail(message: EmailSendMessage): Promise<void>;
+  /** Jobs queue handlers (recurrences, reminders, exports, grace, …). */
+  runJob?(message: JobMessage): Promise<void>;
 }
 
 /** Lets purpose-aware email handlers bound retries by verification expiry. */
@@ -75,7 +78,16 @@ export async function processQueueBatch(
           return;
         }
 
-        await consumers.sendEmail(message);
+        if (message.type === "email.send") {
+          await consumers.sendEmail(message);
+          delivery.ack();
+          return;
+        }
+
+        if (!consumers.runJob) {
+          throw new Error("El consumidor de trabajos no está configurado.");
+        }
+        await consumers.runJob(message);
         delivery.ack();
       } catch (error) {
         const retryUntil =

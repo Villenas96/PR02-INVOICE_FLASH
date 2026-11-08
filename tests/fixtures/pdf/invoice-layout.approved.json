@@ -34,10 +34,17 @@
     "line_table",
     "tax_breakdown",
     "totals",
+    "payment",
     "notes",
     "page_footer"
   ],
-  "tableHeaders": ["Concepto", "Cantidad", "Precio unitario", "IVA", "Total"],
+  "tableHeaders": [
+    "Concepto",
+    "Cantidad",
+    "Precio unitario",
+    "Impuesto",
+    "Total"
+  ],
   "spanishLabels": [
     "Factura",
     "Emisor",
@@ -48,6 +55,9 @@
     "Base imponible",
     "Retención IRPF",
     "Total",
-    "Notas"
+    "Observaciones",
+    "Pago",
+    "Importe",
+    "Vencimiento"
   ]
 }

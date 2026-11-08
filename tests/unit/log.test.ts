@@ -50,3 +50,14 @@ describe("redactForLogs", () => {
     });
   });
 });
+
+describe("IBAN redaction", () => {
+  it("redacts IBANs with and without spaces inside free text", () => {
+    expect(
+      redactForLogs("Cuenta ES91 2100 0418 4502 0005 1332 rechazada"),
+    ).toBe("Cuenta [redacted-iban] rechazada");
+    expect(redactForLogs("iban=DE89370400440532013000")).toBe(
+      "iban=[redacted-iban]",
+    );
+  });
+});

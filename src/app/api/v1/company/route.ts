@@ -1,23 +1,27 @@
-import { and, count, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
 import { companies } from "@/db/schema/company";
-import { documents } from "@/db/schema/document";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseJson } from "@/lib/api/validate";
-import { getCompanyReadiness } from "@/lib/documents";
 import { logSafe } from "@/lib/log";
+import type { OnboardingProgress } from "@/lib/onboarding";
+import { planLabel } from "@/lib/plan";
+import { reminderPolicySchema } from "@/lib/reminders";
 import {
-  getMadridMonthBounds,
-  getPlanCapabilities,
-  usageWarning,
-} from "@/lib/plan";
+  type CompanySummary,
+  loadCompanySummary,
+  usageResponse,
+} from "@/services/company-summary";
 import {
   type CompanyContext,
   ResourceNotFoundError,
   resolveCompanyContext,
 } from "@/services/context";
+import { requireFeature } from "@/services/entitlements";
+import { onboardingProgressFor } from "@/services/onboarding";
+import { setDefaultIvaRate } from "@/services/tax-rates";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const SPANISH_TAX_ID_PATTERN =
@@ -90,6 +94,25 @@ const updateCompanySchema = z
     default_tax_rate: defaultTaxRateSchema.optional(),
     retention_rate: retentionRateSchema.optional(),
     currency: currencySchema.optional(),
+    // `null` returns to the plan default; `full` needs Pro (checked below).
+    ui_mode: z.enum(["simple", "full"]).nullable().optional(),
+    // Pro: automatic payment reminders (FR-041).
+    reminder_policy: reminderPolicySchema.optional(),
+    // Destination of advisor sends (FR-032, FR-034); `null` removes it.
+    advisor_email: z
+      .union([
+        z.null(),
+        z.literal(""),
+        z
+          .string()
+          .trim()
+          .max(320)
+          .email("Introduce un correo válido para tu asesoría."),
+      ])
+      .transform((value) =>
+        value === "" ? null : (value?.toLowerCase() ?? null),
+      )
+      .optional(),
   })
   .strict()
   .refine(
@@ -99,7 +122,6 @@ const updateCompanySchema = z
     },
   );
 
-type CompanyRow = typeof companies.$inferSelect;
 type CompanyUpdate = {
   legalName?: string | null;
   taxId?: string | null;
@@ -107,9 +129,11 @@ type CompanyUpdate = {
   email?: string;
   phone?: string | null;
   defaultDueDays?: number;
-  defaultTaxRate?: string;
   retentionRate?: string;
   currency?: string;
+  uiMode?: "simple" | "full" | null;
+  advisorEmail?: string | null;
+  reminderPolicy?: z.output<typeof reminderPolicySchema>;
   updatedAt: Date;
 };
 
@@ -129,19 +153,12 @@ function withRequestId(response: Response, requestId: string): Response {
   return response;
 }
 
-function missingFieldName(field: "address" | "legalName" | "taxId"): string {
-  if (field === "legalName") {
-    return "legal_name";
-  }
-  if (field === "taxId") {
-    return "tax_id";
-  }
-  return field;
-}
-
-function companyResponse(company: CompanyRow, issuedDocumentCount: number) {
-  const readiness = getCompanyReadiness(company);
-  const capabilities = getPlanCapabilities(company.plan);
+function companyResponse(
+  summary: CompanySummary,
+  context: CompanyContext,
+  onboarding: OnboardingProgress,
+) {
+  const { company } = summary;
 
   return {
     id: company.id,
@@ -152,61 +169,35 @@ function companyResponse(company: CompanyRow, issuedDocumentCount: number) {
     phone: company.phone,
     logo_key: company.logoKey,
     default_due_days: company.defaultDueDays,
-    default_tax_rate: company.defaultTaxRate,
+    default_tax_rate: summary.defaultTaxRate,
     retention_rate: company.retentionRate,
     currency: company.currency,
-    plan: company.plan,
-    is_ready_to_issue: readiness.ready,
-    missing_fields: readiness.missingFields.map(missingFieldName),
-    docs_issued_this_month: issuedDocumentCount,
-    doc_limit: capabilities.docLimit,
-    can_generate_pdf: capabilities.canGeneratePdf,
-    can_send_email: capabilities.canSendEmail,
-    can_share_link: capabilities.canShareLink,
-    usage_warning: usageWarning(company.plan, issuedDocumentCount),
+    advisor_email: company.advisorEmail,
+    reminder_policy: company.reminderPolicy,
+    role: context.role,
+    plan: summary.plan,
+    plan_label: planLabel(summary.plan),
+    usage: summary.usage.map(usageResponse),
+    features: summary.features,
+    ui_mode: summary.uiMode,
+    effective_ui: summary.effectiveUi,
+    used_document_types: summary.usedDocumentTypes,
+    is_ready_to_issue: summary.missingFields.length === 0,
+    missing_fields: summary.missingFields,
+    missing_to_issue: summary.missingToIssue,
+    onboarding,
   };
 }
 
-function issuedDocumentCountPromise(
-  database: Database,
-  companyId: string,
-  now = new Date(),
-): Promise<number> {
-  const { start, endExclusive } = getMadridMonthBounds(now);
-
-  return database
-    .select({ value: count(documents.id) })
-    .from(documents)
-    .where(
-      and(
-        eq(documents.companyId, companyId),
-        inArray(documents.status, ["issued", "voided"]),
-        gte(documents.issuedAt, start),
-        lt(documents.issuedAt, endExclusive),
-      ),
-    )
-    .then(([result]) => Number(result?.value ?? 0));
-}
-
-async function loadCompany(
+async function loadSummary(
   database: Database,
   context: CompanyContext,
-): Promise<CompanyRow> {
-  const [company] = await database
-    .select()
-    .from(companies)
-    .where(
-      and(
-        eq(companies.id, context.companyId),
-        eq(companies.userId, context.userId),
-      ),
-    )
-    .limit(1);
-
-  if (!company) {
+): Promise<CompanySummary> {
+  const summary = await loadCompanySummary(database, context.companyId);
+  if (!summary) {
     throw new ResourceNotFoundError();
   }
-  return company;
+  return summary;
 }
 
 function updatesFrom(
@@ -232,14 +223,20 @@ function updatesFrom(
   if (input.default_due_days !== undefined) {
     updates.defaultDueDays = input.default_due_days;
   }
-  if (input.default_tax_rate !== undefined) {
-    updates.defaultTaxRate = input.default_tax_rate;
-  }
   if (input.retention_rate !== undefined) {
     updates.retentionRate = input.retention_rate;
   }
   if (input.currency !== undefined) {
     updates.currency = input.currency;
+  }
+  if (input.ui_mode !== undefined) {
+    updates.uiMode = input.ui_mode;
+  }
+  if (input.advisor_email !== undefined) {
+    updates.advisorEmail = input.advisor_email;
+  }
+  if (input.reminder_policy !== undefined) {
+    updates.reminderPolicy = input.reminder_policy;
   }
 
   return updates;
@@ -268,20 +265,18 @@ export async function GET(request: Request): Promise<Response> {
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const context = await resolveCompanyContext(request);
+    const context = await resolveCompanyContext(request, { access: "read" });
     const database = createDatabase();
-    const companyPromise = loadCompany(database, context);
-    const usagePromise = issuedDocumentCountPromise(
-      database,
-      context.companyId,
-    );
-    const [company, issuedDocumentCount] = await Promise.all([
-      companyPromise,
-      usagePromise,
-    ]);
+    const summary = await loadSummary(database, context);
 
     return withRequestId(
-      Response.json(companyResponse(company, issuedDocumentCount)),
+      Response.json(
+        companyResponse(
+          summary,
+          context,
+          await onboardingProgressFor(database, summary.company),
+        ),
+      ),
       requestId,
     );
   } catch (error) {
@@ -293,11 +288,17 @@ export async function PUT(request: Request): Promise<Response> {
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const inputPromise = parseJson(request, updateCompanySchema);
     const [context, input] = await Promise.all([contextPromise, inputPromise]);
+    if (input.ui_mode === "full") {
+      requireFeature(context, "full_ui");
+    }
+    if (input.reminder_policy?.enabled) {
+      requireFeature(context, "reminders");
+    }
     const database = createDatabase();
-    const updatePromise = database
+    const [updatedCompany] = await database
       .update(companies)
       .set(updatesFrom(input))
       .where(
@@ -306,22 +307,28 @@ export async function PUT(request: Request): Promise<Response> {
           eq(companies.userId, context.userId),
         ),
       )
-      .returning();
-    const usagePromise = issuedDocumentCountPromise(
-      database,
-      context.companyId,
-    );
-    const [[updatedCompany], issuedDocumentCount] = await Promise.all([
-      updatePromise,
-      usagePromise,
-    ]);
+      .returning({ id: companies.id });
 
     if (!updatedCompany) {
       throw new ResourceNotFoundError();
     }
+    if (input.default_tax_rate !== undefined) {
+      await setDefaultIvaRate(
+        database,
+        context.companyId,
+        input.default_tax_rate,
+      );
+    }
 
+    const summary = await loadSummary(database, context);
     return withRequestId(
-      Response.json(companyResponse(updatedCompany, issuedDocumentCount)),
+      Response.json(
+        companyResponse(
+          summary,
+          context,
+          await onboardingProgressFor(database, summary.company),
+        ),
+      ),
       requestId,
     );
   } catch (error) {

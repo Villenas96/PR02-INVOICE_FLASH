@@ -16,8 +16,8 @@ import { convertProformaAndIssue } from "@/services/document-conversion";
 import { issueDocument } from "@/services/document-issuance";
 import { createReceiptFromPayment } from "@/services/document-receipts";
 import { pdfRenderMessageSchema } from "@/workers/messages";
-
 import { createIntegrationDatabase } from "./database";
+import { convertedTargetIds } from "./fixtures";
 
 const database = createIntegrationDatabase();
 const queuedMessages: unknown[] = [];
@@ -32,8 +32,8 @@ function invoiceFullNumber(number: number): string {
   return `2026-${number.toString().padStart(4, "0")}`;
 }
 
-describe("concurrent mixed-route document issue sharing the monthly quota", () => {
-  it("lets exactly one of a conventional issue, a proforma conversion and a new receipt claim the final slot", async () => {
+describe("concurrent mixed-route document issue with per-type quotas", () => {
+  it("lets one invoice route claim the final invoice slot while the receipt uses its own quota", async () => {
     const now = new Date("2026-09-20T10:00:00.000Z");
     const userId = crypto.randomUUID();
     const companyId = crypto.randomUUID();
@@ -41,11 +41,13 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
     const invoiceSeriesId = crypto.randomUUID();
     const proformaSeriesId = crypto.randomUUID();
     const receiptSeriesId = crypto.randomUUID();
-    // The free plan's monthly quota (5) is shared across every document
-    // type, so the already-issued proforma candidate below also takes one of
-    // the five slots: 3 invoices + 1 proforma leaves exactly 1 remaining slot
-    // for the three candidates to race for.
-    const existingIssuedCount = 3;
+    // Quotas are per document type (FR-008). The Basic plan allows 5 of
+    // each: 4 issued invoices leave exactly 1 invoice slot for the two
+    // invoice-producing routes (conventional issue and proforma conversion)
+    // to race for, while 4 issued receipts leave the new receipt its own
+    // final receipt slot, unaffected by the invoice race.
+    const existingIssuedCount = 4;
+    const existingReceiptCount = 4;
 
     queuedMessages.length = 0;
 
@@ -64,7 +66,7 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
       taxId: "B55667788",
       address: "Calle de la Ruta Mixta 1, Madrid",
       email: "billing-mixed-route@example.test",
-      plan: "free",
+      plan: "basic",
       retentionRate: "0.00",
       createdAt: now,
       updatedAt: now,
@@ -101,7 +103,7 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
         companyId,
         documentType: "receipt",
         prefix: "REC-2026-",
-        nextNumber: 1,
+        nextNumber: existingReceiptCount + 1,
         isDefault: true,
       },
     ]);
@@ -130,6 +132,24 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
       },
     );
     await database.insert(documents).values(existingInvoices);
+    await database.insert(documents).values(
+      Array.from({ length: existingReceiptCount }, (_, index) => ({
+        id: crypto.randomUUID(),
+        companyId,
+        documentType: "receipt" as const,
+        status: "issued" as const,
+        seriesId: receiptSeriesId,
+        number: index + 1,
+        fullNumber: `REC-2026-${(index + 1).toString().padStart(4, "0")}`,
+        clientId,
+        issueDate: "2026-09-01",
+        totalCents: 1_000,
+        pdfStatus: "ready" as const,
+        issuedAt: new Date(`2026-09-0${index + 1}T10:00:00.000Z`),
+        createdAt: now,
+        updatedAt: now,
+      })),
+    );
     const paymentSourceInvoiceId = existingInvoices[0]?.id;
     if (!paymentSourceInvoiceId) {
       throw new Error("No se ha sembrado la factura de origen del pago.");
@@ -243,18 +263,22 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
         : [],
     );
 
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(2);
+    // The receipt always wins its own slot; exactly one invoice route wins.
+    expect(fulfilled.map(({ name }) => name)).toContain("receipt");
+    expect(fulfilled).toHaveLength(2);
+    expect(rejected).toHaveLength(1);
     for (const { reason } of rejected) {
       expect(toApiError(reason)).toMatchObject({
         code: "plan_limit_reached",
         status: 402,
+        details: { document_type: "invoice", limit: 5, used: 5 },
       });
     }
 
-    const winner = fulfilled[0];
-    if (!winner) {
-      throw new Error("Ningún candidato ha ganado la ranura mensual.");
+    const winner = fulfilled.find(({ name }) => name !== "receipt");
+    const receiptWinner = fulfilled.find(({ name }) => name === "receipt");
+    if (!winner || !receiptWinner) {
+      throw new Error("Ningún candidato ha ganado la ranura de facturas.");
     }
 
     const persistedSeries = await database
@@ -267,14 +291,9 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
     const seriesByType = new Map(
       persistedSeries.map((row) => [row.documentType, row.nextNumber]),
     );
-    // Only the winner's own series advanced; the other two document types
-    // never allocated a number.
-    expect(seriesByType.get("invoice")).toBe(
-      winner.name === "conventional" || winner.name === "conversion"
-        ? existingIssuedCount + 2
-        : existingIssuedCount + 1,
-    );
-    expect(seriesByType.get("receipt")).toBe(winner.name === "receipt" ? 2 : 1);
+    // Each series advanced exactly once: one invoice and one receipt.
+    expect(seriesByType.get("invoice")).toBe(existingIssuedCount + 2);
+    expect(seriesByType.get("receipt")).toBe(existingReceiptCount + 2);
 
     const conventionalRow = (
       await database
@@ -282,15 +301,7 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
         .from(documents)
         .where(eq(documents.id, conventionalDraftId))
     )[0];
-    const proformaRow = (
-      await database
-        .select({
-          status: documents.status,
-          convertedToId: documents.convertedToId,
-        })
-        .from(documents)
-        .where(eq(documents.id, proformaId))
-    )[0];
+    const [convertedToId] = await convertedTargetIds(database, proformaId);
     const receiptRows = await database
       .select({ id: documents.id, status: documents.status })
       .from(documents)
@@ -305,57 +316,32 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
     // Draft-mode conversion never touches plan quota, so the conversion
     // candidate always links the proforma to a new invoice draft regardless
     // of whether it goes on to win the shared issuance slot.
-    expect(proformaRow?.convertedToId).toBeTruthy();
+    expect(convertedToId).toBeTruthy();
     const linkedDraft = (
       await database
         .select({ status: documents.status, number: documents.number })
         .from(documents)
-        .where(eq(documents.id, proformaRow?.convertedToId as string))
+        .where(eq(documents.id, convertedToId as string))
     )[0];
 
+    expect(receiptRow.status).toBe("issued");
+    expect(receiptRow.id).toBe(receiptWinner.id);
     if (winner.name === "conventional") {
       expect(conventionalRow).toMatchObject({ status: "issued" });
       expect(linkedDraft).toMatchObject({ status: "draft", number: null });
-      expect(receiptRow.status).toBe("draft");
-    } else if (winner.name === "conversion") {
+    } else {
       expect(conventionalRow).toMatchObject({ status: "draft", number: null });
       expect(linkedDraft).toMatchObject({ status: "issued" });
       expect(linkedDraft?.number).not.toBeNull();
-      expect(receiptRow.status).toBe("draft");
-    } else {
-      expect(conventionalRow).toMatchObject({ status: "draft", number: null });
-      expect(linkedDraft).toMatchObject({ status: "draft", number: null });
-      expect(receiptRow.status).toBe("issued");
-      expect(receiptRow.id).toBe(winner.id);
     }
 
     const messagesAfterRace = queuedMessages.length;
-    expect(messagesAfterRace).toBe(1);
+    expect(messagesAfterRace).toBe(2);
 
-    // Replaying the receipt request must never duplicate side effects: if it
-    // already won, it resolves to the same issued document without consuming
-    // another slot; if it lost, the quota is still exhausted and it fails the
-    // same way again, without creating a second draft row.
-    const replaySettled = await Promise.allSettled([candidates.receipt()]);
-    const replayResult = replaySettled[0];
-    if (!replayResult) {
-      throw new Error("No se ha repetido la solicitud de recibo.");
-    }
-
-    if (winner.name === "receipt") {
-      expect(replayResult.status).toBe("fulfilled");
-      if (replayResult.status === "fulfilled") {
-        expect(replayResult.value.id).toBe(winner.id);
-      }
-    } else {
-      expect(replayResult.status).toBe("rejected");
-      if (replayResult.status === "rejected") {
-        expect(toApiError(replayResult.reason)).toMatchObject({
-          code: "plan_limit_reached",
-          status: 402,
-        });
-      }
-    }
+    // Replaying the receipt request must never duplicate side effects: it
+    // resolves to the same issued receipt without consuming another slot.
+    const replayed = await candidates.receipt();
+    expect(replayed.id).toBe(receiptWinner.id);
 
     const receiptRowsAfterReplay = await database
       .select({ id: documents.id })
@@ -375,14 +361,13 @@ describe("concurrent mixed-route document issue sharing the monthly quota", () =
       .select({ nextNumber: documentSeries.nextNumber })
       .from(documentSeries)
       .where(eq(documentSeries.id, receiptSeriesId));
-    expect(seriesAfterReplay?.nextNumber).toBe(
-      winner.name === "receipt" ? 2 : 1,
-    );
+    expect(seriesAfterReplay?.nextNumber).toBe(existingReceiptCount + 2);
 
     const parsedQueueMessages = queuedMessages.map((message) =>
       pdfRenderMessageSchema.parse(message),
     );
-    expect(parsedQueueMessages).toHaveLength(1);
-    expect(parsedQueueMessages[0]?.documentId).toBe(winner.id);
+    expect(
+      parsedQueueMessages.map(({ documentId }) => documentId).sort(),
+    ).toEqual([winner.id, receiptWinner.id].sort());
   });
 });

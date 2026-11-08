@@ -261,7 +261,10 @@ export function DashboardView() {
           <span className="sr-only">Cargando panel de cobros…</span>
         </output>
       ) : totals ? (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <section
+          aria-label="Resumen de cobros"
+          className="grid gap-3 sm:grid-cols-3"
+        >
           <div className="rounded-xl border bg-card p-5 shadow-sm">
             <p className="text-sm text-muted-foreground">Cobrado</p>
             <p
@@ -289,7 +292,7 @@ export function DashboardView() {
               {formatEur(createCents(totals.overdue_cents))}
             </p>
           </div>
-        </div>
+        </section>
       ) : null}
 
       {!isLoading && items.length === 0 ? (

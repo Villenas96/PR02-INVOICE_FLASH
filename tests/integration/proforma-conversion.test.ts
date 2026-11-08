@@ -10,10 +10,41 @@ import {
   documents,
   users,
 } from "@/db/schema";
-import { convertProformaAndIssue } from "@/services/document-conversion";
+import { toApiError } from "@/lib/api/errors";
+import {
+  convertProformaAndIssue,
+  convertProformaToDraft,
+} from "@/services/document-conversion";
 import { pdfRenderMessageSchema } from "@/workers/messages";
-
 import { createIntegrationDatabase } from "./database";
+import { convertedTargetIds, createOwner, type OwnerFixture } from "./fixtures";
+
+async function seedIssuedProforma(owner: OwnerFixture): Promise<string> {
+  const id = crypto.randomUUID();
+  await database.insert(documents).values({
+    id,
+    companyId: owner.companyId,
+    documentType: "proforma",
+    status: "issued",
+    number: 1,
+    fullNumber: "PRO-0001",
+    clientId: owner.clientId,
+    issueDate: "2026-08-15",
+    subtotalCents: 10_000,
+    totalCents: 12_100,
+    pdfStatus: "ready",
+  });
+  await database.insert(documentLines).values({
+    id: crypto.randomUUID(),
+    documentId: id,
+    position: 1,
+    description: "Servicio",
+    quantity: "1.000",
+    unitPriceCents: 10_000,
+    taxRate: "21.00",
+  });
+  return id;
+}
 
 const database = createIntegrationDatabase();
 const queuedMessages: unknown[] = [];
@@ -29,6 +60,43 @@ function invoiceFullNumber(number: number): string {
 }
 
 describe("concurrent proforma conversion", () => {
+  it("without a key, one conversion wins and repeats ask for confirmation", async () => {
+    const owner = await createOwner(database, { plan: "pro" });
+    const proformaId = await seedIssuedProforma(owner);
+    const results = await Promise.allSettled(
+      Array.from({ length: 5 }, () =>
+        convertProformaToDraft({
+          database,
+          companyId: owner.companyId,
+          documentId: proformaId,
+          actor: owner.userId,
+        }),
+      ),
+    );
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    expect(fulfilled).toHaveLength(1);
+    for (const result of results) {
+      if (result.status === "rejected") {
+        expect(toApiError(result.reason).code).toMatch(
+          /conversion_repeat_confirmation_required|conflict/,
+        );
+      }
+    }
+    expect(await convertedTargetIds(database, proformaId)).toHaveLength(1);
+
+    const repeat = await convertProformaToDraft({
+      database,
+      companyId: owner.companyId,
+      documentId: proformaId,
+      actor: owner.userId,
+      confirmRepeat: true,
+    });
+    expect(await convertedTargetIds(database, proformaId)).toEqual(
+      expect.arrayContaining([repeat.id]),
+    );
+    expect(await convertedTargetIds(database, proformaId)).toHaveLength(2);
+  });
+
   it("links the proforma to a single invoice and consumes exactly the final monthly slot", async () => {
     const now = new Date("2026-08-15T10:00:00.000Z");
     const userId = crypto.randomUUID();
@@ -37,11 +105,10 @@ describe("concurrent proforma conversion", () => {
     const invoiceSeriesId = crypto.randomUUID();
     const proformaSeriesId = crypto.randomUUID();
     const proformaId = crypto.randomUUID();
-    // The free plan's monthly quota (5) is shared across every document
-    // type, so the already-issued proforma itself takes one of the five
-    // slots: 3 invoices + 1 proforma leaves exactly 1 remaining slot for the
-    // concurrent conversions to race for.
-    const existingIssuedCount = 3;
+    // Quotas are per document type (FR-008): 4 issued invoices leave exactly
+    // 1 invoice slot of the Basic plan's 5 for the concurrent conversions to
+    // race for; the issued proforma counts only towards the proforma quota.
+    const existingIssuedCount = 4;
     const concurrentAttemptCount = 8;
 
     queuedMessages.length = 0;
@@ -61,7 +128,7 @@ describe("concurrent proforma conversion", () => {
       taxId: "B11223344",
       address: "Calle de la Conversión 1, Madrid",
       email: "billing-conversion@example.test",
-      plan: "free",
+      plan: "basic",
       retentionRate: "0.00",
       createdAt: now,
       updatedAt: now,
@@ -151,8 +218,14 @@ describe("concurrent proforma conversion", () => {
 
     const attemptResults = await Promise.allSettled(
       Array.from({ length: concurrentAttemptCount }, () =>
+        // Retries of one request share its Idempotency-Key.
         convertProformaAndIssue(
-          { companyId, documentId: proformaId, actor: userId },
+          {
+            companyId,
+            documentId: proformaId,
+            actor: userId,
+            idempotencyKey: "proforma-retry-key-0001",
+          },
           { database, queue: pdfQueue, now },
         ),
       ),
@@ -169,25 +242,19 @@ describe("concurrent proforma conversion", () => {
       (result) => result.status === "rejected",
     );
 
-    expect(rejected).toHaveLength(0);
+    expect(
+      rejected.map((r) => String((r as PromiseRejectedResult).reason)),
+    ).toEqual([]);
     expect(fulfilled).toHaveLength(concurrentAttemptCount);
     const resolvedInvoiceIds = new Set(
       fulfilled.map((result) => result.value.id),
     );
     expect(resolvedInvoiceIds.size).toBe(1);
 
-    const [linkedProforma] = await database
-      .select({ convertedToId: documents.convertedToId })
-      .from(documents)
-      .where(eq(documents.id, proformaId));
-    const invoiceId = linkedProforma?.convertedToId;
+    const linkedInvoices = await convertedTargetIds(database, proformaId);
+    const invoiceId = linkedInvoices[0];
     expect(invoiceId).toBeTruthy();
     expect(resolvedInvoiceIds.has(invoiceId as string)).toBe(true);
-
-    const linkedInvoices = await database
-      .select({ id: documents.id, convertedFromId: documents.convertedFromId })
-      .from(documents)
-      .where(eq(documents.convertedFromId, proformaId));
     expect(linkedInvoices).toHaveLength(1);
 
     const [issuedInvoice] = await database

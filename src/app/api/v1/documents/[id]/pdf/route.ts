@@ -3,9 +3,11 @@ import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 import { createDatabase } from "@/db";
+import { accessEvents } from "@/db/schema/access-event";
 import { documents } from "@/db/schema/document";
 import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
+import { createUuidV7 } from "@/lib/ids";
 import { logSafe } from "@/lib/log";
 import {
   ResourceNotFoundError,
@@ -110,7 +112,7 @@ export async function GET(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "read" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -170,6 +172,16 @@ export async function GET(
         document_id: params.id,
       });
       throw failedPdfError();
+    }
+    if (context.role === "advisor") {
+      // FR-053: every advisor PDF download is visible to the owner.
+      await database.insert(accessEvents).values({
+        id: createUuidV7(),
+        companyId: context.companyId,
+        actorUserId: context.userId,
+        action: "downloaded_pdf",
+        targetId: params.id,
+      });
     }
 
     return withRequestId(

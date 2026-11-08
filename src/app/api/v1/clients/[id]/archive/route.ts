@@ -70,7 +70,11 @@ function clientResponse(client: ClientRow) {
     address: client.address,
     email: client.email,
     phone: client.phone,
+    postal_code: client.postalCode,
+    city: client.city,
     notes: client.notes,
+    logo_key: client.logoKey,
+    reminders_enabled: client.remindersEnabled,
     archived_at: client.archivedAt,
   };
 }
@@ -82,7 +86,7 @@ export async function POST(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );

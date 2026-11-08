@@ -2,16 +2,28 @@ import { runInBackground } from "@/lib/background";
 import { captureException } from "@/lib/sentry";
 
 export type ApiErrorCode =
+  | "advisor_access_suspended"
   | "authentication_required"
   | "company_incomplete"
+  | "confirmation_expired"
+  | "confirmation_required"
   | "conflict"
+  | "conversion_not_allowed"
+  | "conversion_repeat_confirmation_required"
+  | "delivery_note_already_invoiced"
+  | "export_empty"
   | "feature_not_in_plan"
+  | "iban_invalid"
   | "idempotency_key_invalid"
+  | "import_too_large"
   | "internal_error"
   | "overpayment_confirmation_required"
   | "pdf_generation_failed"
   | "plan_limit_reached"
+  | "plan_not_available"
+  | "read_only_access"
   | "resource_not_found"
+  | "series_archived"
   | "validation_error";
 
 export class AuthenticationRequiredError extends Error {
@@ -32,6 +44,9 @@ export class ApiError extends Error {
     public readonly status: number,
     message: string,
     public readonly fields?: Record<string, string>,
+    /** Machine-readable context for the client (e.g. quota usage, the
+     * feature and plan needed); never contains personal data. */
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -80,6 +95,7 @@ export function apiErrorResponse(error: unknown, requestId?: string): Response {
         code: apiError.code,
         message: apiError.message,
         fields: apiError.fields,
+        details: apiError.details,
         requestId,
       },
     },

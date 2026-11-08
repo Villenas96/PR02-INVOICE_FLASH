@@ -6,6 +6,7 @@ import { catalogItems } from "@/db/schema/catalog-item";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseJson, validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
+import { resolveCatalogTax } from "@/services/catalog-tax";
 import {
   ResourceNotFoundError,
   resolveCompanyContext,
@@ -13,7 +14,6 @@ import {
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
-const TAX_RATE_VALUES = ["0.00", "4.00", "10.00", "21.00"] as const;
 
 const routeParamsSchema = z
   .object({
@@ -34,7 +34,12 @@ const updateCatalogItemSchema = z
       .min(0, "El precio no puede ser negativo.")
       .max(MAX_POSTGRES_INTEGER)
       .optional(),
-    tax_rate: z.enum(TAX_RATE_VALUES).optional(),
+    tax_rate: z
+      .union([z.string(), z.number()])
+      .transform((value) => String(value))
+      .optional(),
+    tax_rate_id: z.string().uuid().nullable().optional(),
+    unit: z.string().trim().max(20).nullable().optional(),
   })
   .strict()
   .refine(
@@ -94,6 +99,8 @@ function catalogItemResponse(item: CatalogItemRow) {
     description: item.description,
     unit_price_cents: item.unitPriceCents,
     tax_rate: item.taxRate,
+    tax_rate_id: item.taxRateId,
+    unit: item.unit,
     archived_at: item.archivedAt,
   };
 }
@@ -105,7 +112,7 @@ export async function PATCH(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -116,6 +123,9 @@ export async function PATCH(
       inputPromise,
     ]);
     const database = createDatabase();
+    const tax = await resolveCatalogTax(database, context.companyId, input, {
+      useDefault: false,
+    });
     const [updatedItem] = await database
       .update(catalogItems)
       .set({
@@ -125,7 +135,10 @@ export async function PATCH(
         ...(input.unit_price_cents === undefined
           ? {}
           : { unitPriceCents: input.unit_price_cents }),
-        ...(input.tax_rate === undefined ? {} : { taxRate: input.tax_rate }),
+        ...tax,
+        ...(input.unit === undefined
+          ? {}
+          : { unit: input.unit?.trim() ? input.unit.trim() : null }),
         updatedAt: new Date(),
       })
       .where(
@@ -156,7 +169,7 @@ export async function DELETE(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );

@@ -30,6 +30,15 @@ export const documentEventTypeEnum = pgEnum("document_event_type", [
   "payment_added",
   "payment_updated",
   "payment_deleted",
+  "quote_accepted",
+  "quote_rejected",
+  "linked",
+  "link_released",
+  "reminder_sent",
+  "reminder_skipped",
+  "recurring_generated",
+  "exported",
+  "series_changed",
 ]);
 
 export const documentEvents = pgTable(

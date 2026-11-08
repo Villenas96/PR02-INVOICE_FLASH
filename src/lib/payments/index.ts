@@ -1,8 +1,10 @@
 export type PaymentStatus = "overdue" | "paid" | "partial" | "pending";
 
+import type { DocumentType } from "@/lib/plan";
+
 export interface PaymentStatusInput {
   documentStatus: "draft" | "issued" | "voided";
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   totalCents: number;
   paidCents: number;
   /** `YYYY-MM-DD`, or `null` when the invoice has no due date. */

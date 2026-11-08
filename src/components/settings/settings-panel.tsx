@@ -1,16 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { PlanIndicator } from "@/components/plan/plan-indicator";
+import { companyHasFeature } from "@/components/plan/types";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/api/client";
+import { AdvisorSettings } from "./advisor-settings";
+import { CollectionMethodSettings } from "./collection-method-settings";
 import {
   CompanyProfileForm,
   InvoicingPreferencesForm,
 } from "./company-settings";
+import { IntegrationsSettings } from "./integrations-settings";
+import { InterfaceSettings } from "./interface-settings";
 import { LogoSettings } from "./logo-settings";
+import { ReminderSettings } from "./reminder-settings";
 import { SeriesSettings } from "./series-settings";
+import { SubscriptionSettings } from "./subscription-settings";
+import { TaxRateSettings } from "./tax-rate-settings";
 import type { CompanySettings, DocumentSeries, SeriesPage } from "./types";
 
 export function SettingsPanel() {
@@ -152,6 +161,97 @@ export function SettingsPanel() {
     );
   }
 
+  const sections: Array<{ id: string; label: string; content: ReactNode }> = [
+    {
+      id: "company",
+      label: "Empresa",
+      content: (
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <CompanyProfileForm company={company} onChange={setCompany} />
+          <div className="space-y-6">
+            <LogoSettings
+              logoKey={company.logo_key}
+              onChange={(logoKey) =>
+                setCompany((current) =>
+                  current ? { ...current, logo_key: logoKey } : current,
+                )
+              }
+            />
+            <InvoicingPreferencesForm company={company} onChange={setCompany} />
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "payments",
+      label: "Cobros e impuestos",
+      content: (
+        <div className="space-y-6">
+          <div className="grid items-start gap-6 lg:grid-cols-2">
+            <CollectionMethodSettings />
+            <TaxRateSettings />
+          </div>
+          <ReminderSettings
+            enabledForPlan={companyHasFeature(company, "reminders")}
+            initialPolicy={company.reminder_policy}
+          />
+        </div>
+      ),
+    },
+    {
+      id: "documents",
+      label: "Documentos",
+      content: (
+        <SeriesSettings
+          items={series}
+          nextCursor={nextCursor}
+          onCreate={addSeries}
+          onUpdate={updateSeries}
+          onLoadMore={loadMore}
+          isLoadingMore={isLoadingMore}
+        />
+      ),
+    },
+    ...(companyHasFeature(company, "full_ui")
+      ? [
+          {
+            id: "interface",
+            label: "Interfaz",
+            content: (
+              <InterfaceSettings company={company} onChange={setCompany} />
+            ),
+          },
+        ]
+      : []),
+    ...(company.role === "owner"
+      ? [
+          {
+            id: "advisor",
+            label: "Gestoría",
+            content: (
+              <AdvisorSettings
+                enabled={companyHasFeature(company, "advisor_access")}
+              />
+            ),
+          },
+          {
+            id: "assistants",
+            label: "Asistentes de IA",
+            content: (
+              <IntegrationsSettings
+                enabled={companyHasFeature(company, "ai_assistant")}
+              />
+            ),
+          },
+          {
+            id: "subscription-section",
+            label: "Suscripción",
+            content: <SubscriptionSettings />,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="space-y-6">
       <section className="flex flex-col gap-4 rounded-xl border bg-card p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -162,21 +262,21 @@ export function SettingsPanel() {
               : "Faltan datos fiscales para poder emitir"}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {company.plan === "free" ? "Plan gratuito" : "Plan Pro"} · consumo
-            del mes natural de Madrid
+            Plan {company.plan_label} · consumo del mes natural de Madrid
           </p>
         </div>
         <PlanIndicator
-          plan={company.plan}
-          issuedDocuments={company.docs_issued_this_month}
-          documentLimit={company.doc_limit}
+          planLabel={company.plan_label}
+          usage={company.usage}
           className="w-full sm:w-56"
         />
         <ul className="text-xs text-muted-foreground sm:text-right">
           <li>PDF y enlace profesional incluidos</li>
           <li>
             Email:{" "}
-            {company.can_send_email ? "incluido" : "disponible en Plan Pro"}
+            {companyHasFeature(company, "email")
+              ? "incluido"
+              : "disponible desde el plan Esencial"}
           </li>
         </ul>
       </section>
@@ -190,29 +290,32 @@ export function SettingsPanel() {
         </p>
       ) : null}
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <CompanyProfileForm company={company} onChange={setCompany} />
+      {company.effective_ui === "full" ? (
+        // Full interface: one tab per area.
+        <Tabs defaultValue="company">
+          <TabsList className="flex-wrap">
+            {sections.map((section) => (
+              <TabsTrigger key={section.id} value={section.id}>
+                {section.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {sections.map((section) => (
+            <TabsContent key={section.id} value={section.id} className="pt-4">
+              {section.content}
+            </TabsContent>
+          ))}
+        </Tabs>
+      ) : (
+        // Simple interface: every setting on a single page (FR-057).
         <div className="space-y-6">
-          <LogoSettings
-            logoKey={company.logo_key}
-            onChange={(logoKey) =>
-              setCompany((current) =>
-                current ? { ...current, logo_key: logoKey } : current,
-              )
-            }
-          />
-          <InvoicingPreferencesForm company={company} onChange={setCompany} />
+          {sections.map((section) => (
+            <div key={section.id} id={section.id}>
+              {section.content}
+            </div>
+          ))}
         </div>
-      </div>
-
-      <SeriesSettings
-        items={series}
-        nextCursor={nextCursor}
-        onCreate={addSeries}
-        onUpdate={updateSeries}
-        onLoadMore={loadMore}
-        isLoadingMore={isLoadingMore}
-      />
+      )}
     </div>
   );
 }

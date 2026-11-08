@@ -17,6 +17,7 @@ interface BillingResult {
     totalCents: number;
   }>;
   taxBreakdown: Array<{
+    name: string;
     rate: string;
     baseCents: number;
     taxCents: number;
@@ -139,8 +140,8 @@ describe("billing calculations", () => {
     expect(result.taxBreakdown).toHaveLength(2);
     expect(result.taxBreakdown).toEqual(
       expect.arrayContaining([
-        { rate: "10.00", baseCents: 500, taxCents: 50 },
-        { rate: "21.00", baseCents: 1_250, taxCents: 263 },
+        { name: "IVA", rate: "10.00", baseCents: 500, taxCents: 50 },
+        { name: "IVA", rate: "21.00", baseCents: 1_250, taxCents: 263 },
       ]),
     );
     expect(result).toMatchObject({
@@ -264,5 +265,84 @@ describe("billing calculations", () => {
         expect(Number.isSafeInteger(monetaryValue)).toBe(true);
       }
     }
+  });
+});
+
+describe("tax breakdown by tax name and rate (FR-023)", () => {
+  it("keeps taxes with the same rate but different names apart", () => {
+    const result = calculateBilling({
+      lines: [
+        {
+          quantity: "1",
+          unitPriceCents: createCents(10_000),
+          taxRate: "4.50",
+          taxName: "IGI",
+        },
+        {
+          quantity: "1",
+          unitPriceCents: createCents(5_000),
+          taxRate: "4.50",
+          taxName: "IVA",
+        },
+        {
+          quantity: "2",
+          unitPriceCents: createCents(1_000),
+          taxRate: "4.50",
+          taxName: "IGI",
+        },
+      ],
+    });
+
+    expect(result.taxBreakdown).toEqual([
+      { name: "IGI", rate: "4.50", baseCents: 12_000, taxCents: 540 },
+      { name: "IVA", rate: "4.50", baseCents: 5_000, taxCents: 225 },
+    ]);
+    expect(result.totalCents).toBe(12_000 + 5_000 + 540 + 225);
+  });
+
+  it("rounds two-decimal rates half-up per line and sums exactly to the cent", () => {
+    const result = calculateBilling({
+      lines: [
+        // 333 × 0,5 % = 1,665 → 2
+        {
+          quantity: "1",
+          unitPriceCents: createCents(333),
+          taxRate: "0.50",
+          taxName: "IPSI",
+        },
+        // 999 × 0,5 % = 4,995 → 5
+        {
+          quantity: "1",
+          unitPriceCents: createCents(999),
+          taxRate: "0.50",
+          taxName: "IPSI",
+        },
+        // 1.111 × 4,5 % = 49,995 → 50
+        {
+          quantity: "1",
+          unitPriceCents: createCents(1_111),
+          taxRate: "4.50",
+          taxName: "IGI",
+        },
+      ],
+    });
+
+    expect(result.lines.map((line) => line.taxCents)).toEqual([2, 5, 50]);
+    expect(result.taxBreakdown).toEqual([
+      { name: "IPSI", rate: "0.50", baseCents: 1_332, taxCents: 7 },
+      { name: "IGI", rate: "4.50", baseCents: 1_111, taxCents: 50 },
+    ]);
+    expect(result.totalCents).toBe(1_332 + 1_111 + 7 + 50);
+  });
+
+  it("names the tax «IVA» when a line does not say otherwise", () => {
+    const result = calculateBilling({
+      lines: [
+        { quantity: "1", unitPriceCents: createCents(100), taxRate: "21" },
+      ],
+    });
+    expect(result.taxBreakdown).toEqual([
+      { name: "IVA", rate: "21.00", baseCents: 100, taxCents: 21 },
+    ]);
   });
 });

@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { clients, companies, users } from "@/db/schema";
+import { matchesSearchText } from "@/db/search";
 
 import {
   createIntegrationDatabase,
@@ -10,7 +11,7 @@ import {
 import {
   CLIENT_FIXTURE_COUNT,
   generateClientFixtures,
-  SEARCH_NEEDLE_TERM,
+  SEARCH_NEEDLE_QUERY,
 } from "./fixtures/clients";
 import { expectP95Below } from "./report";
 
@@ -20,7 +21,7 @@ const ITERATIONS = 20;
 const INSERT_BATCH_SIZE = 500;
 
 describe("client search performance", () => {
-  it(`keeps indexed name/tax-id search p95 under ${SEARCH_P95_MS}ms across ${CLIENT_FIXTURE_COUNT} clients`, async () => {
+  it(`keeps accent-insensitive search p95 under ${SEARCH_P95_MS}ms across ${CLIENT_FIXTURE_COUNT} clients`, async () => {
     await truncateIntegrationDatabase();
     const now = new Date();
     const userId = crypto.randomUUID();
@@ -57,11 +58,16 @@ describe("client search performance", () => {
           companyId,
           name: row.name,
           taxId: row.taxId,
+          email: row.email,
+          postalCode: row.postalCode,
+          city: row.city,
         })),
       );
     }
 
-    const searchTerm = `%${SEARCH_NEEDLE_TERM}%`;
+    await database.execute(sql`ANALYZE client`);
+    // Alternate a name and a city query, both typed without accents.
+    const queries = [SEARCH_NEEDLE_QUERY, "villanueva del ebano"];
     const durations: number[] = [];
     for (let iteration = 0; iteration < ITERATIONS; iteration += 1) {
       const startedAt = performance.now();
@@ -71,7 +77,10 @@ describe("client search performance", () => {
         .where(
           and(
             eq(clients.companyId, companyId),
-            sql`${clients.name} ILIKE ${searchTerm}`,
+            matchesSearchText(
+              clients.searchText,
+              queries[iteration % queries.length] as string,
+            ),
           ),
         )
         .limit(26);

@@ -3,16 +3,26 @@ import { z } from "zod";
 
 import { createDatabase, type Database } from "@/db";
 import { executionRows } from "@/db/result";
+import { catalogItems } from "@/db/schema/catalog-item";
 import { clients } from "@/db/schema/client";
+import { collectionMethods } from "@/db/schema/collection-method";
 import { companies } from "@/db/schema/company";
 import { documentLines, documents } from "@/db/schema/document";
 import { documentEvents } from "@/db/schema/document-event";
+import { taxRates } from "@/db/schema/tax-rate";
 import { ApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { type BillingResult, calculateBilling } from "@/lib/billing";
-import { createUuidV7 } from "@/lib/ids";
+import { createUuidV7, deterministicUuid } from "@/lib/ids";
 import { createCents } from "@/lib/money";
+import type { DocumentType } from "@/lib/plan";
 import { ResourceNotFoundError } from "@/services/context";
+import { seriesArchivedError } from "@/services/document-errors";
+import {
+  type DocumentLinkRef,
+  loadDocumentLinks,
+} from "@/services/document-links";
+import { ensureDefaultSeries, findSelectableSeries } from "@/services/series";
 
 const MAX_DRAFT_LINES = 500;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -28,11 +38,31 @@ const draftLineSchema = z
     unitPriceCents: z.number().int().min(0).max(MAX_POSTGRES_INTEGER),
     taxRate: decimalSchema,
     discountPercentage: decimalSchema.default("0"),
+    /** Frozen tax name shown on the document (FR-023). */
+    taxName: z.string().trim().min(1).max(30).default("IVA"),
+    unit: z.string().trim().max(20).nullable().default(null),
+    taxRateId: z.string().uuid().nullable().default(null),
+    catalogItemId: z.string().uuid().nullable().default(null),
   })
   .strict();
+const EDITABLE_DOCUMENT_TYPES = [
+  "invoice",
+  "proforma",
+  "quote",
+  "delivery_note",
+] as const;
+
 const draftFieldsSchema = z.object({
-  documentType: z.enum(["invoice", "proforma"]),
+  documentType: z.enum(EDITABLE_DOCUMENT_TYPES),
+  /** Quotes only (FR-035): `>= issueDate`. */
+  validUntil: z.iso.date().nullable().default(null),
+  /** Recurring cycles: the cycle id is the document's idempotency anchor. */
+  recurringCycleId: nullableUuidSchema.default(null),
   clientId: nullableUuidSchema.default(null),
+  /** Omitted → the company's default collection method (FR-022). */
+  collectionMethodId: nullableUuidSchema.optional(),
+  /** Omitted/null → the type's default series at issue time. */
+  seriesId: nullableUuidSchema.optional(),
   issueDate: z.iso.date(),
   dueDate: z.iso.date().nullable().default(null),
   notes: z.string().trim().max(5_000).nullable().default(null),
@@ -42,15 +72,39 @@ const createDraftSchema = draftFieldsSchema
   .extend({
     companyId: z.string().uuid(),
     actor: z.string().uuid(),
+    /** Audit actor when it differs from `actor` (AI assistant, FR-056). */
+    eventActor: z.string().max(200).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.validUntil !== null && value.documentType !== "quote") {
+      context.addIssue({
+        code: "custom",
+        path: ["validUntil"],
+        message: "La validez solo se indica en los presupuestos.",
+      });
+    }
+    if (value.validUntil !== null && value.validUntil < value.issueDate) {
+      context.addIssue({
+        code: "custom",
+        path: ["validUntil"],
+        message: "La validez no puede ser anterior a la fecha de emisión.",
+      });
+    }
+  });
 const updateDraftSchema = z
   .object({
     companyId: z.string().uuid(),
     documentId: z.string().uuid(),
     actor: z.string().uuid(),
-    documentType: z.enum(["invoice", "proforma"]).optional(),
+    /** Audit actor when it differs from `actor` (AI assistant, FR-056). */
+    eventActor: z.string().max(200).optional(),
+    documentType: z.enum(EDITABLE_DOCUMENT_TYPES).optional(),
+    validUntil: z.iso.date().nullable().optional(),
     clientId: nullableUuidSchema.optional(),
+    /** `null` returns to the type's default series (FR-016). */
+    seriesId: nullableUuidSchema.optional(),
+    collectionMethodId: nullableUuidSchema.optional(),
     issueDate: z.iso.date().optional(),
     dueDate: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
@@ -60,7 +114,10 @@ const updateDraftSchema = z
   .refine(
     (value) =>
       value.documentType !== undefined ||
+      value.validUntil !== undefined ||
       value.clientId !== undefined ||
+      value.seriesId !== undefined ||
+      value.collectionMethodId !== undefined ||
       value.issueDate !== undefined ||
       value.dueDate !== undefined ||
       value.notes !== undefined ||
@@ -72,6 +129,8 @@ const deleteDraftSchema = z
     companyId: z.string().uuid(),
     documentId: z.string().uuid(),
     actor: z.string().uuid(),
+    /** Audit actor when it differs from `actor` (AI assistant, FR-056). */
+    eventActor: z.string().max(200).optional(),
   })
   .strict();
 
@@ -81,7 +140,7 @@ export type UpdateDraftDocumentInput = z.input<typeof updateDraftSchema>;
 export type SoftDeleteDraftDocumentInput = z.input<typeof deleteDraftSchema>;
 
 export interface DocumentDetailProjection {
-  documentType: "invoice" | "proforma" | "receipt";
+  documentType: DocumentType;
   fullNumber: string | null;
   issueDate: string;
   dueDate: string | null;
@@ -105,8 +164,81 @@ export interface DocumentDetailProjection {
   }>;
 }
 
+/** Human-readable client of a document (FR-004): never an internal id. */
+export interface ClientDisplay {
+  name: string;
+  tax_id: string | null;
+}
+
+/**
+ * Issued documents show the frozen snapshot; drafts show the live client.
+ */
+export function clientDisplayFor(
+  clientSnapshot: unknown,
+  liveClient: { name: string | null; taxId: string | null } | null,
+): ClientDisplay | null {
+  if (
+    clientSnapshot &&
+    typeof clientSnapshot === "object" &&
+    "name" in clientSnapshot &&
+    typeof clientSnapshot.name === "string"
+  ) {
+    const taxId =
+      "taxId" in clientSnapshot && typeof clientSnapshot.taxId === "string"
+        ? clientSnapshot.taxId
+        : null;
+    return { name: clientSnapshot.name, tax_id: taxId };
+  }
+  if (liveClient?.name) {
+    return { name: liveClient.name, tax_id: liveClient.taxId };
+  }
+  return null;
+}
+
+/** Live client of a document, scoped to the company. */
+export async function loadDocumentClient(
+  database: Database,
+  companyId: string,
+  documentId: string,
+): Promise<{
+  name: string;
+  taxId: string | null;
+  email: string | null;
+  remindersEnabled: boolean;
+} | null> {
+  const [row] = await database
+    .select({
+      name: clients.name,
+      taxId: clients.taxId,
+      email: clients.email,
+      remindersEnabled: clients.remindersEnabled,
+    })
+    .from(documents)
+    .innerJoin(
+      clients,
+      and(
+        eq(clients.id, documents.clientId),
+        eq(clients.companyId, documents.companyId),
+      ),
+    )
+    .where(
+      and(eq(documents.id, documentId), eq(documents.companyId, companyId)),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+export type { DocumentLinkRef };
+
 export type DocumentDetail = typeof documents.$inferSelect & {
   lines: Array<typeof documentLines.$inferSelect>;
+  /** Live links (not released, other end not deleted), both directions. */
+  links?: { from: DocumentLinkRef[]; to: DocumentLinkRef[] };
+  /** v1 compatibility: derived from the `converted` links. */
+  convertedFromId?: string | null;
+  convertedToId?: string | null;
+  /** Set when saving this draft created the type's first series. */
+  seriesCreated?: { prefix: string; renamed: boolean };
 };
 
 export interface DocumentServiceDependencies {
@@ -121,6 +253,10 @@ interface PreparedLine {
   quantity: string;
   unit_price_cents: number;
   tax_rate: string;
+  tax_name: string;
+  unit: string | null;
+  tax_rate_id: string | null;
+  catalog_item_id: string | null;
   discount_percentage: string;
   line_subtotal_cents: number;
   line_tax_cents: number;
@@ -174,6 +310,7 @@ function calculateDraftBilling(
         quantity: line.quantity,
         unitPriceCents: createCents(line.unitPriceCents),
         taxRate: line.taxRate,
+        taxName: line.taxName,
         discountPercentage: line.discountPercentage,
       })),
       retentionRate,
@@ -201,6 +338,10 @@ function prepareLines(
       quantity: line.quantity,
       unit_price_cents: line.unitPriceCents,
       tax_rate: line.taxRate,
+      tax_name: line.taxName,
+      unit: line.unit ? line.unit.replace(/\s+/g, " ") : null,
+      tax_rate_id: line.taxRateId,
+      catalog_item_id: line.catalogItemId,
       discount_percentage: line.discountPercentage,
       line_subtotal_cents: calculatedLine.subtotalCents,
       line_tax_cents: calculatedLine.taxCents,
@@ -253,6 +394,60 @@ async function assertClientCanBeAssigned(
   if (!client) {
     throw new ResourceNotFoundError();
   }
+}
+
+async function assertSeriesSelectable(
+  database: Database,
+  companyId: string,
+  seriesId: string,
+  documentType: string,
+): Promise<void> {
+  const series = await findSelectableSeries(database, companyId, seriesId);
+  if (!series) {
+    throw new ResourceNotFoundError();
+  }
+  if (series.documentType !== documentType) {
+    throw new ApiError(
+      "validation_error",
+      400,
+      "Elige una serie del mismo tipo de documento.",
+      { series_id: "La serie no corresponde a este tipo de documento." },
+    );
+  }
+  if (series.archivedAt) {
+    throw seriesArchivedError();
+  }
+}
+
+/** Active method of the company; `undefined` → its default (or none). */
+async function resolveCollectionMethod(
+  database: Database,
+  companyId: string,
+  requested: string | null | undefined,
+): Promise<string | null> {
+  if (requested === null) {
+    return null;
+  }
+  const rows = await database
+    .select({
+      id: collectionMethods.id,
+      isDefault: collectionMethods.isDefault,
+    })
+    .from(collectionMethods)
+    .where(
+      and(
+        eq(collectionMethods.companyId, companyId),
+        isNull(collectionMethods.archivedAt),
+        requested
+          ? eq(collectionMethods.id, requested)
+          : eq(collectionMethods.isDefault, true),
+      ),
+    )
+    .limit(1);
+  if (requested && rows.length === 0) {
+    throw new ResourceNotFoundError();
+  }
+  return rows[0]?.id ?? null;
 }
 
 async function throwMutationFailure(
@@ -341,8 +536,17 @@ export async function getDocumentDetail<
   }
 
   const lines = rows.flatMap((row) => (row.line ? [row.line] : []));
+  const links = await loadDocumentLinks(database, companyId, document.id);
+  const latestConverted = (refs: DocumentLinkRef[]) =>
+    refs.filter((ref) => ref.kind === "converted").at(-1)?.id ?? null;
 
-  return { ...document, lines } as unknown as TDetail;
+  return {
+    ...document,
+    lines,
+    links,
+    convertedFromId: latestConverted(links.from),
+    convertedToId: latestConverted(links.to),
+  } as unknown as TDetail;
 }
 
 export async function createDraftDocument(
@@ -358,9 +562,35 @@ export async function createDraftDocument(
     input.actor,
   );
   await assertClientCanBeAssigned(database, input.companyId, input.clientId);
+  // FR-019: the editor shows the series from the first draft of a type.
+  const seriesResult = await ensureDefaultSeries(
+    database,
+    input.companyId,
+    input.documentType,
+    now,
+  );
+  const collectionMethodId = await resolveCollectionMethod(
+    database,
+    input.companyId,
+    input.collectionMethodId,
+  );
+  if (input.seriesId) {
+    await assertSeriesSelectable(
+      database,
+      input.companyId,
+      input.seriesId,
+      input.documentType,
+    );
+  }
 
   const billing = calculateDraftBilling(input.lines, company.retentionRate);
-  const documentId = createUuidV7(now.getTime());
+  const documentId = input.recurringCycleId
+    ? await deterministicUuid(
+        input.companyId,
+        "recurring",
+        input.recurringCycleId,
+      )
+    : createUuidV7(now.getTime());
   const eventId = createUuidV7(now.getTime());
   const preparedLines = prepareLines(input.lines, billing, now);
   const result = await database.execute<{ id: string }>(sql`
@@ -392,7 +622,11 @@ export async function createDraftDocument(
         ${sql.identifier(documents.clientId.name)},
         ${sql.identifier(documents.issueDate.name)},
         ${sql.identifier(documents.dueDate.name)},
+        ${sql.identifier(documents.validUntil.name)},
+        ${sql.identifier(documents.recurringCycleId.name)},
         ${sql.identifier(documents.notes.name)},
+        ${sql.identifier(documents.collectionMethodId.name)},
+        ${sql.identifier(documents.seriesId.name)},
         ${sql.identifier(documents.subtotalCents.name)},
         ${sql.identifier(documents.taxBreakdown.name)},
         ${sql.identifier(documents.retentionRate.name)},
@@ -409,7 +643,11 @@ export async function createDraftDocument(
         ${input.clientId},
         ${input.issueDate},
         ${input.dueDate},
+        ${input.validUntil}::date,
+        ${input.recurringCycleId}::uuid,
         ${input.notes},
+        ${collectionMethodId}::uuid,
+        ${input.seriesId ?? null}::uuid,
         ${billing.subtotalCents},
         ${JSON.stringify(billing.taxBreakdown)}::jsonb,
         scoped_company.retention_rate,
@@ -432,6 +670,10 @@ export async function createDraftDocument(
         quantity numeric(12, 3),
         unit_price_cents integer,
         tax_rate numeric(5, 2),
+        tax_name text,
+        unit text,
+        tax_rate_id uuid,
+        catalog_item_id uuid,
         discount_percentage numeric(5, 2),
         line_subtotal_cents integer,
         line_tax_cents integer,
@@ -448,6 +690,10 @@ export async function createDraftDocument(
         ${sql.identifier(documentLines.unitPriceCents.name)},
         ${sql.identifier(documentLines.taxRate.name)},
         ${sql.identifier(documentLines.discountPercentage.name)},
+        ${sql.identifier(documentLines.taxName.name)},
+        ${sql.identifier(documentLines.unit.name)},
+        ${sql.identifier(documentLines.taxRateId.name)},
+        ${sql.identifier(documentLines.catalogItemId.name)},
         ${sql.identifier(documentLines.lineSubtotalCents.name)},
         ${sql.identifier(documentLines.lineTaxCents.name)},
         ${sql.identifier(documentLines.lineTotalCents.name)}
@@ -461,6 +707,19 @@ export async function createDraftDocument(
         line_input.unit_price_cents,
         line_input.tax_rate,
         line_input.discount_percentage,
+        coalesce(line_input.tax_name, 'IVA'),
+        line_input.unit,
+        -- References outside the company are dropped, never stored.
+        (
+          SELECT scoped_tax.id FROM ${taxRates} scoped_tax
+          WHERE scoped_tax.id = line_input.tax_rate_id
+            AND scoped_tax.company_id = ${input.companyId}
+        ),
+        (
+          SELECT scoped_item.id FROM ${catalogItems} scoped_item
+          WHERE scoped_item.id = line_input.catalog_item_id
+            AND scoped_item.company_id = ${input.companyId}
+        ),
         line_input.line_subtotal_cents,
         line_input.line_tax_cents,
         line_input.line_total_cents
@@ -485,7 +744,7 @@ export async function createDraftDocument(
         ${eventId},
         inserted_document.company_id,
         inserted_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'created'::document_event_type,
         ${now.toISOString()}
       FROM inserted_document
@@ -507,11 +766,20 @@ export async function createDraftDocument(
     );
   }
 
-  return getDocumentDetail<DocumentDetail>({
+  const created = await getDocumentDetail<DocumentDetail>({
     database,
     companyId: input.companyId,
     documentId,
   });
+  return seriesResult.created && seriesResult.prefix
+    ? {
+        ...created,
+        seriesCreated: {
+          prefix: seriesResult.prefix,
+          renamed: seriesResult.renamed,
+        },
+      }
+    : created;
 }
 
 export async function updateDraftDocument(
@@ -527,6 +795,35 @@ export async function updateDraftDocument(
     input.actor,
   );
   await assertClientCanBeAssigned(database, input.companyId, input.clientId);
+  if (input.seriesId) {
+    const [current] = await database
+      .select({ documentType: documents.documentType })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.id, input.documentId),
+          eq(documents.companyId, input.companyId),
+        ),
+      )
+      .limit(1);
+    if (!current) {
+      throw new ResourceNotFoundError();
+    }
+    await assertSeriesSelectable(
+      database,
+      input.companyId,
+      input.seriesId,
+      input.documentType ?? current.documentType,
+    );
+  }
+  const collectionMethodId =
+    input.collectionMethodId === undefined
+      ? undefined
+      : await resolveCollectionMethod(
+          database,
+          input.companyId,
+          input.collectionMethodId,
+        );
 
   const replacesLines = input.lines !== undefined;
   const lines = input.lines ?? [];
@@ -586,6 +883,20 @@ export async function updateDraftDocument(
           WHEN ${input.clientId !== undefined} THEN ${input.clientId ?? null}
           ELSE target_document.client_id
         END,
+        -- A chosen series only applies to drafts of its type; changing the
+        -- type returns to that type's default series.
+        series_id = CASE
+          WHEN ${input.seriesId !== undefined} THEN ${input.seriesId ?? null}::uuid
+          WHEN ${input.documentType !== undefined}
+            AND target_document.document_type IS DISTINCT FROM
+              ${input.documentType ?? "invoice"}::document_type
+            THEN NULL
+          ELSE target_document.series_id
+        END,
+        collection_method_id = CASE
+          WHEN ${collectionMethodId !== undefined} THEN ${collectionMethodId ?? null}::uuid
+          ELSE target_document.collection_method_id
+        END,
         issue_date = CASE
           WHEN ${input.issueDate !== undefined} THEN ${input.issueDate ?? now.toISOString().slice(0, 10)}
           ELSE target_document.issue_date
@@ -593,6 +904,13 @@ export async function updateDraftDocument(
         due_date = CASE
           WHEN ${input.dueDate !== undefined} THEN ${input.dueDate ?? null}
           ELSE target_document.due_date
+        END,
+        -- Only quotes keep a validity date.
+        valid_until = CASE
+          WHEN ${input.documentType !== undefined && input.documentType !== "quote"}
+            THEN NULL
+          WHEN ${input.validUntil !== undefined} THEN ${input.validUntil ?? null}::date
+          ELSE target_document.valid_until
         END,
         notes = CASE
           WHEN ${input.notes !== undefined} THEN ${input.notes ?? null}
@@ -643,6 +961,10 @@ export async function updateDraftDocument(
         quantity numeric(12, 3),
         unit_price_cents integer,
         tax_rate numeric(5, 2),
+        tax_name text,
+        unit text,
+        tax_rate_id uuid,
+        catalog_item_id uuid,
         discount_percentage numeric(5, 2),
         line_subtotal_cents integer,
         line_tax_cents integer,
@@ -659,6 +981,10 @@ export async function updateDraftDocument(
         ${sql.identifier(documentLines.unitPriceCents.name)},
         ${sql.identifier(documentLines.taxRate.name)},
         ${sql.identifier(documentLines.discountPercentage.name)},
+        ${sql.identifier(documentLines.taxName.name)},
+        ${sql.identifier(documentLines.unit.name)},
+        ${sql.identifier(documentLines.taxRateId.name)},
+        ${sql.identifier(documentLines.catalogItemId.name)},
         ${sql.identifier(documentLines.lineSubtotalCents.name)},
         ${sql.identifier(documentLines.lineTaxCents.name)},
         ${sql.identifier(documentLines.lineTotalCents.name)}
@@ -672,6 +998,19 @@ export async function updateDraftDocument(
         line_input.unit_price_cents,
         line_input.tax_rate,
         line_input.discount_percentage,
+        coalesce(line_input.tax_name, 'IVA'),
+        line_input.unit,
+        -- References outside the company are dropped, never stored.
+        (
+          SELECT scoped_tax.id FROM ${taxRates} scoped_tax
+          WHERE scoped_tax.id = line_input.tax_rate_id
+            AND scoped_tax.company_id = ${input.companyId}
+        ),
+        (
+          SELECT scoped_item.id FROM ${catalogItems} scoped_item
+          WHERE scoped_item.id = line_input.catalog_item_id
+            AND scoped_item.company_id = ${input.companyId}
+        ),
         line_input.line_subtotal_cents,
         line_input.line_tax_cents,
         line_input.line_total_cents
@@ -698,7 +1037,7 @@ export async function updateDraftDocument(
         ${eventId},
         updated_document.company_id,
         updated_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'updated'::document_event_type,
         ${now.toISOString()}
       FROM updated_document
@@ -765,7 +1104,7 @@ export async function softDeleteDraftDocument(
         ${createUuidV7(now.getTime())},
         deleted_document.company_id,
         deleted_document.id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'updated'::document_event_type,
         '{"operation":"draft_deleted"}'::jsonb,
         ${now.toISOString()}
@@ -781,4 +1120,145 @@ export async function softDeleteDraftDocument(
   if (executionRows(result).length === 0) {
     return throwMutationFailure(database, input.companyId, input.documentId);
   }
+}
+
+export type DuplicateWarning =
+  | "client_archived"
+  | "product_archived"
+  | "tax_archived";
+
+/**
+ * Duplicates any non-receipt document, in any state, into a new draft dated
+ * today (FR-018). Archived data never blocks the copy: the archived client
+ * is left unset and archived product/tax references are dropped (the line
+ * keeps its frozen values), each reported as a warning for the editor.
+ */
+export async function duplicateDocument(
+  input: { companyId: string; documentId: string; actor: string },
+  dependencies: DocumentServiceDependencies = {},
+): Promise<{ document: DocumentDetail; warnings: DuplicateWarning[] }> {
+  const database = databaseFrom(dependencies);
+  const now = dependencies.now ?? new Date();
+  const source = await getDocumentDetail<DocumentDetail>({
+    database,
+    companyId: input.companyId,
+    documentId: input.documentId,
+  });
+  if (source.documentType !== "invoice" && source.documentType !== "proforma") {
+    throw new ApiError(
+      "conflict",
+      409,
+      "Los recibos no se pueden duplicar; genera uno nuevo desde un pago.",
+    );
+  }
+
+  const warnings = new Set<DuplicateWarning>();
+  let clientId = source.clientId;
+  if (clientId) {
+    const [client] = await database
+      .select({ archivedAt: clients.archivedAt })
+      .from(clients)
+      .where(
+        and(eq(clients.id, clientId), eq(clients.companyId, input.companyId)),
+      )
+      .limit(1);
+    if (!client || client.archivedAt) {
+      warnings.add("client_archived");
+      clientId = null;
+    }
+  }
+
+  const archivedItems = new Set(
+    (
+      await database
+        .select({ id: catalogItems.id, archivedAt: catalogItems.archivedAt })
+        .from(catalogItems)
+        .where(eq(catalogItems.companyId, input.companyId))
+    )
+      .filter((item) => item.archivedAt)
+      .map((item) => item.id),
+  );
+  const archivedTaxes = new Set(
+    (
+      await database
+        .select({ id: taxRates.id, archivedAt: taxRates.archivedAt })
+        .from(taxRates)
+        .where(eq(taxRates.companyId, input.companyId))
+    )
+      .filter((tax) => tax.archivedAt)
+      .map((tax) => tax.id),
+  );
+
+  let collectionMethodId: string | null | undefined;
+  if (source.collectionMethodId) {
+    const [method] = await database
+      .select({ archivedAt: collectionMethods.archivedAt })
+      .from(collectionMethods)
+      .where(eq(collectionMethods.id, source.collectionMethodId))
+      .limit(1);
+    collectionMethodId =
+      method && !method.archivedAt ? source.collectionMethodId : undefined;
+  }
+
+  const document = await createDraftDocument(
+    {
+      companyId: input.companyId,
+      actor: input.actor,
+      documentType: source.documentType,
+      clientId,
+      collectionMethodId,
+      issueDate: madridIsoDate(now),
+      dueDate: null,
+      notes: source.notes,
+      lines: source.lines.map((line) => {
+        const productArchived =
+          line.catalogItemId !== null && archivedItems.has(line.catalogItemId);
+        const taxArchived =
+          line.taxRateId !== null && archivedTaxes.has(line.taxRateId);
+        if (productArchived) {
+          warnings.add("product_archived");
+        }
+        if (taxArchived) {
+          warnings.add("tax_archived");
+        }
+        return {
+          description: line.description,
+          quantity: line.quantity,
+          unitPriceCents: line.unitPriceCents,
+          taxRate: line.taxRate,
+          taxName: line.taxName,
+          unit: line.unit,
+          taxRateId: taxArchived ? null : line.taxRateId,
+          catalogItemId: productArchived ? null : line.catalogItemId,
+          discountPercentage: line.discountPercentage,
+        };
+      }),
+    },
+    { database, now },
+  );
+
+  await database.insert(documentEvents).values({
+    id: createUuidV7(now.getTime()),
+    companyId: input.companyId,
+    documentId: document.id,
+    actor: input.actor,
+    event: "duplicated",
+    payload: { source_document_id: input.documentId },
+    createdAt: now,
+  });
+
+  return { document, warnings: [...warnings] };
+}
+
+function madridIsoDate(now: Date): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  );
+  return `${value.year}-${value.month}-${value.day}`;
 }

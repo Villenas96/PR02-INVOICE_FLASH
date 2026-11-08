@@ -17,6 +17,7 @@ import {
 import { renderAuthEmailTemplate } from "@/services/email/templates/auth";
 import { renderDocumentEmailTemplate } from "@/services/email/templates/document";
 import { createOrReactivateShareLink } from "@/services/share-links";
+import { NOTICE_PURPOSES } from "@/workers/handlers/notice-email";
 import {
   EMAIL_RETRY_WINDOW_MS,
   type EmailSendMessage,
@@ -31,6 +32,8 @@ export interface TransactionalEmail {
   text: string;
   html: string;
   idempotencyKey: string;
+  /** Where replies go; document emails use the issuing company's email. */
+  replyTo?: string | null;
 }
 
 export interface TransactionalEmailProvider {
@@ -44,6 +47,8 @@ export interface EmailSendHandlerDependencies {
   provider: TransactionalEmailProvider;
   appBaseUrl: string;
   documentHandler?: DocumentEmailHandler;
+  /** Billing, advisor and user notices (template stored on the delivery). */
+  noticeHandler?: DocumentEmailHandler;
   now?: () => Date;
 }
 
@@ -320,6 +325,7 @@ export function createDocumentEmailHandler(
         fullNumber: documents.fullNumber,
         totalCents: documents.totalCents,
         legalName: companies.legalName,
+        companyEmail: companies.email,
       })
       .from(documents)
       .innerJoin(companies, eq(companies.id, documents.companyId))
@@ -366,6 +372,8 @@ export function createDocumentEmailHandler(
         to: claimed.recipientEmail,
         ...template,
         idempotencyKey: `email/${claimed.id}`,
+        // The client answers the self-employed issuer, not Factum (R16).
+        replyTo: document.companyEmail,
       });
       await markDocumentDeliverySent(
         database,
@@ -418,6 +426,14 @@ export function createEmailSendHandler(
       return;
     }
 
+    if ((NOTICE_PURPOSES as readonly string[]).includes(delivery.purpose)) {
+      if (!dependencies.noticeHandler) {
+        throw new Error("El consumidor de avisos no está configurado.");
+      }
+      await dependencies.noticeHandler(message);
+      return;
+    }
+
     if (delivery.purpose === "document") {
       if (!dependencies.documentHandler) {
         throw new Error(
@@ -435,13 +451,20 @@ export function createEmailSendHandler(
   };
 }
 
+/**
+ * Resend transport. `from` is always `EMAIL_FROM` (`Factum <no-reply@…>`,
+ * FR-001); `replyTo` is the default Reply-To for system emails, overridden
+ * per message (document emails reply to the issuing company).
+ */
 export function createResendEmailProvider({
   apiKey,
   from,
+  replyTo,
   fetchImplementation = fetch,
 }: {
   apiKey: string;
   from: string;
+  replyTo?: string;
   fetchImplementation?: typeof fetch;
 }): TransactionalEmailProvider {
   return {
@@ -461,6 +484,9 @@ export function createResendEmailProvider({
             subject: message.subject,
             text: message.text,
             html: message.html,
+            ...((message.replyTo ?? replyTo)
+              ? { reply_to: message.replyTo ?? replyTo }
+              : {}),
           }),
         },
       );

@@ -5,7 +5,7 @@ import { createDatabase } from "@/db";
 import { ApiError, apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { validate } from "@/lib/api/validate";
 import { logSafe } from "@/lib/log";
-import { resolveCompanyContext } from "@/services/context";
+import { auditActor, resolveCompanyContext } from "@/services/context";
 import {
   issueDocument,
   type PdfRenderQueue,
@@ -64,7 +64,7 @@ function routeErrorResponse(
 async function pdfRenderQueue(): Promise<PdfRenderQueue> {
   const cloudflare = await getCloudflareContext();
   const queue = (
-    cloudflare.env as {
+    cloudflare.env as unknown as {
       PDF_RENDER_QUEUE?: PdfRenderQueue;
     }
   ).PDF_RENDER_QUEUE;
@@ -111,7 +111,7 @@ export async function POST(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -126,6 +126,7 @@ export async function POST(
         companyId: context.companyId,
         documentId: params.id,
         actor: context.userId,
+        eventActor: auditActor(context),
       },
       {
         database: createDatabase(),

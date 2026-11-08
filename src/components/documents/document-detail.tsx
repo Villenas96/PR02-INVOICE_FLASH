@@ -2,16 +2,24 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
+import { useReadOnly } from "@/components/access/read-only";
+import type { LinkedDocument } from "@/components/documents/document-actions";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { DeleteDraftButton } from "@/components/documents/draft-actions";
 import { IssueAction } from "@/components/documents/editor/issue-action";
 import {
   type DocumentPayment,
   PaymentsPanel,
 } from "@/components/documents/payments-panel";
 import { PdfDownload } from "@/components/documents/pdf-download";
+import { RemindersPanel } from "@/components/documents/reminders-panel";
 import { SharePanel } from "@/components/documents/share-panel";
-import { useAsyncAction } from "@/components/ui/async-action";
+import {
+  type CompanyPlanData,
+  companyHasFeature,
+  usageForType,
+} from "@/components/plan/types";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,12 +41,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { apiRequest } from "@/lib/api/client";
+import { documentTypeLabel } from "@/lib/documents/labels";
 import { createCents, formatEur } from "@/lib/money";
+import type { DocumentType } from "@/lib/plan";
 
 type DocumentStatus = "draft" | "issued" | "voided";
 type PdfStatus = "failed" | "pending" | "ready";
 
 interface TaxEntry {
+  name?: string;
   rate: string;
   baseCents: number;
   taxCents: number;
@@ -84,7 +95,13 @@ interface ClientSnapshot {
 
 interface DocumentDetailData {
   id: string;
-  doc_type: "invoice" | "proforma" | "receipt";
+  doc_type: DocumentType;
+  valid_until: string | null;
+  reminders_enabled: boolean;
+  reminder_warning: string | null;
+  quote_decision: "accepted" | "rejected" | null;
+  derived_state: string | null;
+  document_links?: { from: LinkedDocument[]; to: LinkedDocument[] };
   status: DocumentStatus;
   full_number: string | null;
   client_id: string | null;
@@ -98,6 +115,7 @@ interface DocumentDetailData {
   total_cents: number;
   issuer_snapshot: IssuerSnapshot | null;
   client_snapshot: ClientSnapshot | null;
+  client_display: { name: string; tax_id: string | null } | null;
   converted_to_id: string | null;
   invoice_id: string | null;
   pdf_status: PdfStatus | null;
@@ -111,12 +129,19 @@ interface DocumentDetailData {
   payment_status: "overdue" | "paid" | "partial" | "pending" | null;
 }
 
-interface CompanyCapabilityData {
+interface CompanyCapabilityData
+  extends Pick<CompanyPlanData, "usage" | "features"> {
   is_ready_to_issue: boolean;
-  docs_issued_this_month: number;
-  doc_limit: number;
-  can_send_email: boolean;
 }
+
+const DERIVED_STATE_LABELS: Record<string, string> = {
+  pending: "Pendiente",
+  accepted: "Aceptado",
+  rejected: "Rechazado",
+  converted: "Convertido",
+  expired: "Caducado",
+  invoiced: "Facturado",
+};
 
 const eventLabels: Record<string, string> = {
   created: "Borrador creado",
@@ -128,6 +153,13 @@ const eventLabels: Record<string, string> = {
   payment_added: "Pago registrado",
   payment_updated: "Pago actualizado",
   payment_deleted: "Pago eliminado",
+  reminder_sent: "Recordatorio de pago enviado",
+  reminder_skipped: "Recordatorio de pago omitido",
+  recurring_generated: "Generado por una recurrencia",
+  quote_accepted: "Presupuesto aceptado",
+  quote_rejected: "Presupuesto rechazado",
+  linked: "Vinculado a otro documento",
+  link_released: "Vínculo liberado al anular la factura",
 };
 
 function formattedDate(date: string): string {
@@ -162,7 +194,7 @@ function VoidAction({
   onVoided: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const action = useAsyncAction<unknown>();
+  const action = useMutation<unknown>();
 
   async function handleVoid() {
     const result = await action.run(() =>
@@ -217,6 +249,7 @@ function VoidAction({
 }
 
 export function DocumentDetail({ documentId }: { documentId: string }) {
+  const readOnly = useReadOnly();
   const [document, setDocument] = useState<DocumentDetailData>();
   const [company, setCompany] = useState<CompanyCapabilityData>();
   const [isLoading, setIsLoading] = useState(true);
@@ -285,12 +318,14 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             {statusBadge(document.status)}
             <span className="text-sm text-muted-foreground">
-              {document.doc_type === "invoice"
-                ? "Factura"
-                : document.doc_type === "proforma"
-                  ? "Proforma"
-                  : "Recibo"}
+              {documentTypeLabel(document.doc_type)}
             </span>
+            {document.derived_state ? (
+              <Badge variant="outline">
+                {DERIVED_STATE_LABELS[document.derived_state] ??
+                  document.derived_state}
+              </Badge>
+            ) : null}
           </div>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">
             {document.full_number ?? "Borrador sin número"}
@@ -300,18 +335,35 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
             {document.due_date
               ? ` · vencimiento ${formattedDate(document.due_date)}`
               : ""}
+            {document.valid_until
+              ? ` · válido hasta ${formattedDate(document.valid_until)}`
+              : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          {document.status === "draft" && company ? (
+          {document.status === "draft" && !readOnly ? (
+            <>
+              <Button asChild variant="outline">
+                <Link href={`/documents/${document.id}/edit`}>Editar</Link>
+              </Button>
+              <DeleteDraftButton documentId={document.id} />
+            </>
+          ) : document.status === "draft" ? null : (
+            <Button asChild variant="outline">
+              <Link href={`/documents/${document.id}/print`} target="_blank">
+                Imprimir
+              </Link>
+            </Button>
+          )}
+          {document.status === "draft" && company && !readOnly ? (
             <IssueAction
               documentId={document.id}
               documentType={
-                document.doc_type === "proforma" ? "proforma" : "invoice"
+                document.doc_type === "receipt" ? "invoice" : document.doc_type
               }
               isCompanyReady={company.is_ready_to_issue}
-              issuedDocuments={company.docs_issued_this_month}
-              documentLimit={company.doc_limit}
+              issuedDocuments={usageForType(company, document.doc_type).used}
+              documentLimit={usageForType(company, document.doc_type).limit}
               onIssued={loadDocument}
             />
           ) : null}
@@ -324,7 +376,9 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
                   pdfStatus={document.pdf_status}
                 />
               ) : null}
-              <VoidAction documentId={document.id} onVoided={loadDocument} />
+              {readOnly ? null : (
+                <VoidAction documentId={document.id} onVoided={loadDocument} />
+              )}
             </>
           ) : null}
           {document.status === "voided" && document.pdf_status ? (
@@ -381,11 +435,21 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
             empresa o cliente.
           </p>
         </section>
-      ) : document.client_id ? (
+      ) : document.client_id && document.client_display ? (
         <section className="rounded-xl border bg-card p-5 text-sm shadow-sm">
-          <p>
-            Cliente seleccionado:{" "}
-            <span className="font-mono text-xs">{document.client_id}</span>
+          <h2 className="font-semibold">Cliente</h2>
+          <p className="mt-2">
+            <Link
+              className="font-medium underline-offset-4 hover:underline"
+              href={`/clients/${document.client_id}`}
+            >
+              {document.client_display.name}
+            </Link>
+          </p>
+          <p className="text-muted-foreground">
+            {document.client_display.tax_id
+              ? `NIF ${document.client_display.tax_id}`
+              : "Sin NIF"}
           </p>
         </section>
       ) : null}
@@ -454,9 +518,13 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
               <span>{formatEur(createCents(document.subtotal_cents))}</span>
             </div>
             {document.tax_breakdown.map((tax) => (
-              <div key={tax.rate} className="flex justify-between gap-4">
+              <div
+                key={`${tax.name ?? "IVA"}-${tax.rate}`}
+                className="flex justify-between gap-4"
+              >
                 <span className="text-muted-foreground">
-                  IVA {Number(tax.rate).toLocaleString("es-ES")} %
+                  {tax.name ?? "IVA"} {Number(tax.rate).toLocaleString("es-ES")}{" "}
+                  %
                 </span>
                 <span>{formatEur(createCents(tax.taxCents))}</span>
               </div>
@@ -487,23 +555,66 @@ export function DocumentDetail({ documentId }: { documentId: string }) {
         />
       ) : null}
 
+      {document.doc_type === "invoice" && document.status === "issued" ? (
+        <RemindersPanel
+          documentId={document.id}
+          initialEnabled={document.reminders_enabled}
+          warning={document.reminder_warning}
+          onChanged={loadDocument}
+        />
+      ) : null}
+
       {company ? (
         <DocumentActions
           documentId={document.id}
           documentType={document.doc_type}
-          convertedToId={document.converted_to_id}
-          issuedDocuments={company.docs_issued_this_month}
-          documentLimit={company.doc_limit}
+          status={document.status}
+          derivedState={document.derived_state}
+          linkedTargets={document.document_links?.to ?? []}
+          onChanged={loadDocument}
+          issuedDocuments={usageForType(company, "invoice").used}
+          documentLimit={usageForType(company, "invoice").limit}
           payments={document.payments}
+          canDownloadXlsx={
+            document.status !== "draft" &&
+            companyHasFeature(company, "document_xlsx")
+          }
+          readOnly={readOnly}
         />
       ) : null}
 
       {(document.status === "issued" || document.status === "voided") &&
-      company ? (
+      company &&
+      !readOnly ? (
         <SharePanel
           documentId={document.id}
-          canSendEmail={company.can_send_email}
+          canSendEmail={companyHasFeature(company, "email")}
         />
+      ) : null}
+
+      {(document.document_links?.from.length ?? 0) > 0 ? (
+        <section
+          aria-labelledby="document-origin-title"
+          className="rounded-xl border bg-card p-5 shadow-sm"
+        >
+          <h2 id="document-origin-title" className="font-semibold">
+            Documentos de origen
+          </h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {document.document_links?.from.map((link) => (
+              <li key={link.id}>
+                <Link
+                  className="underline underline-offset-4"
+                  href={`/documents/${link.id}`}
+                >
+                  {documentTypeLabel(link.doc_type)}{" "}
+                  {link.full_number ?? "borrador"}
+                </Link>
+                {link.kind === "invoiced" ? " · facturado aquí" : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {document.notes ? (

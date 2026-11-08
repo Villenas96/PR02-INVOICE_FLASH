@@ -8,14 +8,23 @@ import { payments } from "@/db/schema/payment";
 import { shareLinks } from "@/db/schema/share-link";
 import { apiErrorResponse, toApiError } from "@/lib/api/errors";
 import { parseJson, validate } from "@/lib/api/validate";
-import { logSafe } from "@/lib/log";
-import { resolveCompanyContext } from "@/services/context";
 import {
+  deriveDeliveryNoteState,
+  deriveQuoteState,
+} from "@/lib/documents/conversion";
+import { logSafe } from "@/lib/log";
+import { madridDate } from "@/lib/plan";
+import { auditActor, resolveCompanyContext } from "@/services/context";
+import {
+  clientDisplayFor,
   type DocumentDetail,
+  type DocumentLinkRef,
   getDocumentDetail,
+  loadDocumentClient,
   softDeleteDraftDocument,
   updateDraftDocument,
 } from "@/services/documents";
+import { reminderWarning, setDocumentReminders } from "@/services/reminders";
 
 const REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,128}$/;
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
@@ -33,16 +42,27 @@ const draftLineSchema = z
     unit_price_cents: z.number().int().min(0).max(MAX_POSTGRES_INTEGER),
     tax_rate: decimalSchema,
     discount_pct: decimalSchema.optional(),
+    tax_name: z.string().trim().min(1).max(30).optional(),
+    unit: z.string().trim().max(20).nullable().optional(),
+    tax_rate_id: z.string().uuid().nullable().optional(),
+    catalog_item_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 const updateDraftSchema = z
   .object({
-    doc_type: z.enum(["invoice", "proforma"]).optional(),
+    doc_type: z
+      .enum(["invoice", "proforma", "quote", "delivery_note"])
+      .optional(),
+    valid_until: z.iso.date().nullable().optional(),
     client_id: z.string().uuid().nullable().optional(),
+    series_id: z.string().uuid().nullable().optional(),
+    collection_method_id: z.string().uuid().nullable().optional(),
     issue_date: z.iso.date().optional(),
     due_date: z.iso.date().nullable().optional(),
     notes: z.string().trim().max(5_000).nullable().optional(),
     lines: z.array(draftLineSchema).max(500).optional(),
+    // Allowed on issued invoices too: not fiscal content (FR-041).
+    reminders_enabled: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -52,7 +72,7 @@ const updateDraftSchema = z
     },
   );
 
-type DocumentRow = typeof documents.$inferSelect;
+type DocumentRow = DocumentDetail;
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
@@ -93,6 +113,39 @@ function routeErrorResponse(
   );
 }
 
+function linksResponse(links: NonNullable<DocumentDetail["links"]>) {
+  const ref = (link: DocumentLinkRef) => ({
+    id: link.id,
+    kind: link.kind,
+    doc_type: link.documentType,
+    full_number: link.fullNumber,
+    status: link.status,
+  });
+  return { from: links.from.map(ref), to: links.to.map(ref) };
+}
+
+function derivedStateOf(document: DocumentRow): string | null {
+  const targets = document.links?.to ?? [];
+  if (document.documentType === "quote") {
+    return deriveQuoteState({
+      status: document.status,
+      decision: document.quoteDecision,
+      validUntil: document.validUntil,
+      converted: targets.some(
+        (link) => link.kind === "converted" && link.status !== "voided",
+      ),
+      today: madridDate(new Date()),
+    });
+  }
+  if (document.documentType === "delivery_note") {
+    return deriveDeliveryNoteState({
+      status: document.status,
+      invoiced: targets.some((link) => link.kind === "invoiced"),
+    });
+  }
+  return null;
+}
+
 function documentResponse(document: DocumentRow) {
   return {
     id: document.id,
@@ -104,6 +157,11 @@ function documentResponse(document: DocumentRow) {
     client_id: document.clientId,
     issue_date: document.issueDate,
     due_date: document.dueDate,
+    valid_until: document.validUntil,
+    reminders_enabled: document.remindersEnabled,
+    quote_decision: document.quoteDecision,
+    quote_decided_at: document.quoteDecidedAt,
+    derived_state: derivedStateOf(document),
     notes: document.notes,
     subtotal_cents: document.subtotalCents,
     tax_breakdown: document.taxBreakdown,
@@ -112,8 +170,9 @@ function documentResponse(document: DocumentRow) {
     total_cents: document.totalCents,
     issuer_snapshot: document.issuerSnapshot,
     client_snapshot: document.clientSnapshot,
-    converted_from_id: document.convertedFromId,
-    converted_to_id: document.convertedToId,
+    converted_from_id: document.convertedFromId ?? null,
+    converted_to_id: document.convertedToId ?? null,
+    document_links: document.links ? linksResponse(document.links) : undefined,
     invoice_id: document.invoiceId,
     payment_id: document.paymentId,
     pdf_status: document.pdfStatus,
@@ -134,6 +193,10 @@ function lineResponse(line: typeof documentLines.$inferSelect) {
     unit_price_cents: line.unitPriceCents,
     tax_rate: line.taxRate,
     discount_pct: line.discountPercentage,
+    tax_name: line.taxName,
+    unit: line.unit,
+    tax_rate_id: line.taxRateId,
+    catalog_item_id: line.catalogItemId,
     line_subtotal_cents: line.lineSubtotalCents,
     line_tax_cents: line.lineTaxCents,
     line_total_cents: line.lineTotalCents,
@@ -188,7 +251,7 @@ export async function GET(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "read" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -251,18 +314,26 @@ export async function GET(
       )
       .limit(1);
 
+    const clientPromise = loadDocumentClient(
+      database,
+      context.companyId,
+      params.id,
+    );
+
     const [
       document,
       documentPayments,
       documentLinks,
       documentEventsRows,
       paymentSummaryRows,
+      liveClient,
     ] = await Promise.all([
       detailPromise,
       paymentsPromise,
       linksPromise,
       eventsPromise,
       paymentSummaryPromise,
+      clientPromise,
     ]);
     const paymentSummary = paymentSummaryRows[0] ?? {
       paidCents: 0,
@@ -272,6 +343,15 @@ export async function GET(
     return withRequestId(
       Response.json({
         ...draftResponse(document),
+        client_display: clientDisplayFor(document.clientSnapshot, liveClient),
+        reminder_warning:
+          document.documentType === "invoice" && document.status === "issued"
+            ? reminderWarning({
+                clientEmail: liveClient?.email,
+                clientReminders: liveClient?.remindersEnabled,
+                documentReminders: document.remindersEnabled,
+              })
+            : null,
         payments: documentPayments.map((payment) => ({
           id: payment.id,
           amount_cents: payment.amountCents,
@@ -315,7 +395,7 @@ export async function PATCH(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -325,12 +405,35 @@ export async function PATCH(
       paramsPromise,
       inputPromise,
     ]);
+    const { reminders_enabled: remindersEnabled, ...draftInput } = input;
+    if (remindersEnabled !== undefined) {
+      await setDocumentReminders({
+        companyId: context.companyId,
+        documentId: params.id,
+        enabled: remindersEnabled,
+      });
+      if (Object.values(draftInput).every((value) => value === undefined)) {
+        const current = await getDocumentDetail<DocumentDetail>({
+          companyId: context.companyId,
+          documentId: params.id,
+        });
+        return withRequestId(Response.json(draftResponse(current)), requestId);
+      }
+    }
     const updatedDocument = await updateDraftDocument({
       companyId: context.companyId,
       documentId: params.id,
       actor: context.userId,
+      eventActor: auditActor(context),
       ...(input.doc_type === undefined ? {} : { documentType: input.doc_type }),
+      ...(input.valid_until === undefined
+        ? {}
+        : { validUntil: input.valid_until }),
       ...(input.client_id === undefined ? {} : { clientId: input.client_id }),
+      ...(input.series_id === undefined ? {} : { seriesId: input.series_id }),
+      ...(input.collection_method_id === undefined
+        ? {}
+        : { collectionMethodId: input.collection_method_id }),
       ...(input.issue_date === undefined
         ? {}
         : { issueDate: input.issue_date }),
@@ -345,6 +448,10 @@ export async function PATCH(
               unitPriceCents: line.unit_price_cents,
               taxRate: line.tax_rate,
               discountPercentage: line.discount_pct ?? "0",
+              taxName: line.tax_name ?? "IVA",
+              unit: line.unit?.trim() ? line.unit.trim() : null,
+              taxRateId: line.tax_rate_id ?? null,
+              catalogItemId: line.catalog_item_id ?? null,
             })),
           }),
     });
@@ -365,7 +472,7 @@ export async function DELETE(
   const { requestId, propagatedRequestId } = requestIdFrom(request);
 
   try {
-    const contextPromise = resolveCompanyContext(request);
+    const contextPromise = resolveCompanyContext(request, { access: "write" });
     const paramsPromise = routeContext.params.then((params) =>
       validate(routeParamsSchema, params),
     );
@@ -378,6 +485,7 @@ export async function DELETE(
       companyId: context.companyId,
       documentId: params.id,
       actor: context.userId,
+      eventActor: auditActor(context),
     });
 
     return withRequestId(new Response(null, { status: 204 }), requestId);

@@ -11,6 +11,8 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { companies } from "./company";
+import { importJobs } from "./import-job";
+import { taxRates } from "./tax-rate";
 
 export const catalogItems = pgTable(
   "catalog_item",
@@ -22,6 +24,14 @@ export const catalogItems = pgTable(
     description: text("description").notNull(),
     unitPriceCents: integer("unit_price_cents").notNull(),
     taxRate: numeric("tax_rate", { precision: 5, scale: 2 }).notNull(),
+    unit: text("unit"),
+    taxRateId: uuid("tax_rate_id").references(() => taxRates.id, {
+      onDelete: "set null",
+    }),
+    /** Import that created or last updated it (FR-031). */
+    sourceImportId: uuid("source_import_id").references(() => importJobs.id, {
+      onDelete: "set null",
+    }),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -29,6 +39,9 @@ export const catalogItems = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    searchText: text("search_text").generatedAlwaysAs(
+      sql`immutable_unaccent(lower(description))`,
+    ),
   },
   (table) => [
     index("catalog_item_company_archived_idx").on(
@@ -38,6 +51,10 @@ export const catalogItems = pgTable(
     index("catalog_item_company_description_idx").on(
       table.companyId,
       table.description,
+    ),
+    index("catalog_item_search_text_trgm_idx").using(
+      "gin",
+      table.searchText.op("gin_trgm_ops"),
     ),
     check("catalog_item_price_nonnegative", sql`${table.unitPriceCents} >= 0`),
     check(

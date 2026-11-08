@@ -25,6 +25,8 @@ export interface CreatePaymentInput {
   companyId: string;
   documentId: string;
   actor: string;
+  /** Audit actor when it differs from `actor` (AI assistant, FR-056). */
+  eventActor?: string;
   amountCents: number;
   paidOn: string;
   method: PaymentMethod | null;
@@ -196,7 +198,7 @@ export async function createPayment(
         ${eventId},
         inserted_payment.company_id,
         inserted_payment.document_id,
-        ${input.actor},
+        ${input.eventActor ?? input.actor},
         'payment_added'::document_event_type,
         jsonb_build_object(
           'payment_id', inserted_payment.id,

@@ -151,3 +151,49 @@ describe("public and email logs never leak tokens, tax ids or recipients", () =>
     expect(logged).not.toContain(COMPANY_TAX_ID);
   });
 });
+
+describe("IBANs never reach logs or error messages", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("redacts IBANs in structured logs and keeps them out of validation errors", async () => {
+    const { logSafe } = await import("@/lib/log");
+    const { validateMethodFields } = await import(
+      "@/services/collection-methods"
+    );
+    const output: string[] = [];
+    for (const level of ["error", "warn", "info"] as const) {
+      vi.spyOn(console, level).mockImplementation((entry: unknown) => {
+        output.push(String(entry));
+      });
+    }
+
+    logSafe("error", "collection_method.failed", {
+      iban: "ES9121000418450200051332",
+      detail: "Rechazada la cuenta ES91 2100 0418 4502 0005 1332",
+    });
+    let message = "";
+    try {
+      validateMethodFields("bank_account", {
+        holder_name: "Titular",
+        iban: "ES9121000418450200051333",
+        bic: null,
+        phone: null,
+        email_or_url: null,
+        instructions: null,
+      });
+    } catch (error) {
+      message = JSON.stringify({
+        message: (error as Error).message,
+        fields: (error as { fields?: unknown }).fields,
+      });
+    }
+
+    const joined = output.join("\n");
+    expect(joined).not.toMatch(/2100\s?0418/);
+    expect(joined).toContain("[redacted");
+    expect(message).toContain("IBAN no es válido");
+    expect(message).not.toMatch(/2100|0418|1333/);
+  });
+});

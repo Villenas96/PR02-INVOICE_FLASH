@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { clients, companies, documents, payments, users } from "@/db/schema";
-
 import { createIntegrationDatabase } from "./database";
+import { convertedTargetIds } from "./fixtures";
 
 const appBaseUrl = "http://localhost:3000";
 process.env.BETTER_AUTH_SECRET =
@@ -282,13 +282,14 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     expect(response.status).toBe(400);
   });
 
-  it("converts a proforma to a draft invoice, then to the same draft again idempotently", async () => {
+  it("converts a proforma to a draft invoice and resolves the same draft for the same key", async () => {
     const clientId = await seedClient(owner);
     const proformaId = await createIssuedProforma(owner, clientId);
 
     const first = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-draft-key-000001" },
         body: JSON.stringify({}),
       }),
       routeContext(proformaId),
@@ -301,11 +302,25 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     const second = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-draft-key-000001" },
         body: JSON.stringify({}),
       }),
       routeContext(proformaId),
     );
     expect((await jsonRecord(second)).id).toBe(firstBody.id);
+
+    // A new request without the key is a repeat: it needs confirmation.
+    const repeat = await convertDocument(
+      authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+      routeContext(proformaId),
+    );
+    expect(repeat.status).toBe(409);
+    expect(await jsonRecord(repeat)).toMatchObject({
+      error: { code: "conversion_repeat_confirmation_required" },
+    });
   });
 
   it("issues the converted invoice directly and resolves the same one afterwards", async () => {
@@ -315,6 +330,7 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     const first = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-issue-key-000001" },
         body: JSON.stringify({ issue: true }),
       }),
       routeContext(proformaId),
@@ -327,6 +343,7 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
     const second = await convertDocument(
       authenticatedRequest(owner, `/api/v1/documents/${proformaId}/convert`, {
         method: "POST",
+        headers: { "Idempotency-Key": "convert-issue-key-000001" },
         body: JSON.stringify({ issue: true }),
       }),
       routeContext(proformaId),
@@ -370,9 +387,10 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
 
   it("rejects a new direct emission at quota with 402 and no side effects", async () => {
     const clientId = await seedClient(owner);
-    // The free plan's monthly quota is shared across every document type, so
-    // issuing this proforma itself consumes the final (fifth) slot.
-    for (let number = 1; number <= 4; number += 1) {
+    // The quota is counted per document type (FR-008): the Basic plan's five
+    // invoices are used up, while issuing the proforma itself still fits in
+    // its own proforma quota.
+    for (let number = 1; number <= 5; number += 1) {
       await createIssuedInvoice(owner, clientId, number);
     }
     const proformaId = await createIssuedProforma(owner, clientId);
@@ -391,16 +409,13 @@ describe("document variants (convert/receipt/duplicate) HTTP contract", () => {
 
     // Draft-mode conversion is free of charge (no plan quota); the linked
     // invoice draft is created, but it must stay unissued and numberless.
-    const [proforma] = await database
-      .select({ convertedToId: documents.convertedToId })
-      .from(documents)
-      .where(eq(documents.id, proformaId));
-    expect(proforma?.convertedToId).toBeTruthy();
+    const [convertedToId] = await convertedTargetIds(database, proformaId);
+    expect(convertedToId).toBeTruthy();
 
     const [linkedDraft] = await database
       .select({ status: documents.status, number: documents.number })
       .from(documents)
-      .where(eq(documents.id, proforma?.convertedToId as string));
+      .where(eq(documents.id, convertedToId as string));
     expect(linkedDraft).toMatchObject({ status: "draft", number: null });
   });
 

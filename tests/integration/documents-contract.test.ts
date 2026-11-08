@@ -55,7 +55,7 @@ const { GET: getDocumentPdf } = await import(
   "@/app/api/v1/documents/[id]/pdf/route"
 );
 
-type Plan = "free" | "pro";
+type Plan = "basic" | "essential";
 type PdfStatus = "failed" | "pending" | "ready";
 
 interface TenantFixture {
@@ -215,7 +215,7 @@ async function createTenant(plan: Plan): Promise<TenantFixture> {
     id: companyId,
     userId: user.id,
     legalName: `Empresa ${plan}, S.L.`,
-    taxId: plan === "free" ? "B12345678" : "A87654321",
+    taxId: plan === "basic" ? "B12345678" : "A87654321",
     address: "Calle del Contrato 1, Madrid",
     email,
     plan,
@@ -303,7 +303,7 @@ async function seedDocument({
         ? undefined
         : {
             legalName: `Empresa ${tenant.plan}, S.L.`,
-            taxId: tenant.plan === "free" ? "B12345678" : "A87654321",
+            taxId: tenant.plan === "basic" ? "B12345678" : "A87654321",
             address: "Calle del Contrato 1, Madrid",
           },
     clientSnapshot:
@@ -360,8 +360,8 @@ describe("documents HTTP contract", () => {
       STORAGE_BUCKET: bucket,
     };
     setAuthEmailDeliveryHandler(() => Promise.resolve());
-    owner = await createTenant("free");
-    foreignTenant = await createTenant("pro");
+    owner = await createTenant("basic");
+    foreignTenant = await createTenant("essential");
   });
 
   it("returns company readiness and plan capabilities with Madrid-month usage", async () => {
@@ -382,30 +382,62 @@ describe("documents HTTP contract", () => {
       authenticatedRequest(owner, "/api/v1/company"),
     );
     expect(freeResponse.status).toBe(200);
-    expect(await jsonRecord(freeResponse)).toMatchObject({
+    const basicBody = await jsonRecord(freeResponse);
+    expect(basicBody).toMatchObject({
       is_ready_to_issue: true,
-      plan: "free",
-      docs_issued_this_month: 4,
-      doc_limit: 5,
-      can_send_email: false,
-      usage_warning: true,
+      role: "owner",
+      plan: "basic",
+      features: [],
+      ui_mode: null,
+      effective_ui: "simple",
+      used_document_types: ["invoice"],
+      missing_to_issue: [],
     });
+    expect(basicBody.usage).toEqual(
+      expect.arrayContaining([
+        {
+          document_type: "invoice",
+          used: 4,
+          limit: 5,
+          warning: true,
+          reached: false,
+        },
+        {
+          document_type: "proforma",
+          used: 0,
+          limit: 5,
+          warning: false,
+          reached: false,
+        },
+      ]),
+    );
+    expect(basicBody).not.toHaveProperty("docs_issued_this_month");
+    expect(basicBody).not.toHaveProperty("doc_limit");
 
     await database
       .update(companies)
-      .set({ plan: "pro" })
+      .set({ plan: "essential" })
       .where(eq(companies.id, owner.companyId));
-    const proResponse = await getCompany(
+    const essentialResponse = await getCompany(
       authenticatedRequest(owner, "/api/v1/company"),
     );
-    expect(proResponse.status).toBe(200);
-    expect(await jsonRecord(proResponse)).toMatchObject({
-      plan: "pro",
-      docs_issued_this_month: 4,
-      doc_limit: 100,
-      can_send_email: true,
-      usage_warning: false,
+    expect(essentialResponse.status).toBe(200);
+    const essentialBody = await jsonRecord(essentialResponse);
+    expect(essentialBody).toMatchObject({
+      plan: "essential",
+      features: ["email", "period_export"],
+      effective_ui: "simple",
     });
+    expect(essentialBody.usage).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          document_type: "invoice",
+          used: 4,
+          limit: 100,
+          warning: false,
+        }),
+      ]),
+    );
   });
 
   it("paginates series, clients and documents with opaque cursors", async () => {
@@ -659,12 +691,12 @@ describe("documents HTTP contract", () => {
   });
 
   it.each([
-    { plan: "free" as const, limit: 5 },
-    { plan: "pro" as const, limit: 100 },
+    { plan: "basic" as const, limit: 5 },
+    { plan: "essential" as const, limit: 100 },
   ])(
     "enforces the exact $plan=$limit limit with a side-effect-free 402",
     async ({ plan, limit }) => {
-      const tenant = plan === "free" ? owner : foreignTenant;
+      const tenant = plan === "basic" ? owner : foreignTenant;
       const clientId = await seedClient(tenant, `Cliente límite ${plan}`);
       const seriesId = await seedSeries(
         tenant,

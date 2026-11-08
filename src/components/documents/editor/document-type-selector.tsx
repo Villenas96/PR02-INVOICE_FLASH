@@ -2,16 +2,22 @@
 
 import { Label } from "@/components/ui/label";
 
-export type EditableDocumentType = "invoice" | "proforma";
+export type EditableDocumentType =
+  | "invoice"
+  | "proforma"
+  | "quote"
+  | "delivery_note";
 
 const OPTIONS: Array<{ value: EditableDocumentType; label: string }> = [
   { value: "invoice", label: "Factura" },
   { value: "proforma", label: "Proforma" },
+  { value: "quote", label: "Presupuesto" },
+  { value: "delivery_note", label: "Albarán" },
 ];
 
 /**
- * Only invoices and proformas are ever chosen here: receipts are generated
- * directly from a payment (FR-011) and never appear as an editor option.
+ * Receipts are generated directly from a payment (FR-011) and never appear
+ * as an editor option.
  */
 export function DocumentTypeSelector({
   value,

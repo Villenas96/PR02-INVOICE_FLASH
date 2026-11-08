@@ -1,10 +1,23 @@
 "use client";
 
+import { MoreHorizontalIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-
+import { useReadOnly } from "@/components/access/read-only";
+import {
+  DeleteDraftDialog,
+  useDuplicateDocument,
+} from "@/components/documents/draft-actions";
+import { useMutation } from "@/components/ui/async-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -13,10 +26,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiRequest } from "@/lib/api/client";
+import { apiRequest, jsonRequest } from "@/lib/api/client";
 import { createCents, formatEur } from "@/lib/money";
 
-type DocumentType = "invoice" | "proforma" | "receipt";
+type DocumentType =
+  | "invoice"
+  | "proforma"
+  | "receipt"
+  | "quote"
+  | "delivery_note";
 type DocumentStatus = "draft" | "issued" | "voided";
 type PaymentStatus = "overdue" | "paid" | "partial" | "pending";
 
@@ -26,6 +44,7 @@ interface DocumentListItem {
   status: DocumentStatus;
   full_number: string | null;
   client_id: string | null;
+  client_display: { name: string; tax_id: string | null } | null;
   issue_date: string;
   due_date: string | null;
   total_cents: number;
@@ -37,6 +56,8 @@ interface DocumentListItem {
   paid_cents: number;
   outstanding_cents: number;
   payment_status: PaymentStatus | null;
+  /** Quote/delivery note state derived by the API. */
+  derived_state: string | null;
 }
 
 interface DocumentPage {
@@ -48,6 +69,17 @@ const typeLabels: Record<DocumentType, string> = {
   invoice: "Factura",
   proforma: "Proforma",
   receipt: "Recibo",
+  quote: "Presupuesto",
+  delivery_note: "Albarán",
+};
+
+const derivedLabels: Record<string, string> = {
+  pending: "Pendiente",
+  accepted: "Aceptado",
+  rejected: "Rechazado",
+  converted: "Convertido",
+  expired: "Caducado",
+  invoiced: "Facturado",
 };
 
 const statusLabels: Record<DocumentStatus, string> = {
@@ -82,8 +114,102 @@ function paymentVariant(status: PaymentStatus) {
   return status === "paid" ? ("default" as const) : ("outline" as const);
 }
 
-export function DocumentList() {
-  const [documentType, setDocumentType] = useState("");
+function DocumentRowActions({
+  document,
+  onDeleted,
+}: {
+  document: DocumentListItem;
+  onDeleted: () => void;
+}) {
+  const router = useRouter();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const { duplicate, isLoading, error } = useDuplicateDocument();
+  const label = document.full_number ?? "borrador";
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={isLoading}
+            aria-label={`Acciones de ${label}`}
+          >
+            <MoreHorizontalIcon aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {document.status === "draft" ? (
+            <DropdownMenuItem
+              onSelect={() => router.push(`/documents/${document.id}/edit`)}
+            >
+              Editar
+            </DropdownMenuItem>
+          ) : null}
+          {document.doc_type !== "receipt" ? (
+            <DropdownMenuItem onSelect={() => duplicate(document.id)}>
+              Duplicar
+            </DropdownMenuItem>
+          ) : null}
+          {document.status === "draft" ? (
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => setDeleteOpen(true)}
+            >
+              Eliminar
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <DeleteDraftDialog
+        documentId={document.id}
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onDeleted={onDeleted}
+      />
+    </>
+  );
+}
+
+export function DocumentList({
+  initialType = "",
+  showFilters = true,
+}: {
+  /** Pre-selected type filter (e.g. `/documents?type=quote`). */
+  initialType?: string;
+  showFilters?: boolean;
+} = {}) {
+  const readOnly = useReadOnly();
+  const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const invoiceAction = useMutation<{ id: string }>();
+  const selectable = (document: DocumentListItem) =>
+    !readOnly &&
+    document.doc_type === "delivery_note" &&
+    document.derived_state === "pending";
+
+  async function invoiceSelected() {
+    const created = await invoiceAction.run(() =>
+      apiRequest<{ id: string }>("/api/v1/documents/invoice-delivery-notes", {
+        ...jsonRequest("POST", { delivery_note_ids: [...selected] }),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
+      }),
+    );
+    if (created) {
+      router.push(`/documents/${created.id}`);
+    }
+  }
+  const [documentType, setDocumentType] = useState(initialType);
   const [documentStatus, setDocumentStatus] = useState("");
   const [items, setItems] = useState<DocumentListItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -166,43 +292,50 @@ export function DocumentList() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-end">
-        <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="document-type-filter">
-            Tipo
-          </label>
-          <select
-            id="document-type-filter"
-            className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
-            value={documentType}
-            onChange={(event) => setDocumentType(event.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="invoice">Facturas</option>
-            <option value="proforma">Proformas</option>
-            <option value="receipt">Recibos</option>
-          </select>
+      {showFilters ? (
+        <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 sm:flex-row sm:items-end">
+          <div className="space-y-2">
+            <label
+              className="text-sm font-medium"
+              htmlFor="document-type-filter"
+            >
+              Tipo
+            </label>
+            <select
+              id="document-type-filter"
+              className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
+              value={documentType}
+              onChange={(event) => setDocumentType(event.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="invoice">Facturas</option>
+              <option value="proforma">Proformas</option>
+              <option value="receipt">Recibos</option>
+              <option value="quote">Presupuestos</option>
+              <option value="delivery_note">Albaranes</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label
+              className="text-sm font-medium"
+              htmlFor="document-status-filter"
+            >
+              Estado
+            </label>
+            <select
+              id="document-status-filter"
+              className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
+              value={documentStatus}
+              onChange={(event) => setDocumentStatus(event.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="draft">Borradores</option>
+              <option value="issued">Emitidos</option>
+              <option value="voided">Anulados</option>
+            </select>
+          </div>
         </div>
-        <div className="space-y-2">
-          <label
-            className="text-sm font-medium"
-            htmlFor="document-status-filter"
-          >
-            Estado
-          </label>
-          <select
-            id="document-status-filter"
-            className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-sm sm:w-40"
-            value={documentStatus}
-            onChange={(event) => setDocumentStatus(event.target.value)}
-          >
-            <option value="">Todos</option>
-            <option value="draft">Borradores</option>
-            <option value="issued">Emitidos</option>
-            <option value="voided">Anulados</option>
-          </select>
-        </div>
-      </div>
+      ) : null}
 
       {error ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
@@ -240,21 +373,65 @@ export function DocumentList() {
         </div>
       ) : (
         <div className="rounded-xl border bg-card">
+          {selected.size > 0 ? (
+            <div className="flex flex-wrap items-center gap-3 border-b p-3">
+              <span className="text-sm">
+                {selected.size} albarán{selected.size === 1 ? "" : "es"}{" "}
+                seleccionado{selected.size === 1 ? "" : "s"}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                disabled={invoiceAction.isLoading}
+                onClick={invoiceSelected}
+              >
+                {invoiceAction.isLoading ? "Facturando…" : "Facturar"}
+              </Button>
+              {invoiceAction.error ? (
+                <span role="alert" className="text-sm text-destructive">
+                  {invoiceAction.error}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Documento</TableHead>
+                <TableHead>Cliente</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Cobro</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead>
+                  <span className="sr-only">Acciones</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((document) => (
                 <TableRow key={document.id}>
                   <TableCell>
+                    {selectable(document) ? (
+                      <input
+                        type="checkbox"
+                        className="mr-2 align-middle"
+                        aria-label={`Seleccionar ${document.full_number ?? "albarán"} para facturar`}
+                        checked={selected.has(document.id)}
+                        onChange={(event) =>
+                          setSelected((current) => {
+                            const next = new Set(current);
+                            if (event.target.checked) {
+                              next.add(document.id);
+                            } else {
+                              next.delete(document.id);
+                            }
+                            return next;
+                          })
+                        }
+                      />
+                    ) : null}
                     <Link
                       className="font-medium underline-offset-4 hover:underline"
                       href={`/documents/${document.id}`}
@@ -268,9 +445,31 @@ export function DocumentList() {
                     </div>
                   </TableCell>
                   <TableCell>
+                    {document.client_display ? (
+                      <>
+                        <span className="block max-w-56 truncate">
+                          {document.client_display.name}
+                        </span>
+                        {document.client_display.tax_id ? (
+                          <span className="text-xs text-muted-foreground">
+                            {document.client_display.tax_id}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">Sin cliente</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
                     <Badge variant={statusVariant(document.status)}>
                       {statusLabels[document.status]}
                     </Badge>
+                    {document.derived_state ? (
+                      <Badge variant="outline" className="ml-1">
+                        {derivedLabels[document.derived_state] ??
+                          document.derived_state}
+                      </Badge>
+                    ) : null}
                   </TableCell>
                   <TableCell>{formattedDate(document.issue_date)}</TableCell>
                   <TableCell>
@@ -287,6 +486,18 @@ export function DocumentList() {
                   </TableCell>
                   <TableCell className="text-right font-medium">
                     {formatEur(createCents(document.total_cents))}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {readOnly ? null : (
+                      <DocumentRowActions
+                        document={document}
+                        onDeleted={() =>
+                          setItems((current) =>
+                            current.filter((item) => item.id !== document.id),
+                          )
+                        }
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

@@ -6,6 +6,7 @@ import {
   pgEnum,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -16,6 +17,8 @@ export const documentTypeEnum = pgEnum("document_type", [
   "invoice",
   "proforma",
   "receipt",
+  "quote",
+  "delivery_note",
 ]);
 
 export const documentSeries = pgTable(
@@ -29,6 +32,8 @@ export const documentSeries = pgTable(
     prefix: text("prefix").notNull(),
     nextNumber: integer("next_number").notNull().default(1),
     isDefault: boolean("is_default").notNull().default(false),
+    /** Archived series cannot be chosen; issuing with one → 409. */
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
   },
   (table) => [
     uniqueIndex("document_series_company_type_prefix_unique").on(
