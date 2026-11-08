@@ -1,13 +1,11 @@
 # Informe de validación en staging (T189)
 
-**Estado: EN CURSO (2026-11-08).**
+**Estado: COMPLETADO (2026-11-08).** Única pendiente: la usabilidad (T188).
 
 - Puertas automáticas: en verde en local.
 - Escenarios V1–V14: validados en staging con las salvedades indicadas.
 - V15 manual con Claude (2026-11-08): validado por el responsable, con la salvedad sobre la confirmación al emitir (ver el detalle de V15).
-- Pendiente:
-  - Revocar la conexión desde Ajustes con Claude conectado (V15).
-  - Revisar el remitente «Factum» en una bandeja real (V1.5).
+- V1.5: remitente «Factum» comprobado en una bandeja real.
 - Usabilidad de V3.7 y V14: pendiente explícita en T188. No se ha inventado ningún dato.
 
 Entorno:
@@ -82,7 +80,7 @@ Se saltan fuera de staging.
 |---|---|---|
 | V1.1–1.3 Fluidez | E2E-stg `fluency-fixes` (3 pruebas) | OK |
 | V1.4 Sin notas vacías ni email del cliente | UNIT `pdf-template`; E2E-stg `document-design`, `share-link` | OK |
-| V1.5 Remitente «Factum» | UNIT `email-branding`. En staging se enviaron 50 correos en la suite (verificación, documento, asesoría y avisos de facturación). | Envío OK. **Falta revisar en una bandeja real el remitente «Factum».** |
+| V1.5 Remitente «Factum» | UNIT `email-branding`. En staging se enviaron 50 correos en la suite (verificación, documento, asesoría y avisos de facturación). | OK. En una bandeja de Gmail real, «Plan Esencial activado» llegó a la bandeja de entrada (no a spam) con remitente `Factum <hola@factum.sinergia-hub.com>` y la marca Factum en el cuerpo (2026-11-08). |
 | V2.1 Planes | E2E-local `upgrade-flow` (Pro «Próximamente» con la venta desactivada); INT `billing-contract` | OK. En staging Pro se vende a propósito. |
 | V2.2 Cupo y bloqueo | E2E-stg `upgrade-flow` y `proforma-receipt`; INT `quota-per-type` | OK |
 | V2.3 Cupo independiente por tipo | INT `quota-per-type`; E2E-stg `proforma-receipt` | OK |
@@ -104,7 +102,7 @@ Se saltan fuera de staging.
 | V12 Conciliación | E2E-stg `reconciliation`; INT `bank-reconciliation` (14 pruebas, incluida la SC-009 con ≥ 80 %) | OK |
 | V13 Panel y tesorería | INT `dashboard-pro` (cifras contra una consulta de control, al céntimo); E2E-stg `payments` | OK |
 | V14 Asistente inicial | E2E-stg `onboarding` (2 pruebas); INT `onboarding-sample` (PDF «EJEMPLO», sin consumir cupo, purga a los 7 días) | OK. **Usabilidad: pendiente (T188).** |
-| V15 Asistente de IA | Detalle abajo | OK, con la salvedad de la confirmación. **Falta la revocación con Claude.** |
+| V15 Asistente de IA | Detalle abajo | OK, con la salvedad de la confirmación |
 
 ### Salvedades de V2.7 y V2.8
 
@@ -140,7 +138,7 @@ Se saltan fuera de staging.
   - Claude hizo las dos llamadas en la misma respuesta, tomando «Emite esa factura» como aprobación, porque estaba en modo «Automático», que no aplica el ajuste «Requiere aprobación» de las herramientas.
   - **Decisión del responsable: se acepta así.** El servidor garantiza los dos pasos y que el token sea de un solo uso y caduque en 5 min. La pausa para que la persona confirme depende del modo del cliente de IA. No se añaden anotaciones MCP (`destructiveHint`/`readOnlyHint`).
 - **Desconexión observada, sin reproducir:** tras un mensaje con una errata («Talleres Martñin»), Claude dijo que la conexión se había cortado. En Factum la conexión seguía activa, con tokens válidos, y esa petición no llegó al servidor (`last_used_at` de la llamada anterior). No se ha vuelto a reproducir; se atribuye provisionalmente al cliente.
-- **Pendiente:** revocar la conexión desde Ajustes → Asistentes de IA y comprobar que Claude deja de poder usar las herramientas.
+- **Revocación:** el responsable revocó la conexión de Claude desde Ajustes → Asistentes de IA (17:50 UTC). La interfaz la muestra en «Conexiones revocadas»; en la base de datos queda `status = revoked` y sin tokens de refresco vivos. Que una llamada con el token revocado da 401 lo cubre E2E-stg `assistant-connection`; no se observó una llamada de Claude tras revocar.
 
 ### Contratación de Pro desde el Portal (V8)
 
