@@ -4,15 +4,16 @@
 
 - Puertas automáticas: en verde en local.
 - Escenarios V1–V14: validados en staging con las salvedades indicadas.
-- Pendiente de la parte manual que ejecuta el responsable con un cliente de IA real:
-  - V15: tasa de acierto y confirmación al emitir.
-  - Recepción de correos con remitente «Factum» (V1.5).
+- V15 manual con Claude (2026-11-08): validado por el responsable, con la salvedad sobre la confirmación al emitir (ver el detalle de V15).
+- Pendiente:
+  - Revocar la conexión desde Ajustes con Claude conectado (V15).
+  - Revisar el remitente «Factum» en una bandeja real (V1.5).
 - Usabilidad de V3.7 y V14: pendiente explícita en T188. No se ha inventado ningún dato.
 
 Entorno:
 
 - **Staging:** `https://invoice-flash-staging.sinergia-hub.workers.dev`.
-  - Versión de Worker `16a1589d`, construida desde `275d9c2` en un checkout limpio, sin ficheros `.env` en el bundle.
+  - Versión de Worker `16a1589d`, construida desde `275d9c2` en un checkout limpio, sin ficheros `.env` en el bundle. Para la prueba manual de V15 se desplegó `eeed3b93`, desde `e0cfea6`.
   - Neon de staging en la migración 0015.
   - Stripe en modo sandbox, con el webhook de staging.
   - Resend con el dominio `factum.sinergia-hub.com` verificado.
@@ -103,7 +104,7 @@ Se saltan fuera de staging.
 | V12 Conciliación | E2E-stg `reconciliation`; INT `bank-reconciliation` (14 pruebas, incluida la SC-009 con ≥ 80 %) | OK |
 | V13 Panel y tesorería | INT `dashboard-pro` (cifras contra una consulta de control, al céntimo); E2E-stg `payments` | OK |
 | V14 Asistente inicial | E2E-stg `onboarding` (2 pruebas); INT `onboarding-sample` (PDF «EJEMPLO», sin consumir cupo, purga a los 7 días) | OK. **Usabilidad: pendiente (T188).** |
-| V15 Asistente de IA | Detalle abajo | **Parcial; falta la parte manual.** |
+| V15 Asistente de IA | Detalle abajo | OK, con la salvedad de la confirmación. **Falta la revocación con Claude.** |
 
 ### Salvedades de V2.7 y V2.8
 
@@ -128,13 +129,24 @@ Se saltan fuera de staging.
   - Se lanzaron 250 llamadas en 38 s; el primer 429 llegó en la llamada 151.
   - El limitador de Cloudflare (60/min por conexión, R19) es aproximado: usa contadores por máquina que se sincronizan de forma asíncrona.
   - Corta las ráfagas, pero no al umbral exacto. Si se necesita un límite estricto, haría falta un contador propio (Durable Object o base de datos). **Lo decide el responsable.**
-- **Pendiente (manual):** con un cliente real (Claude), medir la tasa de borradores correctos (≥ 8/10), la confirmación al emitir, «vía asistente de IA» en el historial, el nombre ambiguo y la revocación.
+- **Prueba manual con Claude (2026-11-08, cuenta del responsable en Pro):**
+  - **Descubrimiento:** la primera conexión falló porque Claude busca los metadatos RFC 8414 en `/.well-known/oauth-authorization-server/api/auth` (ruta del emisor insertada) y daba 404. Corregido en `e0cfea6`; `assistant-connection` ahora recorre ese descubrimiento. Tras desplegarlo (versión `eeed3b93`) Claude conecta, muestra el consentimiento y lista las 15 herramientas.
+  - **Borradores:** el responsable da por buenos los 10 intentos (≥ 8/10). En el intento revisado, cliente, cantidad (3 h × 60 €), IVA 21 % y total 217,80 € eran correctos.
+  - **Nombre ambiguo:** con «Talleres» Claude ofreció Talleres Martínez y Talleres Martín sin elegir por su cuenta.
+  - **Historial:** la creación y la emisión figuran «vía asistente de IA», con actor `ai:{conexión}:user:{usuario}`.
+  - **Numeración:** la factura emitida recibió 2026-0003, correlativa con las dos de octubre de esa cuenta (0001 anulada y 0002).
+- **Salvedad: confirmación al emitir.**
+  - El servidor exigió los dos pasos: `request_issue` creó la confirmación y `confirm_action` la consumió 6 s después.
+  - Claude hizo las dos llamadas en la misma respuesta, tomando «Emite esa factura» como aprobación, porque estaba en modo «Automático», que no aplica el ajuste «Requiere aprobación» de las herramientas.
+  - **Decisión del responsable: se acepta así.** El servidor garantiza los dos pasos y que el token sea de un solo uso y caduque en 5 min. La pausa para que la persona confirme depende del modo del cliente de IA. No se añaden anotaciones MCP (`destructiveHint`/`readOnlyHint`).
+- **Desconexión observada, sin reproducir:** tras un mensaje con una errata («Talleres Martñin»), Claude dijo que la conexión se había cortado. En Factum la conexión seguía activa, con tokens válidos, y esa petición no llegó al servidor (`last_used_at` de la llamada anterior). No se ha vuelto a reproducir; se atribuye provisionalmente al cliente.
+- **Pendiente:** revocar la conexión desde Ajustes → Asistentes de IA y comprobar que Claude deja de poder usar las herramientas.
 
 ### Contratación de Pro desde el Portal (V8)
 
 - El Portal del sandbox no tenía activado el cambio de suscripción, así que Stripe rechazaba el flujo `subscription_update_confirm`.
 - Se activó el 2026-11-08 con los 4 precios de Factum y `always_invoice`. Tras eso, Stripe acepta la sesión de cambio a Pro anual.
-- **Pendiente:** recorrer el cambio desde la interfaz, como parte de la prueba manual de V15.
+- **Recorrido desde la interfaz:** el responsable pasó de Esencial a Pro desde Ajustes → Suscripción (Portal) el 2026-11-08. OK.
 - **Para producción:** la configuración del Portal debe incluir los mismos productos y precios. Ya lo exige `docs/operations/v2-runbook.md` §1.3, y se ha añadido la comprobación explícita.
 
 ## 4. Observaciones para producción
