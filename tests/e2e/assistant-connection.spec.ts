@@ -22,6 +22,26 @@ test("el asistente se conecta con consentimiento, usa MCP y deja de funcionar al
   await saveFiscalData(page, email);
   await setCompanyPlan(email, "pro");
 
+  // Discovery as MCP clients do it (MCP spec, RFC 9728 → RFC 8414): from the
+  // resource metadata to the authorization server metadata, inserting the
+  // issuer path after `/.well-known/oauth-authorization-server`.
+  const resourceMetadata = await page.request.get(
+    "/.well-known/oauth-protected-resource/api/mcp",
+  );
+  expect(resourceMetadata.status()).toBe(200);
+  const { authorization_servers: servers } =
+    (await resourceMetadata.json()) as { authorization_servers: string[] };
+  const issuer = new URL(servers[0] ?? "");
+  const serverMetadata = await page.request.get(
+    `/.well-known/oauth-authorization-server${issuer.pathname.replace(/\/$/, "")}`,
+  );
+  expect(serverMetadata.status()).toBe(200);
+  const { registration_endpoint: registrationEndpoint } =
+    (await serverMetadata.json()) as { registration_endpoint: string };
+  expect(new URL(registrationEndpoint).pathname).toBe(
+    "/api/auth/oauth2/register",
+  );
+
   // The assistant registers itself (public client, PKCE) and asks for access.
   // Requests carry the browser session, so Better Auth wants an Origin.
   const origin = { Origin: baseURL ?? "" };
